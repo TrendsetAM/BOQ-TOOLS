@@ -15,6 +15,7 @@ sys.path.insert(0, str(project_root))
 from core.boq_processor import BOQProcessor
 from ui.main_window import MainWindow
 from utils.logger import setup_logging
+from utils.config import validate_and_log_config
 
 
 def main():
@@ -25,6 +26,11 @@ def main():
     
     try:
         logger.info("Starting BOQ Tools application")
+        
+        # Validate configuration
+        if not validate_and_log_config():
+            logger.error("Configuration validation failed. Exiting.")
+            sys.exit(1)
         
         # Initialize the BOQ processor
         processor = BOQProcessor()
