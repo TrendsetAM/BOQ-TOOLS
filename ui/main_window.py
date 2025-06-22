@@ -1,3 +1,8 @@
+"""
+BOQ Tools Main Window
+Comprehensive GUI for Excel file processing and BOQ analysis
+"""
+
 import tkinter as tk
 
 class MainWindow:
