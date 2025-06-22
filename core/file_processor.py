@@ -26,6 +26,13 @@ except ImportError:
     XLRD_AVAILABLE = False
     logging.warning("xlrd not available. Legacy .xls files will not be supported.")
 
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    PANDAS_AVAILABLE = False
+    logging.warning("pandas not available. CSV processing will not work.")
+
 logger = logging.getLogger(__name__)
 
 
@@ -115,6 +122,8 @@ class ExcelProcessor:
             # Load workbook based on format
             if self.file_format == "xlsx":
                 self._load_xlsx_file(filepath)
+            elif self.file_format == "csv":
+                self._load_csv_file(filepath)
             elif self.file_format == "xls":
                 self._load_xls_file(filepath)
             else:
@@ -137,6 +146,10 @@ class ExcelProcessor:
         
         if extension == ".xlsx":
             return "xlsx"
+        elif extension == ".csv":
+            if not PANDAS_AVAILABLE:
+                raise ImportError("pandas is required for .csv files")
+            return "csv"
         elif extension == ".xls":
             if not XLRD_AVAILABLE:
                 raise ImportError("xlrd is required for .xls files")
@@ -170,21 +183,37 @@ class ExcelProcessor:
         except Exception as e:
             raise InvalidFileException(f"Failed to load .xlsx file: {str(e)}")
     
+    def _load_csv_file(self, filepath: Path) -> None:
+        """Load .csv file using pandas into a virtual workbook structure."""
+        if not PANDAS_AVAILABLE:
+            raise ImportError("pandas is required for .csv files")
+        try:
+            df = pd.read_csv(filepath, keep_default_na=False, dtype=str)
+            self.workbook = Workbook()
+            if self.workbook.active:
+                self.workbook.remove(self.workbook.active) # Remove default sheet
+            
+            sheet_name = filepath.stem
+            ws = self.workbook.create_sheet(title=sheet_name)
+            ws.append(list(df.columns))
+            for _, row in df.iterrows():
+                ws.append(list(row))
+            setattr(ws, '_dataframe', df)
+        except Exception as e:
+            raise InvalidFileException(f"Failed to load .csv file: {str(e)}")
+    
     def _load_xls_file(self, filepath: Path) -> None:
         """Load .xls file using xlrd (legacy format)"""
         if not XLRD_AVAILABLE:
             raise ImportError("xlrd is required for .xls files")
         
         try:
-            # For .xls files, we'll create a minimal workbook structure
-            # since openpyxl doesn't support .xls directly
             self.workbook = Workbook()
-            self.workbook.remove(self.workbook.active)  # Remove default sheet
+            if self.workbook.active:
+                self.workbook.remove(self.workbook.active)
             
-            # Load with xlrd for metadata
-            xlrd_book = xlrd.open_workbook(filepath)
+            xlrd_book = xlrd.open_workbook(str(filepath))
             
-            # Create sheets in openpyxl workbook
             for sheet_name in xlrd_book.sheet_names():
                 sheet = xlrd_book.sheet_by_name(sheet_name)
                 ws = self.workbook.create_sheet(title=sheet_name)
@@ -474,45 +503,45 @@ class ExcelProcessor:
     
     def get_sheet_data(self, sheet_name: str, max_rows: int = 1000) -> List[List[str]]:
         """
-        Get all data from a sheet as a list of rows
+        Get all data from a specific sheet as a list of rows.
+
+        Handles both standard Excel sheets and virtual CSV sheets.
         
         Args:
-            sheet_name: Name of the sheet to extract data from
-            max_rows: Maximum number of rows to extract (for memory management)
+            sheet_name: Name of the sheet to get data from
+            max_rows: Maximum number of rows to retrieve
             
         Returns:
-            List of rows, where each row is a list of cell values as strings
+            List of rows, where each row is a list of cell values
         """
         if not self.workbook:
             raise RuntimeError("No workbook loaded. Call load_file() first.")
         
         try:
             worksheet = self.workbook[sheet_name]
+
+            # If it's a CSV, the data is already loaded in rows
+            if self.file_format == 'csv':
+                # The data is already in the openpyxl worksheet structure
+                data = []
+                for row in worksheet.iter_rows(max_row=max_rows):
+                    data.append([cell.value for cell in row])
+                return data
+
+            # For regular excel files, iterate and extract
+            data = []
+            # Use iter_rows for memory efficiency
+            for row in worksheet.iter_rows(max_row=max_rows):
+                # Convert cells to string, handling None
+                data.append([str(cell.value) if cell.value is not None else "" for cell in row])
+                
+            return data
             
-            # Get metadata to determine data boundaries
-            metadata = self.get_sheet_metadata(sheet_name)
-            
-            if metadata.last_data_row < metadata.first_data_row:
-                return []
-            
-            # Limit rows for memory management
-            end_row = min(metadata.last_data_row, metadata.first_data_row + max_rows - 1)
-            
-            # Extract all data
-            sheet_data = []
-            for row in range(metadata.first_data_row, end_row + 1):
-                row_data = []
-                for col in range(metadata.first_data_column, metadata.last_data_column + 1):
-                    cell_value = worksheet.cell(row=row, column=col).value
-                    row_data.append(str(cell_value) if cell_value is not None else "")
-                sheet_data.append(row_data)
-            
-            logger.debug(f"Extracted {len(sheet_data)} rows from sheet '{sheet_name}'")
-            return sheet_data
-            
+        except KeyError:
+            raise ValueError(f"Sheet '{sheet_name}' not found in the workbook.")
         except Exception as e:
-            logger.error(f"Failed to extract data from sheet '{sheet_name}': {str(e)}")
-            raise
+            logger.error(f"Failed to get data for sheet '{sheet_name}': {e}")
+            return []
     
     def get_all_sheets_data(self, max_rows: int = 1000) -> Dict[str, List[List[str]]]:
         """

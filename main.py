@@ -26,7 +26,7 @@ from core.sheet_classifier import SheetClassifier
 from core.column_mapper import ColumnMapper
 from core.row_classifier import RowClassifier
 from core.validator import DataValidator
-from core.mapping_generator import MappingGenerator
+from core.mapping_generator import MappingGenerator, FileMapping
 
 # UI components
 try:
@@ -39,7 +39,7 @@ except ImportError:
     GUI_AVAILABLE = False
 
 # Utils
-from utils.config import get_config
+from utils.config import get_config, BOQConfig
 from utils.export import ExcelExporter
 from utils.logger import setup_logging
 
@@ -67,15 +67,15 @@ class BOQApplicationController:
         self.log_file = log_file or Path(DEFAULT_LOG_FILE)
         
         # Initialize components
-        self.config = None
-        self.logger = None
-        self.processor = None
-        self.sheet_classifier = None
-        self.column_mapper = None
-        self.row_classifier = None
-        self.validator = None
-        self.mapping_generator = None
-        self.exporter = None
+        self.config: Optional[BOQConfig] = None
+        self.logger: Optional[logging.Logger] = None
+        self.processor: Optional[ExcelProcessor] = None
+        self.sheet_classifier: Optional[SheetClassifier] = None
+        self.column_mapper: Optional[ColumnMapper] = None
+        self.row_classifier: Optional[RowClassifier] = None
+        self.validator: Optional[DataValidator] = None
+        self.mapping_generator: Optional[MappingGenerator] = None
+        self.exporter: Optional[ExcelExporter] = None
         
         # Application state
         self.is_running = False
@@ -108,6 +108,7 @@ class BOQApplicationController:
             # Setup signal handlers
             self._setup_signal_handlers()
             
+            assert self.logger is not None
             self.logger.info(f"{APP_NAME} v{APP_VERSION} initialized successfully")
             
         except Exception as e:
@@ -131,6 +132,7 @@ class BOQApplicationController:
     
     def _load_configuration(self):
         """Load application configuration"""
+        assert self.logger is not None
         try:
             self.config = get_config()
             self.logger.info("Configuration loaded successfully")
@@ -140,6 +142,7 @@ class BOQApplicationController:
     
     def _initialize_core_components(self):
         """Initialize all core processing components"""
+        assert self.logger is not None
         try:
             # Initialize processors
             self.processor = ExcelProcessor()
@@ -158,6 +161,7 @@ class BOQApplicationController:
     
     def _load_settings(self):
         """Load application settings"""
+        assert self.logger is not None
         try:
             if self.config_file.exists():
                 with open(self.config_file, 'r', encoding='utf-8') as f:
@@ -172,6 +176,7 @@ class BOQApplicationController:
     
     def _save_settings(self):
         """Save application settings"""
+        assert self.logger is not None
         try:
             self.config_file.parent.mkdir(parents=True, exist_ok=True)
             with open(self.config_file, 'w', encoding='utf-8') as f:
@@ -183,13 +188,14 @@ class BOQApplicationController:
     def _setup_signal_handlers(self):
         """Setup signal handlers for graceful shutdown"""
         def signal_handler(signum, frame):
+            assert self.logger is not None
             self.logger.info(f"Received signal {signum}, initiating shutdown")
             self.shutdown()
         
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
     
-    def process_file(self, file_path: Path, progress_callback: Optional[callable] = None) -> Dict[str, Any]:
+    def process_file(self, file_path: Path, progress_callback: Optional[callable] = None) -> FileMapping:
         """
         Process a single Excel file through the complete pipeline
         
@@ -200,142 +206,139 @@ class BOQApplicationController:
         Returns:
             Complete processing results
         """
+        assert self.logger is not None
+        assert self.processor is not None
+        assert self.sheet_classifier is not None
+        assert self.column_mapper is not None
+        assert self.row_classifier is not None
+        assert self.validator is not None
+        assert self.mapping_generator is not None
+
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
+
+        # Use an absolute path for the dictionary key to ensure consistency
+        abs_filepath_str = str(file_path.resolve())
         
         self.logger.info(f"Processing file: {file_path}")
         
         try:
-            # Step 1: Load and analyze file
-            if progress_callback:
-                progress_callback(0, "Loading Excel file...")
+            # Load the file first, outside the context manager
+            self.processor.load_file(file_path)
+
+            # Step 1: Use the processor as a context manager to ensure cleanup
+            with self.processor as processor_instance:
+                if progress_callback:
+                    progress_callback(10, "File loaded, analyzing...")
+
+                file_info = processor_instance.get_file_info()
+                sheet_data = processor_instance.get_all_sheets_data()
+                
+                if not sheet_data:
+                    raise ValueError("No data found in any sheets.")
             
-            with self.processor.load_file(file_path) as excel_data:
-                file_info = excel_data.get('file_info', {})
-                sheet_data = excel_data.get('sheet_data', {})
-                
-                if progress_callback:
-                    progress_callback(10, "File loaded successfully")
-                
-                # Step 2: Classify sheets
-                if progress_callback:
-                    progress_callback(20, "Classifying sheets...")
-                
-                sheet_classifications = {}
-                for sheet_name, data in sheet_data.items():
-                    classification = self.sheet_classifier.classify_sheet(data)
-                    sheet_classifications[sheet_name] = classification
-                
-                if progress_callback:
-                    progress_callback(30, "Sheets classified")
-                
-                # Step 3: Map columns
-                if progress_callback:
-                    progress_callback(40, "Mapping columns...")
-                
-                column_mappings = {}
-                for sheet_name, data in sheet_data.items():
-                    mapping = self.column_mapper.map_columns(data)
-                    column_mappings[sheet_name] = mapping
-                
-                if progress_callback:
-                    progress_callback(50, "Columns mapped")
-                
-                # Step 4: Classify rows
-                if progress_callback:
-                    progress_callback(60, "Classifying rows...")
-                
-                row_classifications = {}
-                for sheet_name, data in sheet_data.items():
-                    classification = self.row_classifier.classify_rows(data)
-                    row_classifications[sheet_name] = classification
-                
-                if progress_callback:
-                    progress_callback(70, "Rows classified")
-                
-                # Step 5: Validate data
-                if progress_callback:
-                    progress_callback(80, "Validating data...")
-                
-                validation_results = {}
-                for sheet_name, data in sheet_data.items():
-                    validation = self.validator.validate_sheet(
-                        data, 
-                        column_mappings.get(sheet_name, {}),
-                        row_classifications.get(sheet_name, {})
-                    )
-                    validation_results[sheet_name] = validation
-                
-                if progress_callback:
-                    progress_callback(90, "Data validated")
-                
-                # Step 6: Generate unified mapping
-                if progress_callback:
-                    progress_callback(95, "Generating mapping...")
-                
-                processor_results = {
-                    'file_info': file_info,
-                    'sheet_data': sheet_data,
-                    'sheet_classifications': sheet_classifications,
-                    'column_mappings': column_mappings,
-                    'row_classifications': row_classifications,
-                    'validation_results': validation_results
-                }
-                
-                file_mapping = self.mapping_generator.generate_file_mapping(processor_results)
-                
-                if progress_callback:
-                    progress_callback(100, "Processing complete")
-                
-                # Store results
-                self.current_files[str(file_path)] = {
-                    'file_mapping': file_mapping,
-                    'processor_results': processor_results,
-                    'processing_time': time.time()
-                }
-                
-                self.logger.info(f"File processing completed: {file_path}")
-                return file_mapping
+            if progress_callback:
+                progress_callback(20, "Classifying sheets...")
+            
+            # The rest of the processing can happen outside the 'with' block
+            # as the data has been loaded into memory.
+            
+            sheet_classifications = {
+                name: self.sheet_classifier.classify_sheet(data, name) 
+                for name, data in sheet_data.items()
+            }
+            if progress_callback: progress_callback(30, "Sheets classified")
+
+            column_mapping_results = {
+                name: self.column_mapper.process_sheet_mapping(data)
+                for name, data in sheet_data.items()
+            }
+            if progress_callback: progress_callback(50, "Columns mapped")
+
+            column_mappings_dict = {
+                name: {m.column_index: m.mapped_type for m in result.mappings}
+                for name, result in column_mapping_results.items()
+            }
+            
+            row_classifications = {
+                name: self.row_classifier.classify_rows(data, column_mappings_dict.get(name, {}))
+                for name, data in sheet_data.items()
+            }
+            if progress_callback: progress_callback(70, "Rows classified")
+
+            row_classifications_dict = {
+                name: {rc.row_index: rc.row_type.value for rc in result.classifications}
+                for name, result in row_classifications.items()
+            }
+
+            validation_results = {
+                name: self.validator.validate_sheet(
+                    data, column_mappings_dict.get(name, {}), row_classifications_dict.get(name, {})
+                )
+                for name, data in sheet_data.items()
+            }
+            if progress_callback: progress_callback(90, "Data validated")
+
+            processor_results = {
+                'file_info': file_info,
+                'sheet_data': sheet_data,
+                'sheet_classifications': sheet_classifications,
+                'column_mappings': column_mapping_results,
+                'row_classifications': row_classifications,
+                'validation_results': validation_results
+            }
+            
+            file_mapping = self.mapping_generator.generate_file_mapping(processor_results)
+            if progress_callback: progress_callback(100, "Processing complete")
+
+            self.current_files[abs_filepath_str] = {
+                'file_mapping': file_mapping,
+                'processor_results': processor_results,
+                'processing_time': time.time()
+            }
+            
+            self.logger.info(f"File processing completed: {file_path}")
+            return file_mapping
                 
         except Exception as e:
-            self.logger.error(f"Error processing file {file_path}: {e}")
+            self.logger.error(f"Error processing file {file_path}: {e}", exc_info=True)
             raise
     
-    def export_file(self, file_path: str, export_path: Path, format_type: str = 'normalized') -> bool:
+    def export_file(self, file_path: str, export_path: Path, format_type: str) -> bool:
         """
-        Export processed file
+        Export processed file using the appropriate format.
         
         Args:
-            file_path: Key of processed file
-            export_path: Export destination
-            format_type: Export format type
+            file_path: Key of the processed file (should be absolute path).
+            export_path: Export destination path.
+            format_type: Export format type ('normalized_excel', 'summary_excel', 'json', 'csv').
             
         Returns:
-            True if export successful
+            True if export is successful.
         """
-        if file_path not in self.current_files:
+        # The key in current_files is an absolute path string.
+        # Ensure the incoming file_path matches this.
+        processed_file_key = str(Path(file_path).resolve())
+
+        if processed_file_key not in self.current_files:
+            # For debugging, let's see what keys are available
+            available_keys = list(self.current_files.keys())
+            assert self.logger is not None
+            self.logger.error(f"Export failed: '{processed_file_key}' not found. Available files: {available_keys}")
             raise ValueError(f"File not found in processed files: {file_path}")
         
         try:
-            file_data = self.current_files[file_path]
+            assert self.logger is not None
+            assert self.exporter is not None
+            file_data = self.current_files[processed_file_key]
             file_mapping = file_data['file_mapping']
             
-            if format_type == 'normalized':
-                return self.exporter.export_normalized_boq(file_mapping, export_path)
-            elif format_type == 'summary':
-                return self.exporter.export_summary_report(file_mapping, export_path)
-            elif format_type == 'annotated':
-                processor_results = file_data['processor_results']
-                return self.exporter.export_with_annotations(
-                    processor_results['sheet_data'], 
-                    file_mapping, 
-                    export_path
-                )
-            else:
-                raise ValueError(f"Unknown export format: {format_type}")
+            # This now correctly dispatches to the exporter
+            return self.exporter.export_data(file_mapping, export_path, format_type)
                 
         except Exception as e:
-            self.logger.error(f"Error exporting file {file_path}: {e}")
+            assert self.logger is not None
+            self.logger.error(f"Error exporting file {file_path}: {e}", exc_info=True)
             return False
     
     def batch_process(self, file_paths: List[Path], output_dir: Path) -> Dict[str, bool]:
@@ -353,6 +356,7 @@ class BOQApplicationController:
         
         for file_path in file_paths:
             try:
+                assert self.logger is not None
                 self.logger.info(f"Processing file: {file_path}")
                 
                 # Process file
@@ -360,11 +364,12 @@ class BOQApplicationController:
                 
                 # Export file
                 export_path = output_dir / f"{file_path.stem}_processed.xlsx"
-                success = self.export_file(str(file_path), export_path, 'normalized')
+                success = self.export_file(str(file_path), export_path, 'normalized_excel')
                 
                 results[str(file_path)] = success
                 
             except Exception as e:
+                assert self.logger is not None
                 self.logger.error(f"Failed to process {file_path}: {e}")
                 results[str(file_path)] = False
         
@@ -386,14 +391,17 @@ class BOQApplicationController:
         """Update application settings"""
         self.settings.update(new_settings)
         self._save_settings()
+        assert self.logger is not None
         self.logger.info("Settings updated and saved")
     
     def auto_save(self):
         """Perform auto-save operation"""
         try:
             self._save_settings()
+            assert self.logger is not None
             self.logger.debug("Auto-save completed")
         except Exception as e:
+            assert self.logger is not None
             self.logger.error(f"Auto-save failed: {e}")
     
     def start_auto_save(self, interval_seconds: int = 300):
@@ -406,6 +414,7 @@ class BOQApplicationController:
         
         self.auto_save_timer = threading.Thread(target=auto_save_worker, daemon=True)
         self.auto_save_timer.start()
+        assert self.logger is not None
         self.logger.info(f"Auto-save started with {interval_seconds}s interval")
     
     def stop_auto_save(self):
@@ -413,6 +422,7 @@ class BOQApplicationController:
         if self.auto_save_timer:
             self.shutdown_event.set()
             self.auto_save_timer.join(timeout=5)
+            assert self.logger is not None
             self.logger.info("Auto-save stopped")
     
     def shutdown(self):
@@ -420,6 +430,7 @@ class BOQApplicationController:
         if not self.is_running:
             return
         
+        assert self.logger is not None
         self.logger.info("Initiating application shutdown")
         self.is_running = False
         
@@ -432,6 +443,7 @@ class BOQApplicationController:
         # Clear current files
         self.current_files.clear()
         
+        assert self.logger is not None
         self.logger.info("Application shutdown completed")
 
 
@@ -454,25 +466,17 @@ class BOQApplication:
         
         try:
             self.gui_mode = True
-            self.controller.is_running = True
-            
-            # Start auto-save
-            self.controller.start_auto_save()
-            
-            # Create and run main window
-            self.main_window = MainWindow()
-            
-            # Connect controller to UI (this would be implemented in the UI)
+            self.main_window = MainWindow(self.controller)
             self._connect_ui_to_controller()
-            
-            # Run the GUI
             self.main_window.run()
             
         except Exception as e:
-            self.controller.logger.error(f"GUI error: {e}")
+            assert self.controller.logger is not None
+            self.controller.logger.error(f"Failed to run GUI: {e}", exc_info=True)
             traceback.print_exc()
-        finally:
-            self.controller.shutdown()
+            # Fallback to CLI
+            print("GUI failed to start, falling back to CLI mode.")
+            self.run_cli()
     
     def run_cli(self, args: Optional[argparse.Namespace] = None):
         """Run the application in CLI mode"""
@@ -487,6 +491,7 @@ class BOQApplication:
                 self._run_argument_cli(args)
                 
         except Exception as e:
+            assert self.controller.logger is not None
             self.controller.logger.error(f"CLI error: {e}")
             traceback.print_exc()
         finally:
@@ -515,7 +520,7 @@ class BOQApplication:
                     if len(parts) >= 2:
                         file_key = parts[0]
                         export_path = Path(parts[1])
-                        format_type = parts[2] if len(parts) > 2 else 'normalized'
+                        format_type = parts[2] if len(parts) > 2 else 'normalized_excel'
                         self._export_file_cli(file_key, export_path, format_type)
                 elif command == 'list':
                     self._list_processed_files()
@@ -549,7 +554,7 @@ class BOQApplication:
                     success = self.controller.export_file(
                         str(file_path), 
                         export_path, 
-                        args.format or 'normalized'
+                        args.format or 'normalized_excel'
                     )
                     if success:
                         print(f"File exported to: {export_path}")
@@ -597,7 +602,7 @@ class BOQApplication:
         print("  clear              - Clear processed files")
         print("  help               - Show this help")
         print("  quit/exit          - Exit application")
-        print("\nExport formats: normalized, summary, annotated")
+        print("\nExport formats: normalized_excel, summary_excel, json, csv")
     
     def _show_status(self):
         """Show application status"""
@@ -682,8 +687,8 @@ Examples:
     # Output options
     parser.add_argument('--output', type=str, help='Output directory for batch processing')
     parser.add_argument('--export', type=str, help='Export path for single file processing')
-    parser.add_argument('--format', choices=['normalized', 'summary', 'annotated'], 
-                       default='normalized', help='Export format')
+    parser.add_argument('--format', choices=['normalized_excel', 'summary_excel', 'json', 'csv'], 
+                       default='normalized_excel', help='Export format')
     
     # Configuration
     parser.add_argument('--config', type=str, help='Configuration file path')

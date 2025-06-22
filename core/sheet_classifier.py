@@ -117,12 +117,12 @@ class SheetClassifier:
             ]
         }
     
-    def classify_sheet(self, sheet_data: Dict[str, Any], sheet_name: str) -> ClassificationResult:
+    def classify_sheet(self, sheet_content: List[List[str]], sheet_name: str) -> ClassificationResult:
         """
         Classify a sheet based on its data and name
         
         Args:
-            sheet_data: Dictionary containing sheet metadata and content
+            sheet_content: The sheet data as a list of rows.
             sheet_name: Name of the sheet
             
         Returns:
@@ -130,10 +130,10 @@ class SheetClassifier:
         """
         logger.debug(f"Classifying sheet: {sheet_name}")
         
-        # Extract data from sheet_data
-        content = sheet_data.get('content', [])
-        headers = sheet_data.get('headers', [])
-        metadata = sheet_data.get('metadata', {})
+        # The content is the sheet_data itself.
+        # Assume headers are the first row for classification purposes.
+        content = sheet_content
+        headers = content[0] if content else []
         
         # Calculate individual scores
         keyword_score = self.score_keywords(sheet_name, content, headers)
@@ -556,17 +556,18 @@ class SheetClassifier:
 
 
 # Convenience function for quick classification
-def classify_sheet_quick(sheet_data: Dict[str, Any], sheet_name: str) -> Tuple[str, float]:
+def classify_sheet_quick(sheet_data: List[List[str]], sheet_name: str) -> Tuple[str, float]:
     """
-    Quick sheet classification
+    A quick, lightweight version of sheet classification for previews.
     
     Args:
-        sheet_data: Sheet data dictionary
-        sheet_name: Name of the sheet
+        sheet_data: The sheet data as a list of rows.
+        sheet_name: The name of the sheet.
         
     Returns:
-        Tuple of (sheet_type, confidence)
+        A tuple of (sheet_type_string, confidence_score)
     """
+    # Create a temporary classifier instance
     classifier = SheetClassifier()
     result = classifier.classify_sheet(sheet_data, sheet_name)
     return result.sheet_type.value, result.confidence 

@@ -120,7 +120,7 @@ class BOQConfig:
                 keywords=["total", "total price", "total cost", "value",
                          "total amount", "sum", "total value", "cost", "price"],
                 weight=1.0,
-                required=False,
+                required=True,
                 data_type="currency",
                 validation_pattern=r"^\d+(\.\d{1,2})?$"
             ),
@@ -137,7 +137,7 @@ class BOQConfig:
                 keywords=["unit", "measurement", "measure", "uom", "unit of measure",
                          "unit:", "measurement unit"],
                 weight=0.9,
-                required=False,
+                required=True,
                 data_type="text"
             ),
             
@@ -145,7 +145,7 @@ class BOQConfig:
                 keywords=["code", "item code", "reference", "ref", "item no", "item number",
                          "code:", "reference:", "item code:", "boq code"],
                 weight=0.7,
-                required=False,
+                required=True,
                 data_type="text"
             ),
             

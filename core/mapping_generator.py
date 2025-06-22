@@ -46,6 +46,7 @@ class ColumnMappingInfo:
     reasoning: List[str]
     is_required: bool
     validation_status: str
+    is_user_edited: bool
 
 
 @dataclass
@@ -448,56 +449,145 @@ class MappingGenerator:
         )
     
     def _create_sheet_mapping(self, sheet_name: str, sheet_data: List[List[str]],
-                             column_mapping: Dict[str, Any], row_classification: Dict[str, Any],
-                             validation_result: Dict[str, Any]) -> SheetMapping:
+                             column_mapping: Any, row_classification: Any,
+                             validation_result: Any) -> SheetMapping:
         """Create detailed sheet mapping"""
         
-        # Extract column mapping information
+        # Handle MappingResult object to get all columns
+        all_column_data = {}
+        if hasattr(column_mapping, 'header_row'):
+            original_headers = column_mapping.header_row.headers
+            for i, header in enumerate(original_headers):
+                all_column_data[i] = {
+                    'column_index': i,
+                    'original_header': header,
+                    'normalized_header': header.lower().strip(),
+                    'mapped_type': 'ignore',
+                    'confidence': 0.0,
+                    'alternatives': [],
+                    'reasoning': ['Not automatically mapped'],
+                    'is_user_edited': False,
+                }
+        
+        if hasattr(column_mapping, 'mappings'):
+            for col_info in column_mapping.mappings:
+                if col_info.column_index in all_column_data:
+                    all_column_data[col_info.column_index].update({
+                        'normalized_header': col_info.normalized_header,
+                        'mapped_type': col_info.mapped_type,
+                        'confidence': col_info.confidence,
+                        'alternatives': col_info.alternatives,
+                        'reasoning': col_info.reasoning,
+                    })
+
+        # The column_mapper should have already enforced uniqueness.
+        # We just need to set the 'is_required' flag based on the final type.
+        required_types_from_config = self.config.get_required_columns()
+        required_type_values = {rt.value for rt in required_types_from_config}
+        
+        for idx, data in all_column_data.items():
+            mapped_type_str = data['mapped_type'].value if hasattr(data['mapped_type'], 'value') else str(data['mapped_type'])
+            data['is_required'] = mapped_type_str in required_type_values
+
+        # Convert the dictionary of data into a list of ColumnMappingInfo objects
         column_mappings = []
-        for col_info in column_mapping.get('mappings', []):
-            col_mapping = ColumnMappingInfo(
-                column_index=col_info.get('column_index', 0),
-                original_header=col_info.get('original_header', ''),
-                normalized_header=col_info.get('normalized_header', ''),
-                mapped_type=col_info.get('mapped_type', ''),
-                confidence=col_info.get('confidence', 0.0),
-                alternatives=col_info.get('alternatives', []),
-                reasoning=col_info.get('reasoning', []),
-                is_required=col_info.get('is_required', False),
-                validation_status=col_info.get('validation_status', 'unknown')
-            )
-            column_mappings.append(col_mapping)
+        for idx in sorted(all_column_data.keys()):
+            data = all_column_data[idx]
+            mapped_type_str = data['mapped_type'].value if hasattr(data['mapped_type'], 'value') else str(data['mapped_type'])
+            
+            # Alternatives are now expected to be List[Tuple[ColumnType, float]]
+            alts_list = []
+            if data['alternatives']:
+                 alts_list = [{'type': alt[0].value, 'confidence': alt[1]} for alt in data['alternatives']]
+
+            column_mappings.append(ColumnMappingInfo(
+                column_index=data['column_index'],
+                original_header=data['original_header'],
+                normalized_header=data['normalized_header'],
+                mapped_type=mapped_type_str,
+                confidence=data['confidence'],
+                alternatives=alts_list,
+                reasoning=data['reasoning'],
+                is_required=data['is_required'],
+                is_user_edited=data['is_user_edited'],
+                validation_status='valid'
+            ))
         
         # Extract row classification information
         row_classifications = []
-        for row_info in row_classification.get('classifications', []):
-            row_class = RowClassificationInfo(
-                row_index=row_info.get('row_index', 0),
-                row_type=row_info.get('row_type', ''),
-                confidence=row_info.get('confidence', 0.0),
-                completeness_score=row_info.get('completeness_score', 0.0),
-                hierarchical_level=row_info.get('hierarchical_level'),
-                section_title=row_info.get('section_title'),
-                validation_errors=row_info.get('validation_errors', []),
-                reasoning=row_info.get('reasoning', [])
-            )
-            row_classifications.append(row_class)
+        if hasattr(row_classification, 'classifications'):
+            # Handle ClassificationResult object
+            for row_info in row_classification.classifications:
+                row_class = RowClassificationInfo(
+                    row_index=row_info.row_index,
+                    row_type=row_info.row_type.value,
+                    confidence=row_info.confidence,
+                    completeness_score=row_info.completeness_score,
+                    hierarchical_level=row_info.hierarchical_level,
+                    section_title=row_info.section_title,
+                    validation_errors=row_info.validation_errors,
+                    reasoning=row_info.reasoning
+                )
+                row_classifications.append(row_class)
+        else:
+            # Handle dictionary (fallback)
+            for row_info in row_classification.get('classifications', []):
+                row_class = RowClassificationInfo(
+                    row_index=row_info.get('row_index', 0),
+                    row_type=row_info.get('row_type', ''),
+                    confidence=row_info.get('confidence', 0.0),
+                    completeness_score=row_info.get('completeness_score', 0.0),
+                    hierarchical_level=row_info.get('hierarchical_level'),
+                    section_title=row_info.get('section_title'),
+                    validation_errors=row_info.get('validation_errors', []),
+                    reasoning=row_info.get('reasoning', [])
+                )
+                row_classifications.append(row_class)
         
         # Create validation summary
-        validation_summary = ValidationSummary(
-            overall_score=validation_result.get('overall_score', 0.0),
-            mathematical_consistency=validation_result.get('mathematical_consistency', 0.0),
-            data_type_quality=validation_result.get('data_type_quality', 0.0),
-            business_rule_compliance=validation_result.get('business_rule_compliance', 0.0),
-            error_count=validation_result.get('error_count', 0),
-            warning_count=validation_result.get('warning_count', 0),
-            info_count=validation_result.get('info_count', 0),
-            suggestions=validation_result.get('suggestions', [])
-        )
+        if hasattr(validation_result, 'overall_score'):
+            # Handle ValidationResult object and normalize score
+            raw_score = validation_result.overall_score
+            # The validator incorrectly returns a 0-100 score. Normalize to 0-1.
+            normalized_score = raw_score / 100.0 if raw_score > 1.0 else raw_score
+            
+            validation_summary = ValidationSummary(
+                overall_score=normalized_score,
+                mathematical_consistency=validation_result.confidence_factors.get('mathematical_consistency', 0.0),
+                data_type_quality=validation_result.confidence_factors.get('data_type_quality', 0.0),
+                business_rule_compliance=validation_result.confidence_factors.get('business_rule_compliance', 0.0),
+                error_count=len([i for i in validation_result.issues if i.level == 'error']),
+                warning_count=len([i for i in validation_result.issues if i.level == 'warning']),
+                info_count=len([i for i in validation_result.issues if i.level == 'info']),
+                suggestions=validation_result.suggestions
+            )
+        else:
+            # Handle dictionary (fallback) and normalize
+            raw_score = validation_result.get('overall_score', 0.0)
+            normalized_score = raw_score / 100.0 if raw_score > 1.0 else raw_score
+
+            validation_summary = ValidationSummary(
+                overall_score=normalized_score,
+                mathematical_consistency=validation_result.get('mathematical_consistency', 0.0),
+                data_type_quality=validation_result.get('data_type_quality', 0.0),
+                business_rule_compliance=validation_result.get('business_rule_compliance', 0.0),
+                error_count=validation_result.get('error_count', 0),
+                warning_count=validation_result.get('warning_count', 0),
+                info_count=validation_result.get('info_count', 0),
+                suggestions=validation_result.get('suggestions', [])
+            )
         
         # Calculate confidence scores
-        column_mapping_confidence = column_mapping.get('overall_confidence', 0.0)
-        row_classification_confidence = row_classification.get('overall_quality_score', 0.0)
+        if hasattr(column_mapping, 'overall_confidence'):
+            column_mapping_confidence = column_mapping.overall_confidence
+        else:
+            column_mapping_confidence = column_mapping.get('overall_confidence', 0.0)
+            
+        if hasattr(row_classification, 'overall_quality_score'):
+            row_classification_confidence = row_classification.overall_quality_score
+        else:
+            row_classification_confidence = row_classification.get('overall_quality_score', 0.0)
+            
         data_quality_confidence = validation_summary.overall_score
         
         # Calculate overall confidence
@@ -527,13 +617,21 @@ class MappingGenerator:
             column_mapping, row_classification, validation_result
         )
         
+        # Get header information
+        if hasattr(column_mapping, 'header_row'):
+            header_row_index = column_mapping.header_row.row_index
+            header_confidence = column_mapping.header_row.confidence
+        else:
+            header_row_index = column_mapping.get('header_row_index', 0)
+            header_confidence = column_mapping.get('header_confidence', 0.0)
+        
         return SheetMapping(
             sheet_name=sheet_name,
             processing_status=processing_status,
             row_count=len(sheet_data),
             column_count=len(sheet_data[0]) if sheet_data else 0,
-            header_row_index=column_mapping.get('header_row_index', 0),
-            header_confidence=column_mapping.get('header_confidence', 0.0),
+            header_row_index=header_row_index,
+            header_confidence=header_confidence,
             column_mappings=column_mappings,
             row_classifications=row_classifications,
             validation_summary=validation_summary,
@@ -628,26 +726,38 @@ class MappingGenerator:
         
         return review_items
     
-    def _generate_processing_notes(self, column_mapping: Dict[str, Any], 
-                                 row_classification: Dict[str, Any],
-                                 validation_result: Dict[str, Any]) -> Tuple[List[str], List[str]]:
+    def _generate_processing_notes(self, column_mapping: Any, 
+                                 row_classification: Any,
+                                 validation_result: Any) -> Tuple[List[str], List[str]]:
         """Generate processing notes and warnings"""
         notes = []
         warnings = []
         
         # Column mapping notes
-        if column_mapping.get('unmapped_columns'):
+        if hasattr(column_mapping, 'unmapped_columns'):
+            if column_mapping.unmapped_columns:
+                warnings.append(f"{len(column_mapping.unmapped_columns)} columns could not be mapped")
+        elif column_mapping.get('unmapped_columns'):
             warnings.append(f"{len(column_mapping['unmapped_columns'])} columns could not be mapped")
         
-        if column_mapping.get('suggestions'):
+        if hasattr(column_mapping, 'suggestions'):
+            if column_mapping.suggestions:
+                notes.extend(column_mapping.suggestions)
+        elif column_mapping.get('suggestions'):
             notes.extend(column_mapping['suggestions'])
         
         # Row classification notes
-        if row_classification.get('suggestions'):
+        if hasattr(row_classification, 'suggestions'):
+            if row_classification.suggestions:
+                notes.extend(row_classification.suggestions)
+        elif row_classification.get('suggestions'):
             notes.extend(row_classification['suggestions'])
         
         # Validation notes
-        if validation_result.get('suggestions'):
+        if hasattr(validation_result, 'suggestions'):
+            if validation_result.suggestions:
+                notes.extend(validation_result.suggestions)
+        elif validation_result.get('suggestions'):
             notes.extend(validation_result['suggestions'])
         
         return notes, warnings

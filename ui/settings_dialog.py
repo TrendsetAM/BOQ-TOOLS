@@ -260,7 +260,7 @@ class SettingsDialog:
                                      orient=tk.HORIZONTAL, length=200)
         missing_data_scale.grid(row=2, column=1, sticky=tk.W, padx=5, pady=2)
         self.missing_data_label = ttk.Label(thresholds_frame, text="0.3")
-        missing_data_label.grid(row=2, column=2, sticky=tk.W, padx=5, pady=2)
+        self.missing_data_label.grid(row=2, column=2, sticky=tk.W, padx=5, pady=2)
         missing_data_scale.configure(command=lambda v: self.missing_data_label.configure(text=f"{float(v):.1f}"))
         tooltip(missing_data_scale, "Threshold for flagging rows with missing required data")
         

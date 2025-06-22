@@ -423,7 +423,8 @@ class ColumnMapper:
         """
         logger.debug(f"Mapping {len(headers)} columns to BOQ types")
         
-        mappings = []
+        # First pass: create all mappings
+        all_mappings = []
         normalized_headers = self.normalize_header_text(headers)
         
         for col_idx, (original_header, normalized_header) in enumerate(zip(headers, normalized_headers)):
@@ -448,12 +449,47 @@ class ColumnMapper:
                     reasoning=reasoning
                 )
                 
-                mappings.append(mapping)
+                all_mappings.append(mapping)
                 
                 logger.debug(f"Column {col_idx} '{original_header}' -> {best_type.value} "
                            f"(confidence: {best_score:.2f})")
         
-        return mappings
+        # Second pass: enforce uniqueness for required columns
+        required_types = {ColumnType.DESCRIPTION, ColumnType.QUANTITY, ColumnType.UNIT_PRICE, 
+                          ColumnType.TOTAL_PRICE, ColumnType.UNIT, ColumnType.CODE}
+        
+        # Find best candidates for each required type
+        best_candidates = {}
+        for mapping in all_mappings:
+            if mapping.mapped_type in required_types:
+                confidence = mapping.confidence
+                if (mapping.mapped_type not in best_candidates or 
+                    confidence > best_candidates[mapping.mapped_type][0]):
+                    best_candidates[mapping.mapped_type] = (confidence, mapping)
+        
+        # Demote columns that lost the competition for required types
+        for mapping in all_mappings:
+            if (mapping.mapped_type in required_types and 
+                mapping.mapped_type in best_candidates and 
+                best_candidates[mapping.mapped_type][1] != mapping):
+                
+                # This column lost the competition, demote to its second-best guess.
+                # The first alternative (index 0) is the current mapping, so we try index 1.
+                original_type = mapping.mapped_type.value
+                if len(mapping.alternatives) > 1:
+                    second_best_type, second_best_confidence = mapping.alternatives[1]
+                    mapping.mapped_type = second_best_type
+                    mapping.confidence = second_best_confidence
+                    mapping.reasoning.append(f"Demoted from '{original_type}' to '{second_best_type.value}' due to uniqueness constraint.")
+                    logger.debug(f"Demoted column '{mapping.original_header}' from {original_type} to {second_best_type.value} (uniqueness constraint)")
+                else:
+                    # No other alternatives, demote to remarks
+                    mapping.mapped_type = ColumnType.REMARKS
+                    mapping.confidence = 0.0
+                    mapping.reasoning.append(f"Demoted from '{original_type}' to 'remarks' due to uniqueness constraint (no alternatives).")
+                    logger.debug(f"Demoted column '{mapping.original_header}' from {original_type} to remarks (uniqueness constraint, no alternatives)")
+        
+        return all_mappings
     
     def _find_best_column_match(self, normalized_header: str, col_idx: int, 
                                all_headers: List[str]) -> Tuple[Optional[ColumnType], float, List[Tuple[ColumnType, float]]]:
@@ -489,19 +525,24 @@ class ColumnMapper:
         """Calculate score for header matching a column type"""
         score = 0.0
         
-        # Direct keyword matching
+        # Direct keyword matching (base score)
         for keyword in mapping.keywords:
             keyword_lower = keyword.lower()
             if keyword_lower in normalized_header or normalized_header in keyword_lower:
-                score += mapping.weight
+                # Use a base score of 0.6 for keyword matches, then apply weight
+                base_score = 0.6 * mapping.weight
+                score += min(base_score, 0.8)  # Cap keyword score at 0.8
                 break
         
-        # Positional scoring
-        score += self._calculate_positional_score(col_idx, mapping, all_headers)
+        # Positional scoring (additional bonus)
+        positional_bonus = self._calculate_positional_score(col_idx, mapping, all_headers)
+        score += min(positional_bonus, 0.15)  # Cap positional bonus at 0.15
         
-        # Context scoring (check neighboring columns)
-        score += self._calculate_context_score(col_idx, mapping, all_headers)
+        # Context scoring (additional bonus)
+        context_bonus = self._calculate_context_score(col_idx, mapping, all_headers)
+        score += min(context_bonus, 0.05)  # Cap context bonus at 0.05
         
+        # Ensure final score is capped at 1.0
         return min(score, 1.0)
     
     def _calculate_positional_score(self, col_idx: int, mapping: Any, 
