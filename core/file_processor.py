@@ -472,6 +472,88 @@ class ExcelProcessor:
         estimated_bytes = total_cells * 50
         return estimated_bytes / (1024 * 1024)  # Convert to MB
     
+    def get_sheet_data(self, sheet_name: str, max_rows: int = 1000) -> List[List[str]]:
+        """
+        Get all data from a sheet as a list of rows
+        
+        Args:
+            sheet_name: Name of the sheet to extract data from
+            max_rows: Maximum number of rows to extract (for memory management)
+            
+        Returns:
+            List of rows, where each row is a list of cell values as strings
+        """
+        if not self.workbook:
+            raise RuntimeError("No workbook loaded. Call load_file() first.")
+        
+        try:
+            worksheet = self.workbook[sheet_name]
+            
+            # Get metadata to determine data boundaries
+            metadata = self.get_sheet_metadata(sheet_name)
+            
+            if metadata.last_data_row < metadata.first_data_row:
+                return []
+            
+            # Limit rows for memory management
+            end_row = min(metadata.last_data_row, metadata.first_data_row + max_rows - 1)
+            
+            # Extract all data
+            sheet_data = []
+            for row in range(metadata.first_data_row, end_row + 1):
+                row_data = []
+                for col in range(metadata.first_data_column, metadata.last_data_column + 1):
+                    cell_value = worksheet.cell(row=row, column=col).value
+                    row_data.append(str(cell_value) if cell_value is not None else "")
+                sheet_data.append(row_data)
+            
+            logger.debug(f"Extracted {len(sheet_data)} rows from sheet '{sheet_name}'")
+            return sheet_data
+            
+        except Exception as e:
+            logger.error(f"Failed to extract data from sheet '{sheet_name}': {str(e)}")
+            raise
+    
+    def get_all_sheets_data(self, max_rows: int = 1000) -> Dict[str, List[List[str]]]:
+        """
+        Get data from all visible sheets
+        
+        Args:
+            max_rows: Maximum number of rows to extract per sheet
+            
+        Returns:
+            Dictionary mapping sheet names to their data
+        """
+        visible_sheets = self.get_visible_sheets()
+        sheets_data = {}
+        
+        for sheet_name in visible_sheets:
+            try:
+                sheets_data[sheet_name] = self.get_sheet_data(sheet_name, max_rows)
+            except Exception as e:
+                logger.error(f"Failed to get data for sheet '{sheet_name}': {e}")
+                sheets_data[sheet_name] = []
+        
+        return sheets_data
+    
+    def get_file_info(self) -> Dict[str, Any]:
+        """
+        Get basic file information
+        
+        Returns:
+            Dictionary with file information
+        """
+        if not self.workbook:
+            raise RuntimeError("No workbook loaded. Call load_file() first.")
+        
+        return {
+            "file_path": str(self.file_path) if self.file_path else None,
+            "file_format": self.file_format,
+            "total_sheets": len(self.workbook.sheetnames),
+            "visible_sheets": self.get_visible_sheets(),
+            "file_size_mb": self.file_path.stat().st_size / (1024 * 1024) if self.file_path else 0
+        }
+    
     def get_all_sheets_metadata(self) -> Dict[str, SheetMetadata]:
         """
         Get metadata for all visible sheets
