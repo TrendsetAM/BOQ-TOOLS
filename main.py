@@ -39,7 +39,7 @@ except ImportError:
     GUI_AVAILABLE = False
 
 # Utils
-from utils.config import get_config, BOQConfig
+from utils.config import get_config, BOQConfig, ensure_default_config, get_user_config_path
 from utils.export import ExcelExporter
 from utils.logger import setup_logging
 
@@ -743,4 +743,20 @@ def main():
 
 
 if __name__ == "__main__":
+    # At startup, ensure user-writable config files exist
+    boq_settings_path = ensure_default_config(
+        'boq_settings.json',
+        os.path.join(os.path.dirname(__file__), 'config', 'boq_settings.json'),
+        default_data={}
+    )
+    canonical_mappings_path = ensure_default_config(
+        'canonical_mappings.json',
+        os.path.join(os.path.dirname(__file__), 'config', 'canonical_mappings.json'),
+        default_data={}
+    )
+
+    # Example: Load settings
+    with open(boq_settings_path, 'r', encoding='utf-8') as f:
+        settings = json.load(f)
+
     main() 

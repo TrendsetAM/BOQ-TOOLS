@@ -14,6 +14,11 @@ from enum import Enum
 
 from utils.config import get_config, ColumnType
 
+try:
+    from appdirs import user_config_dir
+except ImportError:
+    user_config_dir = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -139,27 +144,52 @@ class ColumnMapper:
             'code': ['code', 'ref', 'reference', 'item no', 'item number']
         }
     
-    def _load_canonical_mappings(self):
-        """Load canonical mappings from JSON file or use defaults"""
-        self.canonical_mappings_file = os.path.join('config', 'canonical_mappings.json')
-        try:
-            if os.path.exists(self.canonical_mappings_file):
-                with open(self.canonical_mappings_file, 'r', encoding='utf-8') as f:
-                    self.CANONICAL_HEADER_MAP = json.load(f)
-                logger.info(f"Loaded canonical mappings from {self.canonical_mappings_file}")
+    @staticmethod
+    def get_user_config_path(filename: str) -> str:
+        """Get a user-writable config path for the given filename."""
+        app_name = "BOQ-TOOLS"
+        if user_config_dir:
+            config_dir = user_config_dir(app_name)
+        else:
+            # Fallback: use platform-specific logic
+            if os.name == 'nt':
+                config_dir = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), app_name)
             else:
-                self.CANONICAL_HEADER_MAP = self.DEFAULT_CANONICAL_HEADER_MAP.copy()
-                self._save_canonical_mappings()
-                logger.info("Created default canonical mappings file")
+                config_dir = os.path.join(os.path.expanduser('~/.config'), app_name)
+        os.makedirs(config_dir, exist_ok=True)
+        return os.path.join(config_dir, filename)
+
+    def _load_canonical_mappings(self):
+        """Load canonical mappings from user config or use defaults. On first run, copy default to user config."""
+        # Path to user config file
+        self.canonical_mappings_file = self.get_user_config_path('canonical_mappings.json')
+        default_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'canonical_mappings.json')
+        try:
+            if not os.path.exists(self.canonical_mappings_file):
+                # Copy default file to user config dir
+                if os.path.exists(default_path):
+                    with open(default_path, 'r', encoding='utf-8') as fsrc:
+                        default_data = fsrc.read()
+                    with open(self.canonical_mappings_file, 'w', encoding='utf-8') as fdst:
+                        fdst.write(default_data)
+                    logger.info(f"Copied default canonical mappings to {self.canonical_mappings_file}")
+                else:
+                    # If default file missing, use hardcoded defaults
+                    with open(self.canonical_mappings_file, 'w', encoding='utf-8') as fdst:
+                        json.dump(self.DEFAULT_CANONICAL_HEADER_MAP, fdst, indent=2, ensure_ascii=False)
+                    logger.info(f"Created new canonical mappings file with defaults at {self.canonical_mappings_file}")
+            # Load from user config
+            with open(self.canonical_mappings_file, 'r', encoding='utf-8') as f:
+                self.CANONICAL_HEADER_MAP = json.load(f)
+            logger.info(f"Loaded canonical mappings from {self.canonical_mappings_file}")
         except Exception as e:
             logger.warning(f"Failed to load canonical mappings: {e}, using defaults")
             self.CANONICAL_HEADER_MAP = self.DEFAULT_CANONICAL_HEADER_MAP.copy()
-        
         # Create lookup dictionary
         self.CANONICAL_TYPE_LOOKUP = {v: k for k, vals in self.CANONICAL_HEADER_MAP.items() for v in vals}
     
     def _save_canonical_mappings(self):
-        """Save canonical mappings to JSON file"""
+        """Save canonical mappings to user config file"""
         try:
             os.makedirs(os.path.dirname(self.canonical_mappings_file), exist_ok=True)
             with open(self.canonical_mappings_file, 'w', encoding='utf-8') as f:

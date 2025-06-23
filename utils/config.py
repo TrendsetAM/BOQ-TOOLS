@@ -7,6 +7,13 @@ from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
 import logging
+import os
+import json
+
+try:
+    from appdirs import user_config_dir
+except ImportError:
+    user_config_dir = None
 
 logger = logging.getLogger(__name__)
 
@@ -424,6 +431,33 @@ def validate_and_log_config() -> bool:
     else:
         logger.info("Configuration validation passed")
         return True
+
+
+def get_user_config_path(filename: str) -> str:
+    app_name = "BOQ-TOOLS"
+    if user_config_dir:
+        config_dir = user_config_dir(app_name)
+    else:
+        if os.name == 'nt':
+            config_dir = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), app_name)
+        else:
+            config_dir = os.path.join(os.path.expanduser('~/.config'), app_name)
+    os.makedirs(config_dir, exist_ok=True)
+    return os.path.join(config_dir, filename)
+
+
+def ensure_default_config(filename: str, default_path: str, default_data: dict = None):
+    user_path = get_user_config_path(filename)
+    if not os.path.exists(user_path):
+        if os.path.exists(default_path):
+            with open(default_path, 'r', encoding='utf-8') as fsrc:
+                data = fsrc.read()
+            with open(user_path, 'w', encoding='utf-8') as fdst:
+                fdst.write(data)
+        elif default_data is not None:
+            with open(user_path, 'w', encoding='utf-8') as fdst:
+                json.dump(default_data, fdst, indent=2, ensure_ascii=False)
+    return user_path
 
 
 if __name__ == "__main__":
