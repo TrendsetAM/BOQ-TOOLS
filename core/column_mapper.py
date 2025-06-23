@@ -235,37 +235,72 @@ class ColumnMapper:
             HeaderRowInfo with header row details
         """
         logger.debug(f"Searching for header row in {len(sheet_data)} rows")
-        
         best_header = None
         best_score = 0.0
-        
-        # Check first few rows for headers
         search_rows = min(self.max_header_rows, len(sheet_data))
+        debug_rows = []  # Collect debug info for each candidate
+        keyword_candidates = []  # Track keyword-based candidates separately
         
         for row_index in range(search_rows):
             row = sheet_data[row_index]
             if not row:
                 continue
-            
-            # Try different detection methods
             methods = [
                 self._detect_by_keywords,
                 self._detect_by_data_patterns,
                 self._detect_by_positional_logic,
                 self._detect_by_merged_cells
             ]
-            
             for method in methods:
                 try:
                     result = method(row, row_index, sheet_data)
-                    if result and result.confidence > best_score:
-                        best_score = result.confidence
-                        best_header = result
+                    if result:
+                        debug_rows.append({
+                            'row_index': row_index,
+                            'method': method.__name__,
+                            'confidence': result.confidence,
+                            'reasoning': result.reasoning,
+                            'headers': row
+                        })
+                        
+                        # Track keyword-based candidates separately for tie-breaking
+                        if method == self._detect_by_keywords:
+                            keyword_candidates.append(result)
+                        
+                        # Apply tie-breaker logic: prefer keyword matches when scores are close
+                        if result.confidence > best_score:
+                            best_score = result.confidence
+                            best_header = result
+                        elif (result.confidence >= best_score - 0.1 and  # Within 0.1 of best score
+                              method == self._detect_by_keywords and 
+                              best_header and 
+                              best_header.method == HeaderDetectionMethod.MERGED_CELLS):
+                            # Prefer keyword matches over merged cells when scores are close
+                            best_score = result.confidence
+                            best_header = result
+                            
                 except Exception as e:
                     logger.warning(f"Error in header detection method {method.__name__}: {e}")
         
+        # Additional tie-breaker: if we have multiple keyword candidates with similar scores,
+        # prefer the one with more keyword matches
+        if len(keyword_candidates) > 1:
+            # Find the keyword candidate with the highest score
+            best_keyword = max(keyword_candidates, key=lambda x: x.confidence)
+            if (best_keyword.confidence >= best_score - 0.05 and  # Very close to best score
+                best_header and 
+                best_header.method != HeaderDetectionMethod.KEYWORD_MATCH):
+                # Prefer the keyword match if it's very close to the best score
+                best_score = best_keyword.confidence
+                best_header = best_keyword
+        
+        # Log all candidate rows and their scores
+        if debug_rows:
+            logger.debug("Header row candidates:")
+            for info in debug_rows:
+                logger.debug(f"Row {info['row_index']} ({info['method']}): confidence={info['confidence']:.2f}, headers={info['headers']}, reasoning={info['reasoning']}")
+        
         if not best_header:
-            # Fallback: use first non-empty row
             for row_index in range(search_rows):
                 row = sheet_data[row_index]
                 if row and any(cell.strip() for cell in row):
@@ -292,7 +327,6 @@ class ColumnMapper:
                 headers=[],
                 is_merged=False
             )
-        
         return best_header
     
     def _detect_by_keywords(self, row: List[str], row_index: int, 
@@ -303,6 +337,7 @@ class ColumnMapper:
         
         score = 0.0
         matches = []
+        keyword_count = 0
         
         # Check each cell for header keywords
         for cell in row:
@@ -318,17 +353,36 @@ class ColumnMapper:
                     for keyword in mapping.keywords:
                         if keyword.lower() in cell_lower:
                             score += mapping.weight
+                            keyword_count += 1
                             matches.append(f"'{cell}' matches {col_type.value}")
         
-        # Normalize score
-        score = min(score / max(1, len(row)), 1.0)
+        # Improved scoring algorithm that prioritizes multiple keyword matches
+        if keyword_count > 0:
+            # Base score from keyword matches (not normalized by row length)
+            base_score = min(score / 10.0, 0.6)  # Cap base score at 0.6
+            
+            # Bonus for multiple keyword matches
+            keyword_bonus = min(keyword_count * 0.15, 0.4)  # Up to 0.4 bonus for multiple keywords
+            
+            # Penalty for too many empty cells (but not as severe)
+            non_empty_cells = sum(1 for cell in row if cell and str(cell).strip())
+            empty_penalty = max(0, (len(row) - non_empty_cells) / len(row) * 0.2)  # Max 0.2 penalty
+            
+            score = base_score + keyword_bonus - empty_penalty
+            
+            # Ensure score is within bounds
+            score = max(0.0, min(score, 1.0))
         
         if score > 0.3:  # Threshold for keyword detection
+            reasoning = [f"Keyword matches: {', '.join(matches[:3])}"]
+            if keyword_count > 3:
+                reasoning.append(f"Multiple keyword matches: {keyword_count} keywords found")
+            
             return HeaderRowInfo(
                 row_index=row_index,
                 confidence=score,
                 method=HeaderDetectionMethod.KEYWORD_MATCH,
-                reasoning=[f"Keyword matches: {', '.join(matches[:3])}"],
+                reasoning=reasoning,
                 headers=row,
                 is_merged=False
             )
@@ -449,17 +503,17 @@ class ColumnMapper:
         
         if empty_cells > 0 and empty_cells < total_cells:
             # Check if this looks like a merged header
-            score = 0.3
+            score = 0.2  # Reduced from 0.3 to be less aggressive
             reasoning = [f"Potential merged cells: {empty_cells}/{total_cells} empty cells"]
             
             # Check if next row has more detailed headers
             if row_index + 1 < len(sheet_data):
                 next_row = sheet_data[row_index + 1]
                 if next_row and len(next_row) > len([c for c in row if c]):
-                    score += 0.2
+                    score += 0.15  # Reduced from 0.2
                     reasoning.append("Next row has more detailed headers")
             
-            if score > 0.4:
+            if score > 0.25:  # Reduced threshold from 0.4 to 0.25
                 return HeaderRowInfo(
                     row_index=row_index,
                     confidence=score,
