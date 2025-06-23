@@ -1,4 +1,4 @@
 @echo off
 echo Starting BOQ Tools...
-venv\Scripts\python.exe main.py
+venv\Scripts\python.exe main.py --gui
 pause 
