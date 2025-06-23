@@ -298,6 +298,9 @@ class BOQApplicationController:
             file_mapping = self.mapping_generator.generate_file_mapping(processor_results)
             if progress_callback: progress_callback(100, "Processing complete")
 
+            # Add column mapper reference to file mapping for UI learning functionality
+            file_mapping.column_mapper = self.column_mapper
+
             self.current_files[abs_filepath_str] = {
                 'file_mapping': file_mapping,
                 'processor_results': processor_results,

@@ -5,6 +5,9 @@ Intelligent column mapping with header detection and confidence scoring
 
 import logging
 import re
+import difflib
+import json
+import os
 from typing import Dict, List, Tuple, Optional, Any, Set
 from dataclasses import dataclass
 from enum import Enum
@@ -60,6 +63,16 @@ class ColumnMapper:
     Intelligent column mapper with header detection and confidence scoring
     """
     
+    # Default canonical required type mapping
+    DEFAULT_CANONICAL_HEADER_MAP = {
+        'description': ["description", "desc", "item description", "work description", "scope", "item", "activity", "task"],
+        'quantity': ["quantity", "qty", "quant", "qty.", "number", "count", "nos"],
+        'unit_price': ["unit price", "unit_price", "price/unit", "unitprice", "rate", "unit rate", "price per unit"],
+        'total_price': ["total price", "total_price", "amount", "price", "total", "sum", "cost", "value"],
+        'unit': ["unit", "uom", "measure", "unit of measure", "units", "measurement"],
+        'code': ["code", "item code", "ref code", "reference code", "item no", "item number", "boq code", "schedule no"]
+    }
+    
     def __init__(self, max_header_rows: int = 10):
         """
         Initialize the column mapper
@@ -70,6 +83,7 @@ class ColumnMapper:
         self.config = get_config()
         self.max_header_rows = max_header_rows
         self._setup_patterns()
+        self._load_canonical_mappings()
         
         logger.info("Column Mapper initialized")
     
@@ -124,6 +138,61 @@ class ColumnMapper:
             'unit': ['unit', 'units', 'uom', 'measurement'],
             'code': ['code', 'ref', 'reference', 'item no', 'item number']
         }
+    
+    def _load_canonical_mappings(self):
+        """Load canonical mappings from JSON file or use defaults"""
+        self.canonical_mappings_file = os.path.join('config', 'canonical_mappings.json')
+        try:
+            if os.path.exists(self.canonical_mappings_file):
+                with open(self.canonical_mappings_file, 'r', encoding='utf-8') as f:
+                    self.CANONICAL_HEADER_MAP = json.load(f)
+                logger.info(f"Loaded canonical mappings from {self.canonical_mappings_file}")
+            else:
+                self.CANONICAL_HEADER_MAP = self.DEFAULT_CANONICAL_HEADER_MAP.copy()
+                self._save_canonical_mappings()
+                logger.info("Created default canonical mappings file")
+        except Exception as e:
+            logger.warning(f"Failed to load canonical mappings: {e}, using defaults")
+            self.CANONICAL_HEADER_MAP = self.DEFAULT_CANONICAL_HEADER_MAP.copy()
+        
+        # Create lookup dictionary
+        self.CANONICAL_TYPE_LOOKUP = {v: k for k, vals in self.CANONICAL_HEADER_MAP.items() for v in vals}
+    
+    def _save_canonical_mappings(self):
+        """Save canonical mappings to JSON file"""
+        try:
+            os.makedirs(os.path.dirname(self.canonical_mappings_file), exist_ok=True)
+            with open(self.canonical_mappings_file, 'w', encoding='utf-8') as f:
+                json.dump(self.CANONICAL_HEADER_MAP, f, indent=2, ensure_ascii=False)
+            logger.info(f"Saved canonical mappings to {self.canonical_mappings_file}")
+        except Exception as e:
+            logger.error(f"Failed to save canonical mappings: {e}")
+    
+    def update_canonical_mapping(self, original_header: str, mapped_type: str):
+        """
+        Update canonical mappings when user confirms a column mapping
+        
+        Args:
+            original_header: The original header text
+            mapped_type: The confirmed mapped type (e.g., 'description', 'quantity', etc.)
+        """
+        if mapped_type not in self.CANONICAL_HEADER_MAP:
+            logger.warning(f"Unknown mapped type: {mapped_type}")
+            return
+        
+        # Normalize the header for storage
+        normalized_header = original_header.strip()
+        
+        # Add to canonical mappings if not already present
+        if normalized_header not in self.CANONICAL_HEADER_MAP[mapped_type]:
+            self.CANONICAL_HEADER_MAP[mapped_type].append(normalized_header)
+            self.CANONICAL_TYPE_LOOKUP[normalized_header] = mapped_type
+            self._save_canonical_mappings()
+            logger.info(f"Added '{normalized_header}' to canonical mappings for '{mapped_type}'")
+    
+    def get_canonical_mappings(self) -> Dict[str, List[str]]:
+        """Get current canonical mappings"""
+        return self.CANONICAL_HEADER_MAP.copy()
     
     def find_header_row(self, sheet_data: List[List[str]]) -> HeaderRowInfo:
         """
@@ -411,34 +480,56 @@ class ColumnMapper:
         
         return normalized
     
+    def _normalize_header(self, header):
+        return re.sub(r'[^a-z0-9]', '', header.strip().lower())
+
+    def _canonical_type_for_header(self, header):
+        norm = self._normalize_header(header)
+        for canonical, variants in self.CANONICAL_HEADER_MAP.items():
+            for variant in variants:
+                if norm == self._normalize_header(variant):
+                    return canonical
+        # Fuzzy match fallback
+        all_variants = [v for vals in self.CANONICAL_HEADER_MAP.values() for v in vals]
+        close = difflib.get_close_matches(header.strip().lower(), all_variants, n=1, cutoff=0.85)
+        if close:
+            for canonical, variants in self.CANONICAL_HEADER_MAP.items():
+                if close[0] in variants:
+                    return canonical
+        return None
+
     def map_columns_to_types(self, headers: List[str]) -> List[ColumnMapping]:
         """
-        Map columns to BOQ types using configuration
-        
-        Args:
-            headers: List of header strings
-            
-        Returns:
-            List of ColumnMapping objects
+        Map columns to BOQ types using improved normalization and canonical mapping
         """
-        logger.debug(f"Mapping {len(headers)} columns to BOQ types")
-        
-        # First pass: create all mappings
+        logger.debug(f"Mapping {len(headers)} columns to BOQ types (robust)")
         all_mappings = []
-        normalized_headers = self.normalize_header_text(headers)
-        
+        normalized_headers = [self._normalize_header(h) for h in headers]
         for col_idx, (original_header, normalized_header) in enumerate(zip(headers, normalized_headers)):
             if not normalized_header:
                 continue
-            
-            # Find best match for this column
+            # Try canonical mapping first
+            canonical_type = self._canonical_type_for_header(original_header)
+            if canonical_type:
+                # 100% confidence for canonical match
+                col_type = getattr(ColumnType, canonical_type.upper(), ColumnType.REMARKS)
+                mapping = ColumnMapping(
+                    column_index=col_idx,
+                    original_header=original_header,
+                    normalized_header=normalized_header,
+                    mapped_type=col_type,
+                    confidence=1.0,
+                    alternatives=[(col_type, 1.0)],
+                    reasoning=[f"Canonical match for '{original_header}' as '{col_type.value}'"]
+                )
+                all_mappings.append(mapping)
+                continue
+            # Fuzzy match fallback
             best_type, best_score, alternatives = self._find_best_column_match(normalized_header, col_idx, headers)
-            
             if best_type:
                 reasoning = self._generate_mapping_reasoning(
                     original_header, normalized_header, best_type, best_score, col_idx, headers
                 )
-                
                 mapping = ColumnMapping(
                     column_index=col_idx,
                     original_header=original_header,
@@ -448,17 +539,10 @@ class ColumnMapper:
                     alternatives=alternatives,
                     reasoning=reasoning
                 )
-                
                 all_mappings.append(mapping)
-                
-                logger.debug(f"Column {col_idx} '{original_header}' -> {best_type.value} "
-                           f"(confidence: {best_score:.2f})")
-        
         # Second pass: enforce uniqueness for required columns
         required_types = {ColumnType.DESCRIPTION, ColumnType.QUANTITY, ColumnType.UNIT_PRICE, 
                           ColumnType.TOTAL_PRICE, ColumnType.UNIT, ColumnType.CODE}
-        
-        # Find best candidates for each required type
         best_candidates = {}
         for mapping in all_mappings:
             if mapping.mapped_type in required_types:
@@ -466,15 +550,10 @@ class ColumnMapper:
                 if (mapping.mapped_type not in best_candidates or 
                     confidence > best_candidates[mapping.mapped_type][0]):
                     best_candidates[mapping.mapped_type] = (confidence, mapping)
-        
-        # Demote columns that lost the competition for required types
         for mapping in all_mappings:
             if (mapping.mapped_type in required_types and 
                 mapping.mapped_type in best_candidates and 
                 best_candidates[mapping.mapped_type][1] != mapping):
-                
-                # This column lost the competition, demote to its second-best guess.
-                # The first alternative (index 0) is the current mapping, so we try index 1.
                 original_type = mapping.mapped_type.value
                 if len(mapping.alternatives) > 1:
                     second_best_type, second_best_confidence = mapping.alternatives[1]
@@ -483,12 +562,10 @@ class ColumnMapper:
                     mapping.reasoning.append(f"Demoted from '{original_type}' to '{second_best_type.value}' due to uniqueness constraint.")
                     logger.debug(f"Demoted column '{mapping.original_header}' from {original_type} to {second_best_type.value} (uniqueness constraint)")
                 else:
-                    # No other alternatives, demote to remarks
                     mapping.mapped_type = ColumnType.REMARKS
                     mapping.confidence = 0.0
                     mapping.reasoning.append(f"Demoted from '{original_type}' to 'remarks' due to uniqueness constraint (no alternatives).")
                     logger.debug(f"Demoted column '{mapping.original_header}' from {original_type} to remarks (uniqueness constraint, no alternatives)")
-        
         return all_mappings
     
     def _find_best_column_match(self, normalized_header: str, col_idx: int, 

@@ -143,6 +143,7 @@ class FileMapping:
     processing_summary: ProcessingSummary
     review_flags: List[ReviewFlag]
     export_ready: bool
+    column_mapper: Optional[Any] = None  # Reference to ColumnMapper for UI learning
 
 
 class MappingGenerator:

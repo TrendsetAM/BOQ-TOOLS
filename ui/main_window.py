@@ -100,8 +100,9 @@ class MainWindow:
         self.status_var = tk.StringVar(value="Ready.")
         self.progress_var = tk.DoubleVar(value=0)
         self.status_bar_visible = True
-        self.file_mapping = None  # To store the full file mapping object
-        self.sheet_treeviews = {} # To store treeview widgets for each sheet
+        self.file_mapping = None
+        self.sheet_treeviews = {}
+        self.column_mapper = None  # Will be set when processing files
         # Create widgets
         self._create_main_widgets()
         self._setup_drag_and_drop()
@@ -327,6 +328,7 @@ class MainWindow:
                     )
                     # After processing, show the main window with BOQ sheets for column mapping
                     self.file_mapping = file_mapping
+                    self.column_mapper = file_mapping.column_mapper if hasattr(file_mapping, 'column_mapper') else None
                     self.root.after(0, self._on_processing_complete, tab, filepath, self.file_mapping, loading_label)
                 
                 self.root.after(0, ask_categorization)
@@ -342,14 +344,18 @@ class MainWindow:
         self._update_status(message)
 
     def _on_processing_complete(self, tab, filepath, file_mapping, loading_widget):
-        """Callback for when file processing succeeds. Runs in the main UI thread."""
+        """Handle processing completion"""
+        # Store the file mapping and column mapper
+        self.file_mapping = file_mapping
+        self.column_mapper = file_mapping.column_mapper if hasattr(file_mapping, 'column_mapper') else None
+        
+        # Remove loading widget and populate tab
         loading_widget.destroy()
-        # Store the real mapping data with the tab widget itself for later access (like exporting)
-        setattr(tab, 'file_mapping', file_mapping)
         self._populate_file_tab(tab, file_mapping)
-        self._update_status(f"Successfully processed: {os.path.basename(filepath)}")
-        self.progress_var.set(100)
-    
+        
+        # Update status
+        self._update_status(f"Processing complete: {os.path.basename(filepath)}")
+
     def _on_processing_error(self, tab, filename, loading_widget):
         """Callback for when file processing fails. Runs in the main UI thread."""
         loading_widget.destroy()
@@ -450,6 +456,18 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         # Add the propagate button to the left, above the Treeview in the mappings_frame
         propagate_btn = ttk.Button(mappings_frame, text="Apply These Mappings to All Other Sheets", command=lambda s=sheet: self._apply_mappings_to_all_sheets(s))
         propagate_btn.grid(row=99, column=0, sticky=tk.W, padx=5, pady=(0, 5))
+        
+        # Add confirm column mappings button at the bottom, full width, large and prominent
+        confirm_btn = ttk.Button(
+            mappings_frame,
+            text="Confirm Column Mappings",
+            command=lambda s=sheet: self._save_all_mappings(s)
+        )
+        confirm_btn.grid(row=200, column=0, columnspan=2, sticky=tk.EW, padx=10, pady=10, ipady=8)
+        try:
+            confirm_btn['font'] = ("TkDefaultFont", 12, "bold")
+        except Exception:
+            pass  # Some ttk themes may not support direct font assignment
 
         # Create treeview for column mappings
         columns = ("Original Header", "Mapped Type", "Confidence", "Required", "Actions")
@@ -531,21 +549,54 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         # Dialog to edit mapped type
         dialog = tk.Toplevel(self.root)
         dialog.title(f"Edit Column: {column_name}")
-        dialog.geometry("400x400")
+        dialog.geometry("500x500")
         dialog.transient(self.root)
         dialog.grab_set()
-        tk.Label(dialog, text=f"Column: {column_name}", font=("Arial", 12, "bold")).pack(pady=10)
-        ttk.Label(dialog, text="Select new mapped type:").pack(pady=5)
-        type_var = tk.StringVar(value=getattr(col_mapping, 'mapped_type', 'unknown'))
+        
+        # Main content frame
+        main_frame = ttk.Frame(dialog)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Header
+        header_label = tk.Label(main_frame, text=f"Column: {column_name}", font=("Arial", 12, "bold"))
+        header_label.pack(pady=(0, 10))
+        
+        # Current mapping info
+        current_type = getattr(col_mapping, 'mapped_type', 'unknown')
+        current_confidence = getattr(col_mapping, 'confidence', 0)
+        info_text = f"Current: {current_type} (Confidence: {current_confidence:.1%})"
+        info_label = ttk.Label(main_frame, text=info_text, foreground="gray")
+        info_label.pack(pady=(0, 15))
+        
+        # Selection label
+        ttk.Label(main_frame, text="Select new mapped type:").pack(pady=(0, 10))
+        
         # Radio buttons for each mapped type
-        radio_frame = ttk.Frame(dialog)
-        radio_frame.pack(pady=5)
+        radio_frame = ttk.Frame(main_frame)
+        radio_frame.pack(pady=5, fill=tk.X)
+        type_var = tk.StringVar(value=current_type)
+        
         for opt in mapped_type_options:
-            ttk.Radiobutton(radio_frame, text=opt, variable=type_var, value=opt).pack(anchor=tk.W, padx=10, pady=2)
-        button_frame = ttk.Frame(dialog)
-        button_frame.pack(pady=10, fill=tk.X)
+            radio_btn = ttk.Radiobutton(radio_frame, text=opt, variable=type_var, value=opt)
+            radio_btn.pack(anchor=tk.W, padx=10, pady=2)
+            
+            # Note: ttk.Radiobutton styling is handled by the theme system
+        
+        # Learning info frame
+        learning_frame = ttk.LabelFrame(main_frame, text="Learning Information")
+        learning_frame.pack(fill=tk.X, pady=15)
+        
+        learning_text = "When you save a required type mapping, it will be added to the system's learning database for future use."
+        learning_label = ttk.Label(learning_frame, text=learning_text, wraplength=450, justify=tk.LEFT)
+        learning_label.pack(padx=10, pady=10)
+        
+        # Button frame
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(20, 0))
+        
         def save():
             new_type = type_var.get()
+            
             # Check for duplicate required type
             if new_type in required_types:
                 for cm in getattr(sheet, 'column_mappings', []):
@@ -571,8 +622,22 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                                 tree.item(row_id, tags=())
                                 break
                         break
+            
+            # Update the column mapping
             col_mapping.mapped_type = new_type
             col_mapping.confidence = 1.0  # User is always right
+            
+            # Learn from user confirmation for required types
+            learning_message = ""
+            if new_type in required_types and self.column_mapper:
+                try:
+                    self.column_mapper.update_canonical_mapping(column_name, new_type)
+                    learning_message = f"\n\n✓ Learning: '{column_name}' has been added to the system's mapping database."
+                    logger.info(f"Learned new mapping: '{column_name}' -> '{new_type}'")
+                except Exception as e:
+                    learning_message = f"\n\n⚠ Warning: Failed to save mapping to database: {e}"
+                    logger.warning(f"Failed to update canonical mapping: {e}")
+            
             # Update the treeview row
             tree.set(selection[0], column="Mapped Type", value=new_type)
             tree.set(selection[0], column="Confidence", value="100.0%")
@@ -585,9 +650,28 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 tree.item(selection[0], tags=("required",))
             else:
                 tree.item(selection[0], tags=())
+            
+            # Show confirmation message
+            messagebox.showinfo(
+                "Mapping Updated", 
+                f"Column '{column_name}' has been mapped to '{new_type}' with 100% confidence.{learning_message}"
+            )
+            
             dialog.destroy()
-        ttk.Button(button_frame, text="Save", command=save).pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-        ttk.Button(button_frame, text="Cancel", command=dialog.destroy).pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
+        
+        # Buttons
+        save_btn = ttk.Button(button_frame, text="Save & Learn", command=save)
+        save_btn.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        cancel_btn = ttk.Button(button_frame, text="Cancel", command=dialog.destroy)
+        cancel_btn.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # Set focus to save button
+        save_btn.focus_set()
+        
+        # Bind Enter key to save
+        dialog.bind('<Return>', lambda e: save())
+        dialog.bind('<Escape>', lambda e: dialog.destroy())
 
     def _apply_mappings_to_all_sheets(self, source_sheet):
         # Propagate user-edited column mappings to all other sheets with the same Original Header (case and whitespace insensitive)
@@ -654,6 +738,83 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                         ), tags=tags)
         messagebox.showinfo("Propagation Complete", f"Propagated {count} column mappings to all other sheets.")
         self._update_status(f"Propagated {count} column mappings to all other sheets.")
+
+    def _save_all_mappings(self, sheet):
+        """Save all required field mappings from the current sheet to the JSON file if not already present"""
+        if not self.column_mapper:
+            messagebox.showwarning("No Column Mapper", "Column mapper not available. Please reload the file.")
+            return
+        
+        required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        saved_count = 0
+        failed_count = 0
+        already_present_count = 0
+        
+        # Get current canonical mappings to check what's already saved
+        current_mappings = self.column_mapper.get_canonical_mappings()
+        
+        for mapping in getattr(sheet, 'column_mappings', []):
+            mapped_type = getattr(mapping, 'mapped_type', '')
+            
+            # Only process required types
+            if mapped_type in required_types:
+                original_header = getattr(mapping, 'original_header', '')
+                confidence = getattr(mapping, 'confidence', 0)
+                
+                if original_header and mapped_type:
+                    # Check if this mapping is already in the JSON file
+                    is_already_present = False
+                    if mapped_type in current_mappings:
+                        normalized_header = original_header.strip()
+                        for existing_header in current_mappings[mapped_type]:
+                            if existing_header.strip() == normalized_header:
+                                is_already_present = True
+                                break
+                    
+                    if is_already_present:
+                        already_present_count += 1
+                        logger.debug(f"Mapping already present: '{original_header}' -> '{mapped_type}'")
+                    else:
+                        # Save the mapping (whether it was auto-detected or user-edited)
+                        try:
+                            self.column_mapper.update_canonical_mapping(original_header, mapped_type)
+                            saved_count += 1
+                            action_type = "user-edited" if confidence == 1.0 else "auto-detected"
+                            logger.info(f"Saved {action_type} mapping: '{original_header}' -> '{mapped_type}' (confidence: {confidence:.1%})")
+                        except Exception as e:
+                            failed_count += 1
+                            logger.warning(f"Failed to save mapping '{original_header}' -> '{mapped_type}': {e}")
+        
+        # Show results
+        if saved_count > 0:
+            messagebox.showinfo(
+                "Mappings Saved", 
+                f"Successfully saved {saved_count} new mappings to the database.\n"
+                f"These mappings will be used for future file processing.\n\n"
+                f"Already present: {already_present_count} mappings"
+            )
+            self._update_status(f"Saved {saved_count} new mappings to database.")
+        else:
+            if already_present_count > 0:
+                messagebox.showinfo(
+                    "No New Mappings to Save", 
+                    f"All {already_present_count} required field mappings are already in the database.\n"
+                    f"No new mappings were saved."
+                )
+                self._update_status("All mappings already present in database.")
+            else:
+                messagebox.showinfo(
+                    "No Required Mappings Found", 
+                    "No required type mappings found to save.\n"
+                    "Make sure columns are mapped to required types first."
+                )
+                self._update_status("No required mappings found.")
+        
+        if failed_count > 0:
+            messagebox.showwarning(
+                "Some Mappings Failed", 
+                f"{failed_count} mappings failed to save. Check the logs for details."
+            )
 
     def run(self):
         """Start the main application loop."""
