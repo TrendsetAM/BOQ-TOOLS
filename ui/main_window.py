@@ -461,7 +461,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         confirm_btn = ttk.Button(
             mappings_frame,
             text="Confirm Column Mappings",
-            command=lambda s=sheet: self._save_all_mappings(s)
+            command=self._save_all_mappings_for_all_sheets  # Save for all sheets
         )
         confirm_btn.grid(row=200, column=0, columnspan=2, sticky=tk.EW, padx=10, pady=10, ipady=8)
         try:
@@ -496,7 +496,14 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 mapped_type = getattr(mapping, 'mapped_type', 'unknown')
                 required = mapped_type in required_types
                 original_header = getattr(mapping, 'original_header', 'Unknown')
-                actions = "Edited" if getattr(mapping, 'confidence', 0) == 1.0 else "Auto-detected"
+                # Determine if this mapping was user-edited
+                # If you have an is_user_edited flag, use it; otherwise, use confidence == 1.0 and check Actions logic
+                if hasattr(mapping, 'is_user_edited'):
+                    actions = "Edited" if getattr(mapping, 'is_user_edited', False) else "Auto-detected"
+                else:
+                    # Only show 'Edited' if confidence==1.0 and the mapping was changed by the user (not just auto-mapped to 1.0)
+                    # We'll assume that if confidence==1.0 and the Actions field was set to 'Edited' in the edit dialog, it's user-edited
+                    actions = "Edited" if (confidence == 1.0 and hasattr(mapping, 'user_edited') and getattr(mapping, 'user_edited', False)) else "Auto-detected"
                 tags = []
                 if required:
                     tags.append('required')
@@ -596,7 +603,6 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         
         def save():
             new_type = type_var.get()
-            
             # Check for duplicate required type
             if new_type in required_types:
                 for cm in getattr(sheet, 'column_mappings', []):
@@ -611,6 +617,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                         # Set the other column to unknown and update the treeview
                         cm.mapped_type = "unknown"
                         cm.confidence = 0.0
+                        cm.user_edited = True  # Mark as user-edited since user demoted it
                         # Find the row in the treeview for the other column
                         for row_id in tree.get_children():
                             row_vals = tree.item(row_id)['values']
@@ -618,15 +625,14 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                                 tree.set(row_id, column="Mapped Type", value="unknown")
                                 tree.set(row_id, column="Required", value="No")
                                 tree.set(row_id, column="Confidence", value="0.0%")
-                                tree.set(row_id, column="Actions", value="Auto-detected")
+                                tree.set(row_id, column="Actions", value="Edited")
                                 tree.item(row_id, tags=())
                                 break
                         break
-            
             # Update the column mapping
             col_mapping.mapped_type = new_type
             col_mapping.confidence = 1.0  # User is always right
-            
+            col_mapping.user_edited = True  # Mark as user-edited
             # Learn from user confirmation for required types
             learning_message = ""
             if new_type in required_types and self.column_mapper:
@@ -637,7 +643,6 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 except Exception as e:
                     learning_message = f"\n\n⚠ Warning: Failed to save mapping to database: {e}"
                     logger.warning(f"Failed to update canonical mapping: {e}")
-            
             # Update the treeview row
             tree.set(selection[0], column="Mapped Type", value=new_type)
             tree.set(selection[0], column="Confidence", value="100.0%")
@@ -650,13 +655,11 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 tree.item(selection[0], tags=("required",))
             else:
                 tree.item(selection[0], tags=())
-            
             # Show confirmation message
             messagebox.showinfo(
                 "Mapping Updated", 
                 f"Column '{column_name}' has been mapped to '{new_type}' with 100% confidence.{learning_message}"
             )
-            
             dialog.destroy()
         
         # Buttons
@@ -705,8 +708,10 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                                 if other_cm is not target_cm and other_cm.mapped_type == edited_cm.mapped_type:
                                     other_cm.mapped_type = "unknown"
                                     other_cm.confidence = 0.0
+                                    other_cm.user_edited = True  # Mark as user-edited since user demoted it
                         target_cm.mapped_type = edited_cm.mapped_type
                         target_cm.confidence = 1.0
+                        target_cm.user_edited = True  # Mark as user-edited (propagated)
                         count += 1
                         affected_sheets.add(getattr(target_sheet, 'sheet_name', None))
         # Always refresh the current sheet as well
@@ -725,7 +730,11 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                         mapped_type = getattr(mapping, 'mapped_type', 'unknown')
                         required = mapped_type in required_types
                         original_header = getattr(mapping, 'original_header', 'Unknown')
-                        actions = "Edited" if getattr(mapping, 'confidence', 0) == 1.0 else "Auto-detected"
+                        # Determine if this mapping was user-edited
+                        if hasattr(mapping, 'is_user_edited'):
+                            actions = "Edited" if getattr(mapping, 'is_user_edited', False) else "Auto-detected"
+                        else:
+                            actions = "Edited" if getattr(mapping, 'user_edited', False) else "Auto-detected"
                         tags = []
                         if required:
                             tags.append('required')
@@ -739,30 +748,44 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         messagebox.showinfo("Propagation Complete", f"Propagated {count} column mappings to all other sheets.")
         self._update_status(f"Propagated {count} column mappings to all other sheets.")
 
-    def _save_all_mappings(self, sheet):
-        """Save all required field mappings from the current sheet to the JSON file if not already present"""
-        if not self.column_mapper:
-            messagebox.showwarning("No Column Mapper", "Column mapper not available. Please reload the file.")
+    def _save_all_mappings_for_all_sheets(self):
+        if not self.file_mapping or not hasattr(self.file_mapping, 'sheets'):
+            messagebox.showwarning("No File", "No file loaded.")
             return
-        
+        total_saved = 0
+        total_failed = 0
+        total_already = 0
+        for sheet in self.file_mapping.sheets:
+            saved, failed, already = self._save_all_mappings(sheet, show_dialogs=False)
+            total_saved += saved
+            total_failed += failed
+            total_already += already
+        # Show a single summary dialog
+        messagebox.showinfo(
+            "Mappings Saved",
+            f"Saved {total_saved} new mappings for all sheets.\n"
+            f"Already present: {total_already}\n"
+            f"Failed: {total_failed}"
+        )
+        self._update_status(f"Saved {total_saved} new mappings for all sheets.")
+
+    def _save_all_mappings(self, sheet, show_dialogs=True):
+        """Save all required field mappings from the given sheet to the JSON file if not already present. Returns (saved, failed, already_present)."""
+        if not self.column_mapper:
+            if show_dialogs:
+                messagebox.showwarning("No Column Mapper", "Column mapper not available. Please reload the file.")
+            return 0, 0, 0
         required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
         saved_count = 0
         failed_count = 0
         already_present_count = 0
-        
-        # Get current canonical mappings to check what's already saved
         current_mappings = self.column_mapper.get_canonical_mappings()
-        
         for mapping in getattr(sheet, 'column_mappings', []):
             mapped_type = getattr(mapping, 'mapped_type', '')
-            
-            # Only process required types
             if mapped_type in required_types:
                 original_header = getattr(mapping, 'original_header', '')
                 confidence = getattr(mapping, 'confidence', 0)
-                
                 if original_header and mapped_type:
-                    # Check if this mapping is already in the JSON file
                     is_already_present = False
                     if mapped_type in current_mappings:
                         normalized_header = original_header.strip()
@@ -770,12 +793,10 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                             if existing_header.strip() == normalized_header:
                                 is_already_present = True
                                 break
-                    
                     if is_already_present:
                         already_present_count += 1
                         logger.debug(f"Mapping already present: '{original_header}' -> '{mapped_type}'")
                     else:
-                        # Save the mapping (whether it was auto-detected or user-edited)
                         try:
                             self.column_mapper.update_canonical_mapping(original_header, mapped_type)
                             saved_count += 1
@@ -784,37 +805,36 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                         except Exception as e:
                             failed_count += 1
                             logger.warning(f"Failed to save mapping '{original_header}' -> '{mapped_type}': {e}")
-        
-        # Show results
-        if saved_count > 0:
-            messagebox.showinfo(
-                "Mappings Saved", 
-                f"Successfully saved {saved_count} new mappings to the database.\n"
-                f"These mappings will be used for future file processing.\n\n"
-                f"Already present: {already_present_count} mappings"
-            )
-            self._update_status(f"Saved {saved_count} new mappings to database.")
-        else:
-            if already_present_count > 0:
+        if show_dialogs:
+            if saved_count > 0:
                 messagebox.showinfo(
-                    "No New Mappings to Save", 
-                    f"All {already_present_count} required field mappings are already in the database.\n"
-                    f"No new mappings were saved."
+                    "Mappings Saved", 
+                    f"Successfully saved {saved_count} new mappings to the database.\n"
+                    f"These mappings will be used for future file processing.\n\n"
+                    f"Already present: {already_present_count} mappings"
                 )
-                self._update_status("All mappings already present in database.")
+                self._update_status(f"Saved {saved_count} new mappings to database.")
             else:
-                messagebox.showinfo(
-                    "No Required Mappings Found", 
-                    "No required type mappings found to save.\n"
-                    "Make sure columns are mapped to required types first."
+                if already_present_count > 0:
+                    messagebox.showinfo(
+                        "No New Mappings to Save", 
+                        f"All {already_present_count} required field mappings are already in the database.\n"
+                        f"No new mappings were saved."
+                    )
+                    self._update_status("All mappings already present in database.")
+                else:
+                    messagebox.showinfo(
+                        "No Required Mappings Found", 
+                        "No required type mappings found to save.\n"
+                        "Make sure columns are mapped to required types first."
+                    )
+                    self._update_status("No required mappings found.")
+            if failed_count > 0:
+                messagebox.showwarning(
+                    "Some Mappings Failed", 
+                    f"{failed_count} mappings failed to save. Check the logs for details."
                 )
-                self._update_status("No required mappings found.")
-        
-        if failed_count > 0:
-            messagebox.showwarning(
-                "Some Mappings Failed", 
-                f"{failed_count} mappings failed to save. Check the logs for details."
-            )
+        return saved_count, failed_count, already_present_count
 
     def run(self):
         """Start the main application loop."""
