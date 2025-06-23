@@ -1008,17 +1008,36 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         # Remove existing Row Review frame if present
         if self.row_review_frame:
             self.row_review_frame.destroy()
-        # Add Row Review container
+        
+        # Hide all widgets/frames related to column mapping in the current tab
         tab = self.notebook.nametowidget(self.notebook.select())
+        self._hidden_column_mapping_widgets = []
+        for child in tab.winfo_children():
+            # Hide everything except the Row Review frame (if present)
+            if child != getattr(self, 'row_review_frame', None):
+                child.grid_remove()
+                self._hidden_column_mapping_widgets.append(child)
+        
+        # Add Row Review container
         self.row_review_frame = ttk.LabelFrame(tab, text="Row Review")
-        self.row_review_frame.grid(row=4, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        self.row_review_frame.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
         self.row_review_frame.grid_rowconfigure(0, weight=1)
         self.row_review_frame.grid_columnconfigure(0, weight=1)
+        
         # Add a notebook for row review per sheet
         self.row_review_notebook = ttk.Notebook(self.row_review_frame)
         self.row_review_notebook.grid(row=0, column=0, sticky=tk.NSEW)
         self.row_review_treeviews = {}
         self.row_validity = {}
+        
+        # Add a "Back to Column Mapping" button
+        back_frame = ttk.Frame(self.row_review_frame)
+        back_frame.grid(row=1, column=0, sticky=tk.EW, padx=5, pady=5)
+        back_frame.grid_columnconfigure(0, weight=1)
+        back_btn = ttk.Button(back_frame, text="← Back to Column Mapping", 
+                             command=lambda: self._show_column_mapping())
+        back_btn.pack(side=tk.LEFT, padx=5)
+        
         for sheet in file_mapping.sheets:
             frame = ttk.Frame(self.row_review_notebook)
             self.row_review_notebook.add(frame, text=sheet.sheet_name)
@@ -1126,6 +1145,19 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         # Optionally, select the first sheet by default
         if file_mapping.sheets:
             self.row_review_notebook.select(0)
+
+    def _show_column_mapping(self):
+        """Show the Column Mapping section and hide Row Review"""
+        # Hide Row Review
+        if self.row_review_frame:
+            self.row_review_frame.destroy()
+            self.row_review_frame = None
+        # Restore all previously hidden column mapping widgets
+        tab = self.notebook.nametowidget(self.notebook.select())
+        if hasattr(self, '_hidden_column_mapping_widgets'):
+            for widget in self._hidden_column_mapping_widgets:
+                widget.grid()
+            self._hidden_column_mapping_widgets = []
 
     def run(self):
         """Start the main application loop."""
