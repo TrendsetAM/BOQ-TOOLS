@@ -482,7 +482,10 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         h_scrollbar.grid(row=1, column=0, sticky=tk.EW)
         
         # Required types
-        required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        if self.column_mapper and hasattr(self.column_mapper, 'config'):
+            required_types = {col_type.value for col_type in self.column_mapper.config.get_required_columns()}
+        else:
+            required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
         # Populate treeview with column mappings
         if hasattr(sheet, 'column_mappings'):
             for mapping in sheet.column_mappings:
@@ -1020,7 +1023,10 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             frame = ttk.Frame(self.row_review_notebook)
             self.row_review_notebook.add(frame, text=sheet.sheet_name)
             # Determine required columns and their indices
-            required_types = {"description", "unit_price", "total_price"}  # unit is not required for now
+            if self.column_mapper and hasattr(self.column_mapper, 'config'):
+                required_types = {col_type.value for col_type in self.column_mapper.config.get_required_columns()}
+            else:
+                required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
             required_cols = []
             col_type_to_header = {}
             col_type_to_index = {}
@@ -1073,6 +1079,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                             row_data = []
                     # Get values for required columns
                     desc_val = row_data[col_type_to_index.get("description", -1)] if row_data and col_type_to_index.get("description", -1) >= 0 and col_type_to_index.get("description", -1) < len(row_data) else ""
+                    quantity_val = row_data[col_type_to_index.get("quantity", -1)] if row_data and col_type_to_index.get("quantity", -1) >= 0 and col_type_to_index.get("quantity", -1) < len(row_data) else ""
                     unit_price_val = row_data[col_type_to_index.get("unit_price", -1)] if row_data and col_type_to_index.get("unit_price", -1) >= 0 and col_type_to_index.get("unit_price", -1) < len(row_data) else ""
                     total_price_val = row_data[col_type_to_index.get("total_price", -1)] if row_data and col_type_to_index.get("total_price", -1) >= 0 and col_type_to_index.get("total_price", -1) < len(row_data) else ""
                     code_val = row_data[col_type_to_index.get("code", -1)] if row_data and col_type_to_index.get("code", -1) >= 0 and col_type_to_index.get("code", -1) < len(row_data) else ""
@@ -1094,6 +1101,8 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     for col in required_cols:
                         if col == col_type_to_header.get("description"):
                             row_values.append(desc_val)
+                        elif col == col_type_to_header.get("quantity"):
+                            row_values.append(fmt_num(quantity_val))
                         elif col == col_type_to_header.get("unit_price"):
                             row_values.append(fmt_num(unit_price_val))
                         elif col == col_type_to_header.get("total_price"):
