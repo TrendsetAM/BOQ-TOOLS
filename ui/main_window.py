@@ -1037,7 +1037,15 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         back_btn = ttk.Button(back_frame, text="← Back to Column Mapping", 
                              command=lambda: self._show_column_mapping())
         back_btn.pack(side=tk.LEFT, padx=5)
-        
+
+        # Add a "Confirm Row Review" button below the Row Review window
+        confirm_row_frame = ttk.Frame(tab)
+        confirm_row_frame.grid(row=1, column=0, sticky=tk.EW, padx=5, pady=5)
+        confirm_row_frame.grid_columnconfigure(0, weight=1)
+        confirm_row_btn = ttk.Button(confirm_row_frame, text="Confirm Row Review", command=self._on_confirm_row_review)
+        confirm_row_btn.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        self.confirm_row_frame = confirm_row_frame
+
         for sheet in file_mapping.sheets:
             frame = ttk.Frame(self.row_review_notebook)
             self.row_review_notebook.add(frame, text=sheet.sheet_name)
@@ -1158,6 +1166,10 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             for widget in self._hidden_column_mapping_widgets:
                 widget.grid()
             self._hidden_column_mapping_widgets = []
+
+    def _on_confirm_row_review(self):
+        # Placeholder for row review confirmation logic
+        messagebox.showinfo("Row Review Confirmed", "Row review has been confirmed! (Implement your logic here)")
 
     def run(self):
         """Start the main application loop."""
