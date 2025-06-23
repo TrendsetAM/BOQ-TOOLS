@@ -195,14 +195,16 @@ class BOQApplicationController:
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
     
-    def process_file(self, file_path: Path, progress_callback: Optional[callable] = None) -> FileMapping:
+    def process_file(self, file_path: Path, progress_callback: Optional[callable] = None, sheet_filter: Optional[List[str]] = None, sheet_types: Optional[Dict[str, str]] = None) -> FileMapping:
         """
         Process a single Excel file through the complete pipeline
         
         Args:
             file_path: Path to Excel file
             progress_callback: Optional progress callback function
-            
+            sheet_filter: Optional list of sheet names to process (only these will be processed)
+            sheet_types: Optional dict mapping sheet names to their user-selected type (e.g., 'BOQ', 'Info', 'Ignore')
+        
         Returns:
             Complete processing results
         """
@@ -236,7 +238,11 @@ class BOQApplicationController:
                 
                 if not sheet_data:
                     raise ValueError("No data found in any sheets.")
-            
+
+            # Filter sheets if a filter is provided
+            if sheet_filter is not None:
+                sheet_data = {name: data for name, data in sheet_data.items() if name in sheet_filter}
+
             if progress_callback:
                 progress_callback(20, "Classifying sheets...")
             
@@ -285,7 +291,8 @@ class BOQApplicationController:
                 'sheet_classifications': sheet_classifications,
                 'column_mappings': column_mapping_results,
                 'row_classifications': row_classifications,
-                'validation_results': validation_results
+                'validation_results': validation_results,
+                'sheet_types': sheet_types or {name: 'BOQ' for name in sheet_data.keys()}
             }
             
             file_mapping = self.mapping_generator.generate_file_mapping(processor_results)

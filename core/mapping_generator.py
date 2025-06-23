@@ -84,26 +84,19 @@ class SheetMapping:
     column_count: int
     header_row_index: int
     header_confidence: float
-    
-    # Processing results
     column_mappings: List[ColumnMappingInfo]
     row_classifications: List[RowClassificationInfo]
     validation_summary: ValidationSummary
-    
-    # Confidence scores
     overall_confidence: float
     column_mapping_confidence: float
     row_classification_confidence: float
     data_quality_confidence: float
-    
-    # Review flags
     review_flags: List[ReviewFlag]
     manual_review_items: List[Dict[str, Any]]
-    
-    # Processing metadata
     processing_notes: List[str]
     warnings: List[str]
     processing_time: float
+    sheet_type: str  # User or classifier assigned type (e.g., 'BOQ', 'Info', 'Ignore')
 
 
 @dataclass
@@ -194,6 +187,7 @@ class MappingGenerator:
             column_mappings = processor_results.get('column_mappings', {})
             row_classifications = processor_results.get('row_classifications', {})
             validation_results = processor_results.get('validation_results', {})
+            sheet_types = processor_results.get('sheet_types', {})
             
             # Create metadata
             metadata = self._create_file_metadata(file_info)
@@ -201,12 +195,14 @@ class MappingGenerator:
             # Process each sheet
             sheet_mappings = []
             for sheet_name in sheet_data.keys():
+                sheet_type = sheet_types.get(sheet_name, 'BOQ')
                 sheet_mapping = self._create_sheet_mapping(
                     sheet_name=sheet_name,
                     sheet_data=sheet_data.get(sheet_name, []),
                     column_mapping=column_mappings.get(sheet_name, {}),
                     row_classification=row_classifications.get(sheet_name, {}),
-                    validation_result=validation_results.get(sheet_name, {})
+                    validation_result=validation_results.get(sheet_name, {}),
+                    sheet_type=sheet_type
                 )
                 sheet_mappings.append(sheet_mapping)
             
@@ -450,7 +446,7 @@ class MappingGenerator:
     
     def _create_sheet_mapping(self, sheet_name: str, sheet_data: List[List[str]],
                              column_mapping: Any, row_classification: Any,
-                             validation_result: Any) -> SheetMapping:
+                             validation_result: Any, sheet_type: str = "BOQ") -> SheetMapping:
         """Create detailed sheet mapping"""
         
         # Handle MappingResult object to get all columns
@@ -643,7 +639,8 @@ class MappingGenerator:
             manual_review_items=manual_review_items,
             processing_notes=processing_notes,
             warnings=warnings,
-            processing_time=0.0  # Would be calculated during actual processing
+            processing_time=0.0,  # Would be calculated during actual processing
+            sheet_type=sheet_type
         )
     
     def _determine_processing_status(self, overall_confidence: float, validation_summary: ValidationSummary,

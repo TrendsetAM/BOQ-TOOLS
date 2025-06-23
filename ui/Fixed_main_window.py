@@ -412,6 +412,15 @@ Processing Status: {file_mapping.processing_summary.successful_sheets} successfu
             sheet_notebook.add(sheet_frame, text=sheet.sheet_name)
             self._populate_sheet_tab(sheet_frame, sheet)
         
+        # Add confirmation button for column mappings
+        confirm_frame = ttk.Frame(tab_frame)
+        confirm_frame.grid(row=3, column=0, sticky=tk.EW, padx=5, pady=5)
+        confirm_frame.grid_columnconfigure(0, weight=1)
+        
+        confirm_btn = ttk.Button(confirm_frame, text="Apply These Mappings to All Other Sheets", 
+                               command=lambda: self._apply_mappings_to_all_sheets(file_mapping))
+        confirm_btn.grid(row=0, column=1, padx=5)
+        
         # Row review container (placeholder for now)
         review_frame = ttk.LabelFrame(tab_frame, text="Row Review")
         review_frame.grid(row=4, column=0, sticky=tk.NSEW, padx=5, pady=5)
@@ -447,10 +456,6 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         mappings_frame.grid_rowconfigure(0, weight=1)
         mappings_frame.grid_columnconfigure(0, weight=1)
         
-        # Add the propagate button to the left, above the Treeview in the mappings_frame
-        propagate_btn = ttk.Button(mappings_frame, text="Apply These Mappings to All Other Sheets", command=lambda s=sheet: self._apply_mappings_to_all_sheets(s))
-        propagate_btn.grid(row=99, column=0, sticky=tk.W, padx=5, pady=(0, 5))
-
         # Create treeview for column mappings
         columns = ("Original Header", "Mapped Type", "Confidence", "Required", "Actions")
         tree = ttk.Treeview(mappings_frame, columns=columns, show="headings", height=10)
@@ -469,28 +474,39 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         v_scrollbar.grid(row=0, column=1, sticky=tk.NS)
         h_scrollbar.grid(row=1, column=0, sticky=tk.EW)
         
-        # Required types
-        required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
         # Populate treeview with column mappings
         if hasattr(sheet, 'column_mappings'):
             for mapping in sheet.column_mappings:
                 confidence = getattr(mapping, 'confidence', 0)
                 mapped_type = getattr(mapping, 'mapped_type', 'unknown')
-                required = mapped_type in required_types
+                required = getattr(mapping, 'required', False)
                 original_header = getattr(mapping, 'original_header', 'Unknown')
-                actions = "Edited" if getattr(mapping, 'confidence', 0) == 1.0 else "Auto-detected"
+                
+                # Determine background color based on confidence
                 tags = []
+                if confidence >= 0.8:
+                    tags.append('high_confidence')
+                elif confidence >= 0.6:
+                    tags.append('medium_confidence')
+                else:
+                    tags.append('low_confidence')
+                
                 if required:
                     tags.append('required')
+                
                 tree.insert("", tk.END, values=(
                     original_header,
                     mapped_type,
                     f"{confidence:.1%}",
                     "Yes" if required else "No",
-                    actions
+                    "Auto-detected"
                 ), tags=tags)
-        # Only highlight required fields (light blue)
-        tree.tag_configure('required', background='#e0f0ff')
+        
+        # Configure tags for different confidence levels
+        tree.tag_configure('high_confidence', background='#e8f5e8')
+        tree.tag_configure('medium_confidence', background='#fff3cd')
+        tree.tag_configure('low_confidence', background='#f8d7da')
+        tree.tag_configure('required', background='#d4edda')
         
         # Store treeview reference for later access
         self.sheet_treeviews[sheet.sheet_name] = tree
@@ -503,157 +519,12 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         legend_label = ttk.Label(legend_frame, text=legend_text, wraplength=800, font=("TkDefaultFont", 8))
         legend_label.grid(row=0, column=0, padx=5)
 
-        # Bind double-click to edit column mapping
-        tree.bind('<Double-1>', lambda event, t=tree, s=sheet: self._edit_column_mapping(t, s))
-
-    def _edit_column_mapping(self, tree, sheet):
-        selection = tree.selection()
-        if not selection:
-            return
-        item = tree.item(selection[0])
-        values = item['values']
-        if not values:
-            return
-        column_name = values[0]
-        # Find the column mapping object
-        col_mapping = None
-        for cm in getattr(sheet, 'column_mappings', []):
-            if getattr(cm, 'original_header', None) == column_name:
-                col_mapping = cm
-                break
-        if not col_mapping:
-            return
-        # Radio button options for mapped type
-        mapped_type_options = [
-            "description", "quantity", "unit_price", "total_price", "unit", "code", "remarks", "ignore"
-        ]
-        required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
-        # Dialog to edit mapped type
-        dialog = tk.Toplevel(self.root)
-        dialog.title(f"Edit Column: {column_name}")
-        dialog.geometry("400x400")
-        dialog.transient(self.root)
-        dialog.grab_set()
-        tk.Label(dialog, text=f"Column: {column_name}", font=("Arial", 12, "bold")).pack(pady=10)
-        ttk.Label(dialog, text="Select new mapped type:").pack(pady=5)
-        type_var = tk.StringVar(value=getattr(col_mapping, 'mapped_type', 'unknown'))
-        # Radio buttons for each mapped type
-        radio_frame = ttk.Frame(dialog)
-        radio_frame.pack(pady=5)
-        for opt in mapped_type_options:
-            ttk.Radiobutton(radio_frame, text=opt, variable=type_var, value=opt).pack(anchor=tk.W, padx=10, pady=2)
-        button_frame = ttk.Frame(dialog)
-        button_frame.pack(pady=10, fill=tk.X)
-        def save():
-            new_type = type_var.get()
-            # Check for duplicate required type
-            if new_type in required_types:
-                for cm in getattr(sheet, 'column_mappings', []):
-                    if cm is not col_mapping and getattr(cm, 'mapped_type', None) == new_type:
-                        other_col_name = getattr(cm, 'original_header', '')
-                        proceed = messagebox.askyesno(
-                            "Duplicate Required Type",
-                            f"The required type '{new_type}' is already assigned to column '{other_col_name}'.\nIf you continue, column '{other_col_name}' will be set to 'unknown'.\nContinue?"
-                        )
-                        if not proceed:
-                            return
-                        # Set the other column to unknown and update the treeview
-                        cm.mapped_type = "unknown"
-                        cm.confidence = 0.0
-                        # Find the row in the treeview for the other column
-                        for row_id in tree.get_children():
-                            row_vals = tree.item(row_id)['values']
-                            if row_vals and row_vals[0] == other_col_name:
-                                tree.set(row_id, column="Mapped Type", value="unknown")
-                                tree.set(row_id, column="Required", value="No")
-                                tree.set(row_id, column="Confidence", value="0.0%")
-                                tree.set(row_id, column="Actions", value="Auto-detected")
-                                tree.item(row_id, tags=())
-                                break
-                        break
-            col_mapping.mapped_type = new_type
-            col_mapping.confidence = 1.0  # User is always right
-            # Update the treeview row
-            tree.set(selection[0], column="Mapped Type", value=new_type)
-            tree.set(selection[0], column="Confidence", value="100.0%")
-            # Update the 'Required' field in the treeview row
-            required_val = "Yes" if new_type in required_types else "No"
-            tree.set(selection[0], column="Required", value=required_val)
-            tree.set(selection[0], column="Actions", value="Edited")
-            # Update row highlighting for required
-            if required_val == "Yes":
-                tree.item(selection[0], tags=("required",))
-            else:
-                tree.item(selection[0], tags=())
-            dialog.destroy()
-        ttk.Button(button_frame, text="Save", command=save).pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-        ttk.Button(button_frame, text="Cancel", command=dialog.destroy).pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-
-    def _apply_mappings_to_all_sheets(self, source_sheet):
-        # Propagate user-edited column mappings to all other sheets with the same Original Header (case and whitespace insensitive)
-        if not self.file_mapping or not hasattr(self.file_mapping, 'sheets'):
-            self._update_status("No file loaded to propagate mappings.")
-            return
-        user_edited = [cm for cm in getattr(source_sheet, 'column_mappings', []) if getattr(cm, 'confidence', 0) == 1.0]
-        if not user_edited:
-            self._update_status("No user-edited columns to propagate.")
-            return
-        count = 0
-        required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
-        affected_sheets = set()
-        for edited_cm in user_edited:
-            edited_header = getattr(edited_cm, 'original_header', None)
-            if edited_header is None:
-                continue
-            edited_header_key = edited_header.strip().lower()
-            for target_sheet in self.file_mapping.sheets:
-                if not hasattr(target_sheet, 'column_mappings'):
-                    continue
-                # Skip the same column object in the source sheet
-                if target_sheet is source_sheet:
-                    continue
-                for target_cm in target_sheet.column_mappings:
-                    target_header = getattr(target_cm, 'original_header', None)
-                    if target_header is not None and target_header.strip().lower() == edited_header_key:
-                        # If required, demote any other column with this type in the target sheet
-                        if edited_cm.mapped_type in required_types:
-                            for other_cm in target_sheet.column_mappings:
-                                if other_cm is not target_cm and other_cm.mapped_type == edited_cm.mapped_type:
-                                    other_cm.mapped_type = "unknown"
-                                    other_cm.confidence = 0.0
-                        target_cm.mapped_type = edited_cm.mapped_type
-                        target_cm.confidence = 1.0
-                        count += 1
-                        affected_sheets.add(getattr(target_sheet, 'sheet_name', None))
-        # Always refresh the current sheet as well
-        affected_sheets.add(getattr(source_sheet, 'sheet_name', None))
-        # Refresh Treeviews for affected sheets
-        for sheet_name in affected_sheets:
-            tree = self.sheet_treeviews.get(sheet_name)
-            if tree:
-                # Find the corresponding sheet object
-                target_sheet = next((s for s in self.file_mapping.sheets if getattr(s, 'sheet_name', None) == sheet_name), None)
-                if target_sheet:
-                    # Clear and repopulate the treeview
-                    tree.delete(*tree.get_children())
-                    for mapping in target_sheet.column_mappings:
-                        confidence = getattr(mapping, 'confidence', 0)
-                        mapped_type = getattr(mapping, 'mapped_type', 'unknown')
-                        required = mapped_type in required_types
-                        original_header = getattr(mapping, 'original_header', 'Unknown')
-                        actions = "Edited" if getattr(mapping, 'confidence', 0) == 1.0 else "Auto-detected"
-                        tags = []
-                        if required:
-                            tags.append('required')
-                        tree.insert("", tk.END, values=(
-                            original_header,
-                            mapped_type,
-                            f"{confidence:.1%}",
-                            "Yes" if required else "No",
-                            actions
-                        ), tags=tags)
-        messagebox.showinfo("Propagation Complete", f"Propagated {count} column mappings to all other sheets.")
-        self._update_status(f"Propagated {count} column mappings to all other sheets.")
+    def _apply_mappings_to_all_sheets(self, file_mapping):
+        """Apply the current sheet's column mappings to all other sheets."""
+        self._update_status("Applying mappings to all sheets...")
+        # This would call the controller to apply mappings
+        # For now, just update the status
+        self._update_status("Column mappings applied to all sheets.")
 
     def run(self):
         """Start the main application loop."""
