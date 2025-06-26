@@ -1,0 +1,6 @@
+Item No.,Description,Unit,Quantity,Unit Price,Total Price,Category
+1.1,Excavation for foundation,m³,150.0,25.00,3750.0,
+1.2,Concrete foundation,m³,75.0,120.00,9000.0,
+,,,,Subtotal,12750.0,
+2.1,Brickwork,m²,200.0,45.00,9000.0,
+,,,,Total,21750.0,

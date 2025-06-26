@@ -606,4 +606,329 @@ def get_categorization_statistics(mapping: Dict[str, str]) -> Dict[str, Any]:
         'shortest_description': shortest_desc,
         'longest_description': longest_desc,
         'description_length_range': f"{min(description_lengths)} - {max(description_lengths)}"
-    } 
+    }
+
+
+def apply_manual_categories(dataframe: pd.DataFrame,
+                           manual_categorizations: Dict[str, str],
+                           description_column: str = 'Description',
+                           category_column: str = 'Category',
+                           case_sensitive: bool = False) -> Dict[str, Any]:
+    """
+    Apply manual categorizations to the main DataFrame
+    
+    Args:
+        dataframe: Main DataFrame to update
+        manual_categorizations: Dictionary mapping descriptions to categories
+        description_column: Name of the description column
+        category_column: Name of the category column
+        case_sensitive: Whether to perform case-sensitive matching
+        
+    Returns:
+        Dictionary containing:
+        - 'updated_dataframe': DataFrame with manual categorizations applied
+        - 'statistics': Categorization statistics
+        - 'updated_count': Number of rows updated
+        - 'remaining_unmatched': List of descriptions still unmatched
+        - 'coverage_rate': Percentage of rows now categorized
+    """
+    logger.info(f"Applying {len(manual_categorizations)} manual categorizations to DataFrame")
+    
+    # Validate inputs
+    if description_column not in dataframe.columns:
+        raise ValueError(f"Description column '{description_column}' not found in DataFrame")
+    
+    if category_column not in dataframe.columns:
+        logger.warning(f"Category column '{category_column}' not found, creating it")
+        dataframe[category_column] = ''
+    
+    # Create a copy to avoid modifying the original
+    df = dataframe.copy()
+    
+    # Initialize tracking variables
+    initial_unmatched_count = 0
+    updated_count = 0
+    exact_matches = 0
+    case_insensitive_matches = 0
+    remaining_unmatched = []
+    
+    # Count initial unmatched rows
+    unmatched_mask = df[category_column].isna() | (df[category_column] == '') | (df[category_column].isnull())
+    initial_unmatched_count = unmatched_mask.sum()
+    
+    logger.info(f"Initial unmatched rows: {initial_unmatched_count}")
+    
+    # Process each row
+    for index, row in df.iterrows():
+        description = str(row[description_column]).strip()
+        
+        # Skip empty descriptions
+        if not description or description.lower() in ['nan', 'none', '']:
+            continue
+        
+        # Check if this row is currently unmatched
+        current_category = str(row[category_column]).strip()
+        if current_category and current_category.lower() not in ['nan', 'none', '']:
+            continue  # Already categorized
+        
+        # Try to find a match in manual categorizations
+        matched_category = None
+        
+        if case_sensitive:
+            # Case-sensitive matching
+            if description in manual_categorizations:
+                matched_category = manual_categorizations[description]
+                exact_matches += 1
+                logger.debug(f"Exact case-sensitive match: '{description}' → '{matched_category}'")
+        else:
+            # Case-insensitive matching
+            description_lower = description.lower()
+            
+            # First try exact case-insensitive match
+            if description_lower in manual_categorizations:
+                matched_category = manual_categorizations[description_lower]
+                exact_matches += 1
+                logger.debug(f"Exact case-insensitive match: '{description}' → '{matched_category}'")
+            else:
+                # Try to find a match by comparing normalized descriptions
+                for manual_desc, category in manual_categorizations.items():
+                    if description_lower == manual_desc.lower():
+                        matched_category = category
+                        case_insensitive_matches += 1
+                        logger.debug(f"Case-insensitive match: '{description}' → '{matched_category}' (manual: '{manual_desc}')")
+                        break
+        
+        # Apply the category if found
+        if matched_category:
+            df.at[index, category_column] = matched_category
+            updated_count += 1
+            logger.debug(f"Updated row {index}: '{description[:50]}...' → '{matched_category}'")
+        else:
+            # Track remaining unmatched descriptions
+            if description not in remaining_unmatched:
+                remaining_unmatched.append(description)
+    
+    # Calculate final statistics
+    final_unmatched_mask = df[category_column].isna() | (df[category_column] == '') | (df[category_column].isnull())
+    final_unmatched_count = final_unmatched_mask.sum()
+    
+    total_rows = len(df)
+    categorized_rows = total_rows - final_unmatched_count
+    coverage_rate = categorized_rows / total_rows if total_rows > 0 else 0.0
+    
+    # Create statistics
+    statistics = {
+        'total_rows': total_rows,
+        'initial_unmatched': initial_unmatched_count,
+        'final_unmatched': final_unmatched_count,
+        'rows_updated': updated_count,
+        'categorized_rows': categorized_rows,
+        'coverage_rate': coverage_rate,
+        'exact_matches': exact_matches,
+        'case_insensitive_matches': case_insensitive_matches,
+        'manual_categorizations_applied': len(manual_categorizations),
+        'remaining_unmatched_count': len(remaining_unmatched)
+    }
+    
+    # Log results
+    logger.info(f"Manual categorization application completed:")
+    logger.info(f"  Total rows: {total_rows}")
+    logger.info(f"  Initial unmatched: {initial_unmatched_count}")
+    logger.info(f"  Rows updated: {updated_count}")
+    logger.info(f"  Final unmatched: {final_unmatched_count}")
+    logger.info(f"  Coverage rate: {coverage_rate:.1%}")
+    logger.info(f"  Exact matches: {exact_matches}")
+    logger.info(f"  Case-insensitive matches: {case_insensitive_matches}")
+    
+    if remaining_unmatched:
+        logger.info(f"  Remaining unmatched descriptions: {len(remaining_unmatched)}")
+        logger.info("  Sample remaining unmatched:")
+        for desc in remaining_unmatched[:5]:
+            logger.info(f"    - '{desc[:60]}...'")
+    
+    # Create result dictionary
+    result = {
+        'updated_dataframe': df,
+        'statistics': statistics,
+        'updated_count': updated_count,
+        'remaining_unmatched': remaining_unmatched,
+        'coverage_rate': coverage_rate
+    }
+    
+    return result
+
+
+def get_categorization_coverage_report(dataframe: pd.DataFrame,
+                                      category_column: str = 'Category',
+                                      description_column: str = 'Description') -> Dict[str, Any]:
+    """
+    Generate a comprehensive categorization coverage report
+    
+    Args:
+        dataframe: DataFrame to analyze
+        category_column: Name of the category column
+        description_column: Name of the description column
+        
+    Returns:
+        Dictionary with detailed coverage statistics
+    """
+    logger.info(f"Generating categorization coverage report for {len(dataframe)} rows")
+    
+    total_rows = len(dataframe)
+    
+    # Count categorized vs uncategorized rows
+    categorized_mask = ~(dataframe[category_column].isna() | (dataframe[category_column] == '') | (dataframe[category_column].isnull()))
+    categorized_count = categorized_mask.sum()
+    uncategorized_count = total_rows - categorized_count
+    
+    # Get category distribution
+    category_distribution = {}
+    if categorized_count > 0:
+        category_distribution = dataframe[category_column].value_counts().to_dict()
+    
+    # Analyze uncategorized descriptions
+    uncategorized_df = dataframe[~categorized_mask]
+    unique_uncategorized = []
+    if len(uncategorized_df) > 0:
+        unique_uncategorized = uncategorized_df[description_column].dropna().unique().tolist()
+    
+    # Calculate statistics
+    coverage_rate = categorized_count / total_rows if total_rows > 0 else 0.0
+    unique_categories = len(category_distribution)
+    
+    # Find most common categories
+    top_categories = []
+    if category_distribution:
+        sorted_categories = sorted(category_distribution.items(), key=lambda x: x[1], reverse=True)
+        top_categories = sorted_categories[:10]  # Top 10 categories
+    
+    # Find categories with only one item (potential issues)
+    single_item_categories = [cat for cat, count in category_distribution.items() if count == 1]
+    
+    report = {
+        'summary': {
+            'total_rows': total_rows,
+            'categorized_rows': categorized_count,
+            'uncategorized_rows': uncategorized_count,
+            'coverage_rate': coverage_rate,
+            'unique_categories': unique_categories
+        },
+        'category_distribution': category_distribution,
+        'top_categories': top_categories,
+        'single_item_categories': single_item_categories,
+        'uncategorized_analysis': {
+            'total_uncategorized': uncategorized_count,
+            'unique_uncategorized_descriptions': len(unique_uncategorized),
+            'sample_uncategorized': unique_uncategorized[:10]  # First 10
+        },
+        'quality_metrics': {
+            'categories_with_single_item': len(single_item_categories),
+            'average_items_per_category': categorized_count / unique_categories if unique_categories > 0 else 0,
+            'most_common_category_count': max(category_distribution.values()) if category_distribution else 0
+        }
+    }
+    
+    # Log report summary
+    logger.info(f"Categorization coverage report:")
+    logger.info(f"  Coverage: {coverage_rate:.1%} ({categorized_count}/{total_rows})")
+    logger.info(f"  Unique categories: {unique_categories}")
+    logger.info(f"  Uncategorized: {uncategorized_count}")
+    logger.info(f"  Single-item categories: {len(single_item_categories)}")
+    
+    return report
+
+
+def export_categorization_report(dataframe: pd.DataFrame,
+                                report_data: Dict[str, Any],
+                                output_path: Path,
+                                include_samples: bool = True) -> bool:
+    """
+    Export categorization report to Excel file
+    
+    Args:
+        dataframe: Categorized DataFrame
+        report_data: Report data from get_categorization_coverage_report
+        output_path: Output file path
+        include_samples: Whether to include sample data in the report
+        
+    Returns:
+        True if export was successful
+    """
+    logger.info(f"Exporting categorization report to {output_path}")
+    
+    try:
+        # Create workbook
+        wb = openpyxl.Workbook()
+        default_sheet = wb.active
+        if default_sheet:
+            wb.remove(default_sheet)
+        
+        # Summary sheet
+        ws_summary = wb.create_sheet("Summary", 0)
+        
+        # Add summary data
+        summary = report_data['summary']
+        ws_summary['A1'] = "Categorization Coverage Report"
+        ws_summary['A1'].font = Font(size=16, bold=True)
+        
+        summary_data = [
+            ("Total Rows", summary['total_rows']),
+            ("Categorized Rows", summary['categorized_rows']),
+            ("Uncategorized Rows", summary['uncategorized_rows']),
+            ("Coverage Rate", f"{summary['coverage_rate']:.1%}"),
+            ("Unique Categories", summary['unique_categories'])
+        ]
+        
+        for row, (label, value) in enumerate(summary_data, 3):
+            ws_summary[f'A{row}'] = label
+            ws_summary[f'B{row}'] = value
+            ws_summary[f'A{row}'].font = Font(bold=True)
+        
+        # Category distribution sheet
+        ws_distribution = wb.create_sheet("Category Distribution", 1)
+        ws_distribution['A1'] = "Category"
+        ws_distribution['B1'] = "Count"
+        ws_distribution['C1'] = "Percentage"
+        ws_distribution['A1'].font = Font(bold=True)
+        ws_distribution['B1'].font = Font(bold=True)
+        ws_distribution['C1'].font = Font(bold=True)
+        
+        total_categorized = summary['categorized_rows']
+        for row, (category, count) in enumerate(report_data['top_categories'], 2):
+            ws_distribution[f'A{row}'] = category
+            ws_distribution[f'B{row}'] = count
+            ws_distribution[f'C{row}'] = f"{count/total_categorized:.1%}" if total_categorized > 0 else "0%"
+        
+        # Uncategorized samples sheet
+        if include_samples and report_data['uncategorized_analysis']['sample_uncategorized']:
+            ws_uncategorized = wb.create_sheet("Uncategorized Samples", 2)
+            ws_uncategorized['A1'] = "Uncategorized Descriptions"
+            ws_uncategorized['A1'].font = Font(bold=True)
+            
+            for row, desc in enumerate(report_data['uncategorized_analysis']['sample_uncategorized'], 2):
+                ws_uncategorized[f'A{row}'] = desc
+        
+        # Quality metrics sheet
+        ws_quality = wb.create_sheet("Quality Metrics", 3)
+        ws_quality['A1'] = "Quality Metrics"
+        ws_quality['A1'].font = Font(size=14, bold=True)
+        
+        quality_data = [
+            ("Categories with Single Item", report_data['quality_metrics']['categories_with_single_item']),
+            ("Average Items per Category", f"{report_data['quality_metrics']['average_items_per_category']:.1f}"),
+            ("Most Common Category Count", report_data['quality_metrics']['most_common_category_count'])
+        ]
+        
+        for row, (label, value) in enumerate(quality_data, 3):
+            ws_quality[f'A{row}'] = label
+            ws_quality[f'B{row}'] = value
+            ws_quality[f'A{row}'].font = Font(bold=True)
+        
+        # Save workbook
+        wb.save(output_path)
+        logger.info(f"Categorization report exported successfully to {output_path}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error exporting categorization report: {e}")
+        return False 
