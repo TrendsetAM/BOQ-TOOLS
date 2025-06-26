@@ -12,8 +12,10 @@ import pandas as pd
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.utils import get_column_letter
+import shutil
 
 from core.auto_categorizer import UnmatchedDescription
+from core.category_dictionary import CategoryDictionary
 
 logger = logging.getLogger(__name__)
 
@@ -931,4 +933,86 @@ def export_categorization_report(dataframe: pd.DataFrame,
         
     except Exception as e:
         logger.error(f"Error exporting categorization report: {e}")
-        return False 
+        return False
+
+
+def update_master_dictionary(
+    category_dict: CategoryDictionary,
+    manual_categorizations: dict,
+    backup_dir: Path = Path('config/backups')
+) -> dict:
+    """
+    Update the master CategoryDictionary with new manual categorizations.
+    - Adds new description-category mappings
+    - Prevents duplicates and handles conflicts
+    - Creates a backup of the old dictionary before updating
+    - Saves the updated dictionary to file
+    - Logs all additions and conflicts
+
+    Args:
+        category_dict: CategoryDictionary object
+        manual_categorizations: dict mapping description (str) to category (str)
+        backup_dir: Directory to store backups (default: config/backups)
+    Returns:
+        dict with summary of additions, conflicts, and backup path
+    """
+    logger.info(f"Updating master dictionary with {len(manual_categorizations)} manual categorizations...")
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup_path = None
+    additions = []
+    conflicts = []
+    skipped = []
+
+    # Backup the old dictionary file
+    dict_file = category_dict.dictionary_file
+    if dict_file.exists():
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        backup_path = backup_dir / f"category_dictionary_{timestamp}.json"
+        shutil.copy2(dict_file, backup_path)
+        logger.info(f"Backup of old dictionary created at: {backup_path}")
+    else:
+        logger.warning(f"Dictionary file {dict_file} does not exist, skipping backup.")
+
+    # Add new mappings
+    for desc, cat in manual_categorizations.items():
+        desc_norm = desc.strip().lower()
+        cat_norm = cat.strip()
+        if not desc_norm or not cat_norm:
+            continue
+        # Check for existing mapping
+        existing = category_dict.mappings.get(desc_norm)
+        if existing:
+            if existing.category == cat_norm:
+                skipped.append(desc)
+                continue  # Already present, skip
+            else:
+                # Conflict: description exists with different category
+                conflicts.append({'description': desc, 'existing_category': existing.category, 'new_category': cat_norm})
+                logger.warning(f"Conflict for '{desc}': existing category '{existing.category}', new '{cat_norm}' (skipped)")
+                continue  # Do not overwrite, just log
+        # Add new mapping
+        added = category_dict.add_mapping(desc_norm, cat_norm)
+        if added:
+            additions.append({'description': desc, 'category': cat_norm})
+            logger.info(f"Added mapping: '{desc}' → '{cat_norm}'")
+        else:
+            logger.error(f"Failed to add mapping: '{desc}' → '{cat_norm}'")
+
+    # Save updated dictionary
+    saved = category_dict.save_dictionary()
+    if saved:
+        logger.info(f"Updated dictionary saved to {dict_file}")
+    else:
+        logger.error(f"Failed to save updated dictionary to {dict_file}")
+
+    summary = {
+        'additions': additions,
+        'conflicts': conflicts,
+        'skipped': skipped,
+        'backup_path': str(backup_path) if backup_path else None,
+        'saved': saved,
+        'total_added': len(additions),
+        'total_conflicts': len(conflicts),
+        'total_skipped': len(skipped)
+    }
+    return summary 
