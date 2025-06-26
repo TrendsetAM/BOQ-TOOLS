@@ -1,0 +1,3399 @@
+[
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "Cost of Bank Guarantee (Down Payment, Execution, Warranty) and Insurance"
+  },
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "Standard Safety Costs"
+  },
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "Detail Design (Civil Design, Electrical Design, Cable Design etc as per DPP) & As-Built Design"
+  },
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "Documentation and Studies accordinly Grid Operator Needs (e.i. Dynamic Model of the whole system LV/MV/HV, etc)"
+  },
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "PV PARK AREA: On field Investigations and Surveys (Geological, Geotechnical, Hydrological, Topographical Survey)"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Project and Site management (Project Management, H&SEQ, Env. Coord, Activities planning, Material control, Contract Administration….)"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "Execution of the environmental works, environmental Mitigation and Restoration Works in accordance to the Technical Specification."
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Site Needs (Machinery, mobilization and demobilization, survilleance, signals, assurance, Water and Electricity supply, etc.)"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Site Camp Construction (including Offices, main Storage Area, etc)"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Site Camp Operation and Maintenance"
+  },
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "PV PARK AREA: Topographical Survey. (no se incluyen los trabajos, lo que se incluye es el análisis de los estudios y gestión docuementaL UIP)"
+  },
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "PV PARK AREA: Hydrological Survey"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Facilities (Canteen, Changing Room and Toilets)"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Offices for EGP site team and Contractors"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "First Aid, Emergency Health Care Facility and Site Signs"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Main Storage Area for construction, Waste Storage Area, Parking Area, Camp Fences"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Supply & Distribution of Water, Power and Broadband connectivity"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Site Camp Operation and Maintenance"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Other Site Expenses (Contractor to Specify)"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Accomodation on site (if defined in SoW)"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Accomodation out of site"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Transportation for local workers"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Medical stations"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Ambulance is required if the nearest hospital is more than 30 minutes away or if there are more than 500 workers"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Control of the Site's Acceses"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Project Personnel"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "Execution of the environmental works, environmental Mitigation and Restoration Works"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "PV PARK AREA: Hydrological Survey_Post-operam"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "PV PARK AREA: Topographical Survey"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "PV PARK AREA: Geological and Geotechnical Survey"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "HV/MV SUBSTATION AREA: Topographical Survey"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "HV/MV SUBSTATION AREA: Geological and Geotechnical Survey"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "HV/MV SUBSTATION AREA: Hydrological Survey"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "INTERCONNECTION LINE (MV or HV): Topographical Survey"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "INTERCONNECTION LINE (MV or HV): Geological and Geotechnical Survey"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "INTERCONNECTION LINE (MV or HV): Hydrological Survey"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Project Manager"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Construction Manager"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Supervisor - Civil & Electrical"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "HSE Manager"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Contract Manager / Procurement Manager"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Other Personnel (Quality, Logistic Coord, Env. Coord, Project Control, ... )"
+  },
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "BIM Detail Design (Civil Design, Electrical Design, Cable Design etc as per DPP) & BIM As-Built Design"
+  },
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "Documentation and Studies accordingly Grid Operator Needs (e.i. Dynamic Model of the whole system LV/MV/HV, etc)"
+  },
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "Ingegneria necessaria per l'ottenimento dei permessi per le opere di rete (documentazione per il genio civile, planimetrie, indagini georadar e risoluzione delle interferenze)"
+  },
+  {
+    "CATEGORY": "Roads",
+    "DESCRIPTION": "Internal Roads (Construction and Maintanance during the construction period)"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "Access (Construction and Maintanance during the construction period)"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "Access Roads (Construction and Maintanance during the construction period)"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "Maintenance of Existing Roads during construction period"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "Platform Foundation for Cabins (Conversion Units, Transformation Cabins or Delivery/Parallel Cabin)"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "Cleanup of explosive remants of war"
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "Site Area preparation works - Land Cleaning and Demolitions"
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "Site Area preparation works - Deforestation (if any)"
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "Site Area preparation works - Top Soil Removal (Mandatory for Roads and Platforms)"
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "Site Area preparation works - Earth Movement"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "Disposal and Storage of Excess Excavated Material"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Trenching for MV (Single Core Solution)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Trenching for Fiber Optic"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Trenching for Auxiliary supply of the trackers"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Trenching for Other LV (DC Cable from String Boxes or AC Cable from String Inverter not Included)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Trenching for Data Cables for the trackers (Include all the Trenching for Tracker's Data Cables also if supplied and installed by Tracker's Contractor)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Trenching for Other Data Cables (communication cables for Trackers, String Boxes and/or String Inverter not included)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Trenching for DC (From String Boxes up to Conversion Units)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Trenching for Auxiliary supply of the String Boxes"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Trenching for Data Cables for the String Boxes"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Trenching for LV-AC Cables (from String Inverter to Transformation Cabin)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Trenching for Data Cables for the String Inverters"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "Fences (including Gates) and Foundations"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "Fence Installation"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "Construction of Drainage system"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "Distributed secondary Storage Areas to facilitate the Logistics during Construction Activities"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "Perimeter planting, if required (supply and planting according local Authorities requestes, to be verify in Environmental Impact assesment and DIA)"
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "Site Area preparation works - Land Cleaning and Demolitions (incluido la demolición necesaria para la ejecución de las zanjas)"
+  },
+  {
+    "CATEGORY": "Roads",
+    "DESCRIPTION": "AGGREGATE SUB-BASE FOR PADS AND INTERNAL ROADS : SUPPLY AND INSTALLATION OF MATERIAL TYPE AS PER TS - FROM ON-SITE EXCAVATIONS, ON-SITE STORAGE OR IMPORTED FROM QUARRY (CBR>20%) INCLUDING LOADING, TRANSPORTATION UP TO THE SPECIFIC INSTALLATION POINT, SPREADING, LAYER (NOT EXCEEDING 30 CM),COMPACTATION  MINIMUM/ MEDIUM 95% /98% NORMAL PROCTOR DENSITY AND ALL NECESSARY IN- SITU TESTS (QUALITY CONTROL PLAN)"
+  },
+  {
+    "CATEGORY": "Roads",
+    "DESCRIPTION": "AGGREGATE BASE FOR PADS AND INTERNAL ROADS : SUPPLY AND INSTALLATION OF MATERIAL TYPE AS PER TS - IMPORTED FROM QUARRY (CBR>60%) INCLUDING LOADING, TRANSPORTATION UP TO THE SPECIFIC INSTALLATION POINT, SPREADING, LAYER (NOT EXCEEDING 25 CM),COMPACTATION  MINIMUM/ MEDIUM 98%/ 100% NORMAL PROCTOR DENSITY AND ALL NECESSARY IN- SITU TESTS (QUALITY CONTROL PLAN)"
+  },
+  {
+    "CATEGORY": "Roads",
+    "DESCRIPTION": "SIGNALS SUPPLY AND INSTALLATION"
+  },
+  {
+    "CATEGORY": "Roads",
+    "DESCRIPTION": "MANTENAINCE OF INTERNAL ROADS, PADS,  DURING CONSTRUCTION PERIOD"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "AGGREGATE SUB-BASE FOR ACCESS AND ACCESS ROADS: SUPPLY AND INSTALLATION OF MATERIAL TYPE AS PER TS - FROM ON-SITE EXCAVATIONS, ON-SITE STORAGE OR IMPORTED FROM QUARRY (CBR>20%) INCLUDING LOADING, TRANSPORTATION UP TO THE SPECIFIC INSTALLATION POINT, SPREADING, LAYER (NOT EXCEEDING 30 CM),COMPACTATION  AT LEAST 95% OF THE MODIFIED PROCTOR DENSITY AND ALL NECESSARY IN- SITU TESTS (QUALITY CONTROL PLAN)"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "AGGREGATE BASE FOR ACCESS AND ACCESS ROADS:: SUPPLY AND INSTALLATION OF MATERIAL TYPE AS PER TS - IMPORTED FROM QUARRY (CBR>60%) INCLUDING LOADING, TRANSPORTATION UP TO THE SPECIFIC INSTALLATION POINT, SPREADING, LAYER (NOT EXCEEDING 25 CM),COMPACTATION  AT LEAST 98% OF THE MODIFIED PROCTOR DENSITY AND ALL NECESSARY IN- SITU TESTS (QUALITY CONTROL PLAN)"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "CEMENT STABILIZATION: ANY TYPE OF CEMENT, PERCENTAGE BY WEIGHT > 6% TO 10% (SUPPLY, INSTALLATION AND ALL NECESSARY TESTS)"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "GARD RAIL /BARRIER SUPPLY AND INSTALLATION"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "SURFACE FINISHING - SUPPLY AND INSTALLATION OF BITUMINOUS LAYER AND PRIMER INCLUDING ALL NECESSARY TESTS (QUALITY CONTROL PLAN)"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "SUPPLY AND INSTALLATION OF GEOTEXTILES FOR REINFORCEMENT WITH WEIGHT PER UNIT AREA > 7 ,5TO 15  oz/sq-yd / 250 TO 500 g/M2 WITH FUNCTION OF SEPARATOR AND FILTER"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "MANTENAINCE OF ACCESS AND ACCESS ROADS DURING CONSTRUCTION PERIOD"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "CONCRETE MIXTURE: SUPPLY, POURING, FORMWORK - COMPRESSION STRENGTH 2200 psi / C12/15"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "CONCRETE MIXTURE: SUPPLY, POURING, FORMWORK - COMPRESSION STRENGTH 4500 psi / C25/30"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "STEEL REINFORCEMENTS: REBARS SUPPLY AND INSTALLATION - GRADE 60 (ASTM A615) / B450 C"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "STEEL REINFORCEMENTS: WELDED MESH SUPPLY AND INSTALLATION - GRADE 60 (ASTM A615) / B450 C"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "EMBEDMENTS: PLASTIC PIPES FOR CABLES SUPPLY AND INSTALLATION - ANY DIAMETER"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "POST-INSTALLED ANCHOR BOLTS and FINISHING OF THE EXPOSED SURFACES"
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "CLEANUP OF EXPLOSIVE REMANTS OF WAR"
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "VEGETAL SUPPRESSION (MANUAL AND MECHANIZED), AREA CLEARING AND STRIPPING: SHRUBS, BUSHES, TREES, BOULDERS AND/OR DEBRIS"
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "TOPSOIL EXCAVATION FOR ANY DEPTH, LOADING, TRANSPORTATION TO THE AUTHORIZED DUMPS (ANY DISTANCE) AND MATERIAL DISCARGE, INCLUDING ALL NECESSARY IN- SITU TESTS  (WERE REQUIRED)"
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "EXCAVATION IN RESIDUAL AND SEDIMENTARY SOILS WITH THE USE OF MECHANICAL DOZER, INCLUDING AUXILIARY USE OF SCRAPER. STORAGE MATERIAL ON SITE FOR FILLING/ EMBANKMENT. FOR EVENTUAL EXCEEDING MATERIAL IT IS INCLUDED LOADING, TRANSPORTATION WITH TRACKS TO AUTHORIZED DUMPS (ANY DISTANCE) AND SPREADING OF THE MATERIAL. INCLUDED IN SITU TETS (WERE REQUIRED)"
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "EXCAVATION IN ROCKY SOILS BY HAMMERING , LOADING, TRANSPORTATION WITH TRACKS. STORAGE MATERIAL ON SITE FOR FILLING/ EMBANKMENT. FOR EVENTUAL EXCEEDING MATERIAL IT IS INCLUDED LOADING, TRANSPORTATION WITH TRACKS TO AUTHORIZED DUMPS (ANY DISTANCE) AND SPREADING OF THE MATERIAL. INCLUDED IN SITU TESTS (WERE REQUIRED)"
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "LOADING, TRANSPORTATION, DISPOSAL AND STORAGE OF EXCAVATED MATERIAL  OUT OF PLANT TO A SPECIFIC SITE (ANY DISTANCE) INCLUDING IN SITU TESTS"
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "PREPARATION OF THE SUBGRADE - COMPACTION AND ASSESSMENT OF THE  SUBGRADE LAYER MINIMUM/ MEDIUM 95%/ 98% NORMAL PROCTOR DENSITY AND ALL NECESSARY IN- SITU TESTS  (QUALITY CONTROL PLAN)"
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "EMBANKMENT: SUPPLY OF MATERIAL FROM ON-SITE EXCAVATION, ON-SITE STORAGE OR IMPORTED FROM QUARRY (CBR>10%) INCLUDING LOADING, TRANSPORTATION AND INSTALLATION  INSIDE THE PLANT, SPREADING AND COMPACTION LAYERS (NOT EXCEEDING 30 CM)   MINIMUM/ MEDIUM 95%/ 98% NORMAL PROCTOR DENSITY AND ALL NECESSARY IN - SITU TESTS  (QUALITY CONTROL PLAN)"
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "FILLING : SUPPLY OF MATERIAL FROM ON-SITE PLANT AREA, INCLUDING LOADING,  TRANSPORTATION AND SPREADING UP TO THE SPECIFIC INSTALLATION AREA"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "FENCE SUPPLY AND GATE INSTALLATION, IN STEEL WIRE MESH: GALVANIZED FINISHING and FOUNDATION"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "FENCE SUPPLY AND INSTALLATION IN STEEL WIRE MESH: PLASTIC-COATED and FOUNDATION"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "FENCE AND GATE,SUPPLY AND INSTALLATION , IN STEEL GRILL PANELS: GALVANIZED FINISHING and FOUNDATION"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "BASIN EXCAVATION - EXCAVATION, backfilling and compaction IN RESIDUAL AND SEDIMENTARY SOILS WITH THE USE OF MECHANICAL DOZER, (INCLUDING IN-SITU TESTS WERE REQUIRED). For eventually exceeding materials it is included the execution of: loading, transportation up to authorized dumps (any distance) and spreading of the material"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "BASIN EXCAVATION - EXCAVATION, backfilling and compaction IN ROCK SOILS BY HAMMERING (INCLUDING IN-SITU TESTS  WERE REQUIRED). For eventually exceeding materials it is included the execution of: loading, transportation up to authorized dumps (any distance) and spreading of the material"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "SURFACE DRAINS - BACKFILLING DRAINING MATERIAL: IMPORTED FROM QUARRY - SUPPLY, INSTALLATION AND SPREADING"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "DRAINAGE DITCHES/CATCH POOLS - BY GEOTEXTILES: SECTION AREA < 1 M2 - INCLUDING EXCAVATION, SURFACE PREPARATION, SOIL DISPOSAL, LINING AS WELL AS SUPPLY AND INSTALLATION OF ALL MATERIALS AND ACCESSORY COMPONENTS NECESSARY FOR THE CORRECT IMPLEMENTATION"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "DRAINAGE DITCHES/CATCH POOLS - BY GEOTEXTILES: SECTION AREA > 1 M2  - INCLUDING EXCAVATION, SURFACE PREPARATION, SOIL DISPOSAL, LINING AS WELL AS SUPPLY AND INSTALLATION OF ALL MATERIALS AND ACCESSORY COMPONENTS NECESSARY FOR THE CORRECT IMPLEMENTATION"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "DRAINAGE DITCHES/CATCH POOLS - BY ROCK RIP-RAP: SECTION AREA < 1 M2 - INCLUDING EXCAVATION, SURFACE PREPARATION, SOIL DISPOSAL, LINING AS WELL AS SUPPLY AND INSTALLATION OF ALL MATERIALS AND ACCESSORY COMPONENTS NECESSARY FOR THE CORRECT IMPLEMENTATION"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "DRAINAGE DITCHES/CATCH POOLS - BY ROCK RIP-RAP: SECTION AREA > 1 M2 - INCLUDING EXCAVATION, SURFACE PREPARATION, SOIL DISPOSAL, LINING AS WELL AS SUPPLY AND INSTALLATION OF ALL MATERIALS AND ACCESSORY COMPONENTS NECESSARY FOR THE CORRECT IMPLEMENTATION"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "DRAINAGE DITCHES/CATCH POOLS - BY CONCRETE ELEMENTS: SECTION AREA < 1 M2 - INCLUDING EXCAVATION, SURFACE PREPARATION, SOIL DISPOSAL, LINING AS WELL AS SUPPLY AND INSTALLATION OF ALL MATERIALS AND ACCESSORY COMPONENTS NECESSARY FOR THE CORRECT IMPLEMENTATION"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "DRAINAGE DITCHES/CATCH POOLS - BY CONCRETE ELEMENTS: SECTION AREA > 1 M2 - INCLUDING EXCAVATION, SURFACE PREPARATION, SOIL DISPOSAL, LINING AS WELL AS SUPPLY AND INSTALLATION OF ALL MATERIALS AND ACCESSORY COMPONENTS NECESSARY FOR THE CORRECT IMPLEMENTATION"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "SURFACE DRAINAGE PIPES - PERFORATED CONCRETE PIPES: DIAMETER > 0 TO 8\" / 0 TO 200 MM - SUPPLY AND INSTALLATION OF ALL MATERIALS AND ACCESSORY COMPONENTS NECESSARY FOR THE CORRECT IMPLEMENTATION (THIS ITEM MUST BE CONSIDERED IN ADDITION TO DRAINAGE DITCHES BY GEOTEXTILES INSTALLATION)"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "SURFACE DRAINAGE PIPES - PERFORATED CONCRETE PIPES: DIAMETER > 8 TO 16\" / 200 TO 400 MM - SUPPLY AND INSTALLATION OF ALL MATERIALS AND ACCESSORY COMPONENTS NECESSARY FOR THE CORRECT IMPLEMENTATION (THIS ITEM MUST BE CONSIDERED IN ADDITION TO DRAINAGE DITCHES BY GEOTEXTILES INSTALLATION)"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "SURFACE DRAINAGE PIPES - PERFORATED CONCRETE PIPES: DIAMETER > 16\" / 400 MM - SUPPLY AND INSTALLATION OF ALL MATERIALS AND ACCESSORY COMPONENTS NECESSARY FOR THE CORRECT IMPLEMENTATION(THIS ITEM MUST BE CONSIDERED IN ADDITION TO DRAINAGE DITCHES BY GEOTEXTILES INSTALLATION)"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "REINFORCED CONCRETE PIPES: INNER DIAMETER > 24 TO 32\" / 600 TO 800 MM - INCLUDING EXCAVATION, SURFACE PREPARATION, SOIL DISPOSAL, LINING, BACKFILL AS WELL AS SUPPLY AND INSTALLATION OF ALL MATERIALS AND ACCESSORY COMPONENTS NECESSARY FOR THE CORRECT IMPLEMENTATION"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "REINFORCED CONCRETE PIPES: INNER DIAMETER > 32 TO 40\" / 800 TO 1000 MM - INCLUDING EXCAVATION, SURFACE PREPARATION, SOIL DISPOSAL, LINING, BACKFILL AS WELL AS SUPPLY AND INSTALLATION OF ALL MATERIALS AND ACCESSORY COMPONENTS NECESSARY FOR THE CORRECT IMPLEMENTATION"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "REINFORCED CONCRETE PIPES: INNER DIAMETER > 40 TO 48\" / 1000 TO 1200 MM - INCLUDING EXCAVATION, SURFACE PREPARATION, SOIL DISPOSAL, LINING, BACKFILL AS WELL AS SUPPLY AND INSTALLATION OF ALL MATERIALS AND ACCESSORY COMPONENTS NECESSARY FOR THE CORRECT IMPLEMENTATION"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "REINFORCED CONCRETE PIPES: INNER DIAMETER > 48 TO 60\" / 1200 TO 1500 MM - INCLUDING EXCAVATION, SURFACE PREPARATION, SOIL DISPOSAL, LINING, BACKFILL AS WELL AS SUPPLY AND INSTALLATION OF ALL MATERIALS AND ACCESSORY COMPONENTS NECESSARY FOR THE CORRECT IMPLEMENTATION"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "REINFORCED CONCRETE PIPES: INNER DIAMETER > 60\" / 1500 MM - INCLUDING EXCAVATION, SURFACE PREPARATION, SOIL DISPOSAL, LINING, BACKFILL AS WELL AS SUPPLY AND INSTALLATION OF ALL MATERIALS AND ACCESSORY COMPONENTS NECESSARY FOR THE CORRECT IMPLEMENTATION. THIS ITEM INCLUDES NON-CIRCULAR SHAPED REINFORCED CONCRETE CULVERT"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "HYDRAULIC DISSIPATOR POOL: STONES - SUPPLY AND INSTALLATION OF ALL MATERIALS AND ACCESSORY COMPONENTS NECESSARY FOR THE CORRECT IMPLEMENTATION"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "HYDRAULIC DISSIPATOR POOL: REINFORCED CONCRETE - SUPPLY AND INSTALLATION OF ALL MATERIALS AND ACCESSORY COMPONENTS NECESSARY FOR THE CORRECT IMPLEMENTATION"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "LOW WATER CROSSINGS (FORD): ACCORDING TO TYPICAL DRAWINGS"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "LEVEES: ACCORDING TO TYPICAL DRAWINGS"
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "VEGETAL SUPPRESSION, AREA CLEARING AND STRIPPING\nRemoval of all obstructions such as vegetation (Manual and Machanized), trees of having any circumference, shrubs, boulders and/or other debris. Included  loading, transportation up to final destination,  unloading, spreading."
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "LOADING, TRANSPORTATION, DISPOSALSPREADING AND COMPACTION\nNew transportation of topsoil material (excavated or by dump) up to a specific site request by ENEL. Preparation of surface for seeding."
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "TOPSOIL REMOVAL \nRemoval of topsoil layer, any depth, including loading, transportation, unloading and spreading. Topsoil should be stockpiled for later reuse as needed."
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "EXCAVATION IN SOIL    \nExcavation in soil, any depth, with mechanical means \"dozer\" and \"scraper\" including loading and transport to usage location or authorized dump to any distance, spreading, natural compaction and geometrical embankement conformation according to the design. Including testing as prescribed."
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "HORIZONTAL DIRECTIONAL DRILLING (HDD): CABLES/PIPES/CONDUITS DIAM. MAX 100 MM\nHorizontal directional drilling is performed using a remote-controlled guided auger with or without high pressure drilling muds to lay underground flexible cables/pipes/conduits with no conventional digging. The item includes all the preparatory and auxiliary works, soil sampling and laboratory analysis activities excluded."
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "HORIZONTAL DIRECTIONAL DRILLING (HDD): CABLES/PIPES/CONDUITS DIAM. > 100 TO 200 MM\nHorizontal directional drilling is performed using a remote-controlled guided auger with or without high pressure drilling muds to lay underground flexible cables/pipes/conduits with no conventional digging. The item includes all the preparatory and auxiliary works, soil sampling and laboratory analysis activities excluded."
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "HORIZONTAL DIRECTIONAL DRILLING (HDD): CABLES/PIPES/CONDUITS DIAM. > 200 TO 250 MM\nHorizontal directional drilling is performed using a remote-controlled guided auger with or without high pressure drilling muds to lay underground flexible cables/pipes/conduits with no conventional digging. The item includes all the preparatory and auxiliary works, soil sampling and laboratory analysis activities excluded."
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "HORIZONTAL DIRECTIONAL DRILLING (HDD): CABLES/PIPES/CONDUITS DIAM. > 250 MM\nHorizontal directional drilling is performed using a remote-controlled guided auger with or without high pressure drilling muds to lay underground flexible cables/pipes/conduits with no conventional digging. The item includes all the preparatory and auxiliary works, soil sampling and laboratory analysis activities excluded."
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION IN ROCKY SOILS BY HAMMERING \nExcavation in rocky soil, any depth, with hammer demolition equipment  including loading and transport to usage location or authorized dump to any distance, spreading, natural compaction and geometrical embankment conformation according to the design. Including testing as prescribed."
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION IN ROCKY SOILS BY CONTROLLED BLASTING\nExcavation in rocky soil, any depth, with massive blasting including loading and transport to usage location or authorized dump to any distance, spreading, natural compaction and geometrical embankment conformation according to the design. Including testing as prescribed."
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "PREPARATION OF SUBGRADE \nCompaction and assessment of the subgrade layer. Including testing as prescribed."
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "EMBANKMENT: MATERIAL FROM ON-SITE EXCAVATION  \nExcution with material from on-site excavation or on-site storage, according to drawings and technical specifications. Including compaction and testing as prescribed."
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "EMBANKMENT: MATERIAL IMPORTED FROM QUARRY OR CHUSHING PLANT AS PER DESIGN\nExecution with material from quarry or crushing plant, according to drawings and technical specifications. Including supply, loading, transportation, spreading, compaction and testing as prescribed."
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "LOADING, TRANSPORTATION, DISPOSAL AND STORAGE OF EXCAVATED MATERIAL:  INERT WASTE LANDFILL/RECYCLING PLANT\nAll duties including additional tests required by the dump. Any disposal compensations/fees arising from the landfill/recycling plants and/or third party"
+  },
+  {
+    "CATEGORY": "Roads",
+    "DESCRIPTION": "AGGREGATE SUB-BASE: MATERIAL TYPE AS PER THE DESIGN \nExecution of road and crane pad aggregate sub-base with material as per design and technical specifications (from on-site excavation, crushing plant or imported from quarry). Including excavation/production/escavation, loading, transportation up the usage location, spreading, compaction and testing."
+  },
+  {
+    "CATEGORY": "Roads",
+    "DESCRIPTION": "AGGREGATE BASE: MATERIAL TYPE AS PER THE DESIGN \nExecution of road and crane pad aggregate base with material as per design and technical specifications (crushing plant or imported from quarry). Including excavation/production/escavation, loading, transportation up the usage location, spreading, compaction and testing."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "CEMENT STABILIZATION\nCement stabilization with X% of cement according to the design.\nMaterial supply, placement and compaction, and testing. Includes preliminary testing for determining cement dosage based on moisture content."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "GEO-SYNTHETICS: GEOTEXTILES\nSupply and installation of geotextiles for reinforcement with weight per unit area according to the design in the whole width of the roads and pads, as shown on the drawings, including ancillary material for overlapping and proper installation."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "SURFACE COURSE: REINFORCED CONCRETE\nSupply and installation of concrete finishing according to the design criteria and the local/federal codes."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "SURFACE COURSE: ASPHALT\nSupply and installation of asphalt finishing according to the design criteria and the local/federal codes."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "DRAINAGE DITCHES/CATCH POOLS - EXCAVATION ONLY: SECTION AREA UP 0,3 M2 \nAny form, including excavation, surface preparation, soil disposal and transportation to dump including all activities necessary for the correct implementation and functioning."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "DRAINAGE DITCHES/CATCH POOLS - EXCAVATION ONLY: SECTION AREA OF 0,3 M2 UP 1 M2 \nAny form, including excavation, surface preparation, soil disposal and transportation to dump including all activities necessary for the correct implementation and functioning."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "DRAINAGE DITCHES/CATCH POOLS - EXCAVATION ONLY: SECTION AREA OF 1 M2 UP 3 M2 \nAny form, including excavation, surface preparation, soil disposal and transportation to dump including all activities necessary for the correct implementation and functioning."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "DRAINAGE DITCHES/CATCH POOLS - EXCAVATION ONLY: SECTION AREA ABOVE 3 M2 \nAny form, including excavation, surface preparation, soil disposal and transportation to dump including all activities necessary for the correct implementation and functioning."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "DRAINAGE DITCHES/CATCH POOLS - BY CONCRETE: SECTION AREA UP 0,3 M2 \nAny form, including excavation, surface preparation, soil disposal and transportation to dump, backfilling compaction, lining as well as supply and installation of all materials and accessory components necessary for the correct implementation and functioning. To consider a thickness of 15 cm for no reinforced section and 8 cm for reinforced section (with rebars included) unless otherwise shown in the drawings."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "DRAINAGE DITCHES/CATCH POOLS - BY CONCRETE: SECTION AREA OF 0,3 M2 UP 1 M2 \nAny form, including excavation, surface preparation, soil disposal and transportation to dump, backfilling compaction, lining as well as supply and installation of all materials and accessory components necessary for the correct implementation and functioning. To consider a thickness of 15 cm for no reinforced section and 8 cm for reinforced section (with rebars included) unless otherwise shown in the drawings."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "DRAINAGE DITCHES/CATCH POOLS - BY CONCRETE: SECTION AREA OF 1 M2 UP 3 M2 \nAny form, including excavation, surface preparation, soil disposal and transportation to dump, backfilling compaction, lining as well as supply and installation of all materials and accessory components necessary for the correct implementation and functioning. To consider a thickness of 15 cm for no reinforced section and 8 cm for reinforced section (with rebars included) unless otherwise shown in the drawings."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "DRAINAGE DITCHES/CATCH POOLS - BY CONCRETE: SECTION AREA ABOVE 3 M2 \nAny form, including excavation, surface preparation, soil disposal and transportation to dump, backfilling compaction, lining as well as supply and installation of all materials and accessory components necessary for the correct implementation and functioning. To consider a thickness of 15 cm for no reinforced section and 8 cm for reinforced section (with rebars included) unless otherwise shown in the drawings."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "REINFORCED CONCRETE PIPES: INNER DIAMETER > 20 TO 24\" / 500 TO 600 MM\nIncluding excavation, surface preparation, soil disposal and transportation to dump, lining, backfill as well as supply and installation of all materials and accessory component necessary for the correct implementation and functioning."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "REINFORCED CONCRETE PIPES: INNER DIAMETER > 24 TO 32\" / 600 TO 800 MM\nIncluding excavation, surface preparation, soil disposal and transportation to dump, lining, backfill as well as supply and installation of all materials and accessory component necessary for the correct implementation and functioning."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "REINFORCED CONCRETE PIPES: INNER DIAMETER  > 32 TO 40\" / 800 TO 1000 MM\nIncluding excavation, surface preparation, soil disposal and transportation to dump, lining, backfill as well as supply and installation of all materials and accessory component necessary for the correct implementation and functioning."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "REINFORCED CONCRETE PIPES: INNER DIAMETER  > 40 TO 48\" / 1000 TO 1200 MM\nIncluding excavation, surface preparation, soil disposal and transportation to dump, lining, backfill as well as supply and installation of all materials and accessory component necessary for the correct implementation and functioning. This item includes non-circular shaped reinforced concrete culvert."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "REINFORCED CONCRETE PIPES: INNER DIAMETER  > 48 TO 60\" / 1200 TO 1500 MM\nIncluding excavation, surface preparation, soil disposal and transportation to dump, lining, backfill as well as supply and installation of all materials and accessory component necessary for the correct implementation and functioning. This item includes non-circular shaped reinforced concrete culvert."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "REINFORCED CONCRETE PIPES: INNER DIAMETER > 60\" / 1500 MM\nIncluding excavation, surface preparation, soil disposal and transportation to dump, lining, backfill as well as supply and installation of all materials and accessory component necessary for the correct implementation and functioning. This item includes non-circular shaped reinforced concrete culvert."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "EXCAVATION IN SOIL\nExcavation in soil with mechanical means \"dozer\" and \"scraper\" including loading and transport to usage location or authorized dump to any distance, spreading, natural compaction and geometrical embankement conformation according to the design. Including testing, access ramps and retaining  works as per design."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "EXCAVATION IN ROCKY SOILS BY HAMMERING \nExcavation in rocky soil, any depth, with hammer demolition equipment  including loading and transport to usage location or authorized dump to any distance, spreading, natural compaction and geometrical embankment conformation according to the design. Including testing, access ramps and retaining works as per design."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "EXCAVATION IN ROCKY SOILS BY CONTROLLED BLASTING\nExcavation in rocky soil, any depth, with massive blasting  including loading and transport to usage location or authorized dump to any distance, spreading, natural compaction and geometrical embankment conformation according to the design. Including testing, access ramps and retaining works as per design."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "INCLINATED DRAINAGE CHANNEL FOR DISCHARGE - AS PER DESIGN: SECTION AREA OF 0,3 M2 UP 1 M2 \nAny form, any material (stones, concrete, etc.) including excavation, surface preparation, soil disposal and transportation to dump, backfilling compaction, lining as well as supply and installation of all materials and accessory components necessary for the correct implementation and functioning. In case of cocrete lining consider a thickness of 15 cm for no reinforced section and 8 cm for reinforced section (with rebars inlcuded)."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "CONCRETE CURB\nAny form, including excavation, surface preparation, soil disposal and transport to backfill, backfill compaction, lean concrete base, as well as supply and installation of all materials and ancillary components necessary for correct implementation and functioning."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "FENCE\nSupply and installation according to the design"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "CONNECTION PITS - NON-REINFORCED/REINFORCED/CAST-IN SITU CONCRETE TYPE: AREA OF THE INNER SURFACE IN PLAN VIEW > 1.20 TO 1.80 SY / 1,00 TO 1,50 M2\nAny form, including excavation, surface preparation, soil disposal and transport to backfill, backfill compaction, lining, as well as supply and installation of all necessary materials and ancillary components (including cast iron covers) for correct implementation and operation. The design thickness of the concrete must take into account the potential presence of rebar."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "HYDRAULIC DISSIPATOR POOL: AS PER DESIGN\nAny material (stones, concrete, etc.) Surface preparation, soil disposal and transportation to dump, backfilling compaction, lining as well as supply and installation of all materials and accessory components necessary for the correct implementation and functioning."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "CLOSED GUTTER SEGMENT: SECTION AREA OF 0.3 M2 TO 1 M2\nSupply of materials and execution according to the design. Includes cut/fill, grading, surface preparation, execution."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "LOW WATER CROSSINGS (FORD)\nSupply of materials and execution according to the design. Includes cut/fill, grading, surface preparation, execution."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "RIP-RAP PROTECTION\nSupply of materials and execution according to the design. Includes cut/fill, grading, surface preparation, execution."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "BACKFILLING\nThis activity involves placing and compacting soil in layers, with suitable excavated materials or quarry materials supplied by the Contractor and in compliance with the design/project documents or as defined by EGP. Included loading, transportation, spreading, compaction."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "LEAN CONCRETE - CLASS (2200 PSI/C12/15)\nSupply, transportation, placement and testing according to the design and the TS, including ancillary works (vibration, formworks of any type, curing activities, etc.).."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "STRUCTURAL CONCRETE - CLASS (5500 PSI/C25/30) \nSupply, transportation, installation and testing of concrete according to the design and the TS, including ancillary works (vibration, formworks of any type, curing activities, etc.)."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "STRUCTURAL CONCRETE - CLASS (5500 PSI/C30/37) \nSupply, transportation, installation and testing of concrete according to the design and the TS, including ancillary works (vibration, formworks of any type, curing activities, etc.)."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "STRUCTURAL STEEL - REBARS GRADE 60 (ASTM A615) / B450 C\nSupply, transportation, installation and testing according to the design and the TS, including ancillary works."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "GROUT\nSupply, transportation, installation and testing according to the design and the TS, including ancillary works (formworks of any type, curing activities, etc.). If no information are given, consider BASF Masterflow 9300."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "SEALING GROUT \nSupply, transportation, installation and testing. If no information is given, consider using Masterseal 550."
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "CABLE CONDUCTORS / EMBEDMENTS: PLASTIC PIPES FOR CABLES - DIAMETER >  2 TO 4\" / 50 TO 100 MM\nSupply and installation of ducts for LV/MV, communication and grounding cables according to WTG documentation and TS, with embedment material if needed, including ancillary materials (spacers, fixing materials, etc.)."
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "CABLE CONDUCTORS/ EMBEDMENTS: PLASTIC PIPES FOR CABLES - DIAMETER > \n6 TO 8\" / 150 TO 200 MM\nSupply and installation of ducts for LV/MV, communication and grounding cables according to WTG documentation and TS, with embedment material if needed, including ancillary materials (spacers, fixing materials, etc.)."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "HOT DIP GALVANIZED MINOR STEEL STRUCTURES"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "PREFABRICATION OF HOT DIP GALVANIZED MINOR STEEL STRUCTURES"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "ERECTION OF MINOR STEEL STRUCTURES"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "SUPPLY PREFABRICATION AND ERECTION OF HOT DIP GALVANIZED BUCKLE OR CHEQUERED STEEL SHEETS"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "PREFAFRICATION OF HOT DIP GALVANIZED BUCKLE OR CHEQUERED STEEL SHEETS"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "ERECTION OF BUCKLE OR CHEQUERED STEEL SHEETS"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "RAMMING\nIncluding all machinery and ancillary activities necessary to carry out the work and testing, as prescribed"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "PRE-DRILED AND RAMMING\nIncluding all machinery and ancillary activities necessary to carry out the work and testing, as prescribed"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "DRILLING AND CONCRETING: DRILLING DIAMETER (XXX mm < Æ ≤ XXX mm)\nIncluding all machinery, drilling/excavation in any material, soil disposal and trasportation to dump, croncreting and all ancillary activities necessary to carry out the work (e.g. tests, as prescribed)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "DRILLING, BACKFILING AND COMPACTING: DRILLING DIAMETER (XXX mm < Æ ≤ XXX mm)\nIncluding all machinery, drilling/excavation in any material, soil disposal and trasportation to dump, backfilling, compaction, lining and all ancillary activities necessary to carry out the work (e.g. tests, as prescribed)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "MECHANICAL ASSEMBLY OF TRACKERS  STRUCTURES (PV PANELS INSTALLATION EXCLUDED)\nIncluding all materials (e.g. coupling nuts and bolts, anchor bolts with specially provided inserts, expansion bolts, welding materials, shims, etc.) and activities necessary to carry out the mechanical installation (e.g. drillings; renovation of hot-dip galvanizing according to the structure manufacturer, if removed/damaged during installation; installation of motor, drive arm mechanism, dampers, spring and any other device necessary for the perfect functioning of the structure; implementation of defense procedures during construction phasis; etc.)"
+  },
+  {
+    "CATEGORY": "PV Mod. Installation",
+    "DESCRIPTION": "MECHANICAL INSTALLATION OF PV MODULES\nIncluding all materials and activities necessary to carry out the mechanical installation of the pannels, excluded the electrical connection."
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "DEMOLITION OF CONCRETE STRUCTURES, REINFORCED CONCRETE\nDemolition of all materials included inside the buildings/structures/civil works, as well as proper separation and disposal according to technical specifications"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "DISMANTLING AND RE-INSTALLATION OF FENCE  \nSame typology according to existing fence. Including supply of all necessary materials, transportation and dismantling/re-installation."
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "MASONRY DEMOLITION\nDemolition of all materials included inside the buildings/structures/civil works, as well as proper separation and disposal according to technical specifications"
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "DEMOLITION OF STEEL STRUCTURES, MECHANICAL EQUIPMENTS, STEEL PIPING AND ELECTRICAL CABLES \nDemolition of all materials included inside the buildings/structures/civil works, as well as proper separation and disposal according to technical specifications"
+  },
+  {
+    "CATEGORY": "Earth Movement",
+    "DESCRIPTION": "ROADS, LOT AND OUTDOOR WORK DEMOLITION \nDemolition of all materials composing the road section including ditches, culvert, pipes, asphalt, base, subbase, pits, signs, concrete, retaining wall, etc., as well as proper separation and disposal according to technical specifications"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "SEEDING GRASS AND PLANTS\nSeeding and all necessary activities."
+  },
+  {
+    "CATEGORY": "Roads",
+    "DESCRIPTION": "MANTENAINCE OF ROADS AND PLATFORM AFTER CONSTRUCTION PERIOD \nAny layer."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "TEMPORARY AND PERMANENT ROAD SIGNS\nSupply and installation according to the design criteria and the local/federal codes."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "ROAD SAFETY BARRIERS\nSupply and installation of guard rail according to the design criteria and the local/federal codes."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "GATES\nSupply and installation according to the design."
+  },
+  {
+    "CATEGORY": "OEM Building",
+    "DESCRIPTION": "Desing and Supply O&M building accordingly Annex 10 and Scope of Works (All the equipment necessary for the finalization of the Works)"
+  },
+  {
+    "CATEGORY": "OEM Building",
+    "DESCRIPTION": "Civil and Electromechanical Construction Activities of O&M Building Accordingly Annex 10 and Scope of Works"
+  },
+  {
+    "CATEGORY": "OEM Building",
+    "DESCRIPTION": "Parking Lot"
+  },
+  {
+    "CATEGORY": "OEM Building",
+    "DESCRIPTION": "Waste Storage Area"
+  },
+  {
+    "CATEGORY": "OEM Building",
+    "DESCRIPTION": "Desing and Supply Warehouse main building accordingly Annex 10 and Scope of Works (All the equipment necessary for the finalization of the Works)"
+  },
+  {
+    "CATEGORY": "OEM Building",
+    "DESCRIPTION": "Civil and Electromechanical Construction Activities of Warehouse main Building Accordingly Annex 10 and Scope of Works"
+  },
+  {
+    "CATEGORY": "OEM Building",
+    "DESCRIPTION": "Desing and Supply Warehouse secondary building accordingly Annex 10 and Scope of Works (All the equipment necessary for the finalization of the Works)"
+  },
+  {
+    "CATEGORY": "OEM Building",
+    "DESCRIPTION": "Civil and Electromechanical Construction Activities of Warehouse secondary Building Accordingly Annex 10 and Scope of Works"
+  },
+  {
+    "CATEGORY": "OEM Building",
+    "DESCRIPTION": "Desing and Supply O&M building"
+  },
+  {
+    "CATEGORY": "OEM Building",
+    "DESCRIPTION": "Civil and Electromechanical Construction Activities of O&M Building"
+  },
+  {
+    "CATEGORY": "OEM Building",
+    "DESCRIPTION": "Supply and installation of all the internal fornitures and equipment necessary for the finalization of the Works"
+  },
+  {
+    "CATEGORY": "OEM Building",
+    "DESCRIPTION": "Desing and Supply Warehouse main building (All the equipment necessary for the finalization of the Works)"
+  },
+  {
+    "CATEGORY": "OEM Building",
+    "DESCRIPTION": "Civil and Electromechanical Construction Activities of Warehouse main Building"
+  },
+  {
+    "CATEGORY": "Solar Cables",
+    "DESCRIPTION": "Solar Cables, connectors excluded (sizing depending on electrical study)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Solar Cables Connectors"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Solar Cables & Connectors Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation and Cabling of String Boxes, including accessories. Include Supply and installation of Supporting Structures for String Boxes (in case the Tracker's Supporting Structures cannot be used)"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "MV/AC Power cable, connectors excluded (sizing depending on electrical study) - Single Core"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Terminals Connectors MV cable - Single Core"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "MV Cables & Terminals Installation"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "LV/DC Power Cables (Single Core), connectors excluded (sizing depending on electrical study)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Terminal Connectors LV/DC Cables (Single Core)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "LV/DC Cables & Connectors Installation"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "LV Cables for the power supply of the String Boxes"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "LV Cables for the power supply of the Trackers - From Cabins up to Head Trackers"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "LV Cables for the power supply of the Trackers - From Head Tracker up to Trackers"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Other LV cables (e.i. Video surveillance and intrusion detection system, etc)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Terminals Connectors for LV cables"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Other LV Cables & Connectors Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Data cables for the String's Monitoring"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Data cables for the Tracker's communication - From Cabins up to Head Trackers"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Data cables for the Tracker's communication - From Head Tracker up to Trackers"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Fiber Optic"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Data Cables and Fiber Optic Installation"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "MV/AC Power cable from Paralle Cabin to the Step-Up Station, connectors excluded (sizing depending on electrical study) - Single Core"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of Antilightning System for Cabins, including accessories"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Video surveillance and intrusion detection system and other security system"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Earthing (grounding) system (sizing depending on electrical study)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation and test of all the electromechanical equipments (CCTV, lightning Protection System, Earthing System, Atonometrics, etc) [Cables and PV Modules Excluded]"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Cold Commissioning, Hot Commissioning and Start-Up, Temporary Operation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Back up materials according to the Technical Specification"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Fields Sensors and Meteo Station Supply, Transportation, Delivery, Installation and Commissioning"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Power Plant Control (PPC)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Meteo Station ( Meteo Tower and Field Monitoring System, with Data Logger, Wiring and Power Supply)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Complete Soiling Measurement System"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation and test of all the electromechanical equipments (CCTV, lightning Protection System, Earthing System, Soiling Device, etc) [Cables and PV Modules Excluded]"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Spare materials according to the Technical Specification"
+  },
+  {
+    "CATEGORY": "Solar Cables",
+    "DESCRIPTION": "Supply of solar cable 4 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Solar Cables",
+    "DESCRIPTION": "Supply of solar cable 6 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Solar Cables",
+    "DESCRIPTION": "Supply of solar cable 10 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of solar cable connectors"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of termination/connector for solar cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation and connection of solar cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Test of Solar Cables"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/DC cable - 50 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/DC cable - 70 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/DC cable - 95 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/DC cable - 120 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/DC cable - 150 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/DC cable - 185 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/DC cable - 240 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/DC cable - 300 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/DC cable - 400 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/DC cable connectors"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/DC cable connectors"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation and connection of LV/DC cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Test of LV Cables"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Supply of MV cable - 50 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Supply of MV cable - 70 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Supply of MV cable - 95 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Supply of MV cable - 120 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Supply of MV cable - 150 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Supply of MV cable - 185 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Supply of MV cable - 240 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Supply of MV cable - 300 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Supply of MV cable - 400 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Supply of MV cable - 500 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Supply of MV cable - 630 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of MV cable connectors"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of MV cable joints"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation and connection of MV cables"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Test of MV Cables"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - five core 1.5 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - five core 2.5 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - five core 4.0 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - five core 6.0 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - five core 10.0 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - five core 16.0 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - five core 25.0 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - five core 35.0 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - five core 50.0 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - three core 1.5 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - three core 2.5 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - three core 4.0 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - three core 6.0 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - three core 10.0 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - three core 16.0 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - three core 25.0 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - three core 35.0 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV aux power cable - three core 50.0 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV aux power cable connectors"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of termination/connector for LV aux power cables"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation and connection of LV aux power cables"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Test of LV aux power cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of Data cables for the Tracker's communication - From Cabins up to Head Trackers, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of Data cables for the Tracker's communication - From Head Tracker up to Trackers, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of Data cable connectors"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of data cable connectors"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Data Cables Installation and connection"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Data Cable Test"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Fiber optic cable (single-mode, 24 wires)- Supply, installation and connection (including terminations)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of bare stranded copper wire, cross section 35 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of bare stranded copper wire, cross section 50 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of bare stranded copper wire, cross section 70 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of bare stranded copper wire, cross section 95 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of bare stranded copper wire, cross section 120 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of insulated grounding cables for String Box SPDs (minimum 16mm2 section), connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of insulated grounding cables for equipotential connection between structures (minimum 25mm2 section), connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of insulated grounding cables for equipotential connection between moving and fixed parts of structures (minimum 25mm2 section), connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply and installation of joint for earthing cable"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply and installation of termination for earthing cable"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply and installation of earthing rods"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Bare copper rope installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Isolated grounding cable installation"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Execution of trench excavation in residual and sedimentary soils (INCLUDING IN-SITU TESTS WERE REQUIRED)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Execution of trench excavation in rock soils or in roads and platforms (INCLUDING IN-SITU TESTS WERE REQUIRED)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply and execution of the trench sand bed"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply and installation of the cable mechanical protection and warning tape"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Execution of trench, backfilling and compaction for trenches on earth. For eventually exceeding materials execution of: loading, transportation up to authorized dumps (any distance) and spreading of the material (INCLUDING IN-SITU TESTS WERE REQUIRED)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Execution of trench backfilling and compaction for trenches on roads and platforms restoring the driveway layer. For eventually exceeding materials execution of: loading, transportation up to authorized dumps (any distance) and spreading of the material (INCLUDING IN-SITU TESTS WERE REQUIRED)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Road crossing of MV trench - trench additional price"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Road crossing of LV trench - trench additional price"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Crossing under cables/conduits - trench additional price"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Crossing under piping - trench additional price"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Corrugated HDPE pipes for cables - supply and installation Ø ≤ 40 mm"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Corrugated HDPE pipes for cables - supply and installation 40 mm < Ø ≤ 75 mm"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Corrugated HDPE pipes for cables - supply and installation 75 mm < Ø ≤ 125 mm"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Corrugated HDPE pipes for cables - supply and installation 125 mm < Ø ≤  200 mm"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Complete cable pit in concrete (including PD test equipment, when requested)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Complete cable pit in plastic (including PD test equipment, when requested)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "HORIZONTAL DIRECTIONAL DRILLING (HDD): CABLES/PIPES/CONDUITS DIAMETER MAXIMUM 4\" / 10 CM"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "HORIZONTAL DIRECTIONAL DRILLING (HDD): CABLES/PIPES/CONDUITS DIAMETER > 4\" TO 8\" / 10 TO 20 CM"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "HORIZONTAL DIRECTIONAL DRILLING (HDD): CABLES/PIPES/CONDUITS DIAMETER > 8\" TO 12\" / 20 TO 25 CM"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "HORIZONTAL DIRECTIONAL DRILLING (HDD): CABLES/PIPES/CONDUITS DIAMETER > 12\" / 25 CM"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of the Parallel Cabin"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation and Interconnection Works of the Parallel Cabin"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of Antilightning System"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of Antilightning System"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply, Installation and Wiring of Video Surveillance System"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Complete interconnection of the PCU (in case of central inverters)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Complete interconnection of parallel cabin (if applicable)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Complete interconneciton of the delivery cabin (if applicable)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Complete installation and cabling of string boxes, including accessories. Including Supply and Installation of sun-shaded Supporting Structures for string boxes (in case the Tracker's Supporting Structures cannot be used)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply, installation and cabling of all LV distribution boards (complete with all internal protections and wiring), necessary for the complete auxiliary supply of the trackers from the PCU/TC to the tracker actuator"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation and Wiring of Pyranometers- excluding LV aux power cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation and Wiring of Module Temperature Sensors- excluding LV aux power cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation and Wiring of Soiling Devices- excluding LV aux power cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation and Wiring of meteo station (centralized metereological monitoring system) - excluding LV aux power cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Testing of all cables and electromechanical equipments (CCTV, lightning Protection System, Earthing System, etc)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation and Cabling of String Inverters, including accessories. Including Supply and Installation of Supporting Structures for String Inverters (in case the Tracker's Supporting Structures cannot be used)"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "LV/AC Power Cables (Single Core), connectors excluded (sizing depending on electrical study)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Terminal Connectors LV/AC Cables"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "LV/AC Cables & Connectors Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of Antilighting System for PV Modules Area, including accessories"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of Antilighting System for Cabin, including accessories"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "String Box Supply"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 50 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 70 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 95 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 120 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 150 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 185 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 240 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 300 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 400 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of LV/AC cable connectors"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of LV/AC cable connectors"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation and connection of LV/AC cable"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Test of LV/AC Cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply and Installation of Terminals Connectors MV cable - Single Core"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "MV Cables Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply and Installation of Video Surveillance System"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Complete interconnection of the Transformation center"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Complete installation and cabling of string inverters, including accessories. Including Supply and Installation of sun-shaded Supporting Structures for string boxes (in case the Tracker's Supporting Structures cannot be used)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply, installation and cabling of all LV distribution boards (complete with all internal protections and wiring), necessary for the complete auxiliary supply of the trackers from the TC to the tracker actuator"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Water storage tanks\nAny water storage tanks used during the construction shall be left for the community after the construction phase"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Packaging to be re-used after construction phase by community\nImplement a system with local communities in order to re-use packaging after construction phase by community (e.g. wood for construction, plastic for storage, steel)"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Donation of cutted wood during construction\nImplement a system with local communities in order to donate cutted wood which could use it as firewood for heating/cooking or any other needs."
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Education of local workers\nImplement an hiring system, in coordination with EGP and Local Communities, of local people with the inclusion of Training activities for Workers on PV Modules Installation and Trackers Installation during the Construction Phase."
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Utilization of energy saving bulbs for the Construction Camp facilities"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Prefabricated buildings/containers powered by PV modules (with a minimum power of 2KW)\nactivity row nr.1 annex A Sustainable Solutions Check-list, according dedicated Technical specification inside the ANNEX C of General Requirements - Sustainability Requirements"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Streetlamps powered by PV modules, for the Lighting of the site camp area during construction phase\nactivity row nr.4 annex A Sustainable Solutions Check-list,  according dedicated Technical specification inside the ANNEX C of General Requirements - Sustainability Requirements"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Stand-alone PV plants auxiliary to energy generation for the construction site\nInclude the supply and installation of PV Modules, Cables, Inverters, Batteries, Power Regulator, Supporting Structures (Ground or rooftop), and any other equipment necessary necessary for the functioning of the system.\nThe System will be given for free to the Local Community once the Site Camp will be dismantled"
+  },
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "Improvement of local emergency station / equipments\nAcquisition of 2 additional defibrilliator for Site Needs that at the end of the Construction Site will be given for free to the local community to cover any necessities for improvement of the local emergency station."
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Insurance for Trackers Installation Activities"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Standard Safety Costs for Trackers Installation Activities"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Site Management Cost for Trackers Installation Activities"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Unloading and Storage of all the Equipment on Site"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Foundations installation: Only Ramming Poles (The supplier must define the percentage or ramming installation based on geotechnical studies)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Foundations installation: Pre-drilling & Ramming Pole (The supplier must define the percentage of predrilling and ramming installation based on geotechnical studies)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Foundations installation: Screw Solution (The supplier must define the percentage or screw solution based on geotechnical studies)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Foundations installation: Concrete Solution (The supplier must define the percentage or concrete installation based on geotechnical studies)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Installation of supporting structure including Engines, Electronic System and Cable"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Installation of Communication cable between Control Units/Headtrackers and their associated trackers \n(in case of wireless communication this item should not be quoted)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Installation of Meteo station and environmental sensors associated to the trackers and to the Control Units/Headtrackers"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Installation of the SCADA system (the communication cables from the Conversion Unit to the Control Units / Headtrackers and from the CU to the substation is not included)"
+  },
+  {
+    "CATEGORY": "PV Mod. Installation",
+    "DESCRIPTION": "Manual Mechanical PV Modules Installation (Nut & Bolt)"
+  },
+  {
+    "CATEGORY": "PV Mod. Installation",
+    "DESCRIPTION": "Manual Mechanical PV Modules Installation (Rivets)"
+  },
+  {
+    "CATEGORY": "Cleaning and Cabling of PV Mod.",
+    "DESCRIPTION": "PV Modules String Cabling"
+  },
+  {
+    "CATEGORY": "Cleaning and Cabling of PV Mod.",
+    "DESCRIPTION": "Cleaning of PV Modules"
+  },
+  {
+    "CATEGORY": "PV Mod. Installation",
+    "DESCRIPTION": "Manual Mechanical PV Modules Installation (Rivets) - (según EETT)"
+  },
+  {
+    "CATEGORY": "Roads",
+    "DESCRIPTION": "AGGREGATE SUB-BASE FOR PADS AND INTERNAL ROADS : SUPPLY AND INSTALLATION OF MATERIAL TYPE AS PER TS - FROM ON-SITE EXCAVATIONS, ON-SITE STORAGE OR IMPORTED FROM QUARRY (CBR>20%) INCLUDING LOADING, TRANSPORTATION UP TO THE SPECIFIC INSTALLATION POINT, SPREADING, LAYER (NOT EXCEEDING 30 CM),COMPACTATION  MINIMUM/ MEDIUM 95% /98% NORMAL PROCTOR DENSITY AND ALL NECESSARY IN- SITU TESTS (QUALITY CONTROL PLAN)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of video surveillance equipment"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of video surveillance auxiliary power supply cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of video surveillance communication cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of the video surveillance system"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Permeable fencing - the plant area will be equipped with a wire mesh fence entirely 10 cm away from the ground for the passage of small fauna - activity row nr.1 annex A SUS Project Plan"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Top soil conservation - conservation of soil layers: separately retaining and storing topsoil (0-20 cm) and sub-soil stripped from the construction areas for later use during reinstatement - activity row nr.2 annex A SUS Project Plan"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation Amphenol male connector (50%)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation Amphenol female connector (50%)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Unloading on site of the overall equipment"
+  },
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "Detail Design + BIM (Civil Design, Electrical Design, Cable Design etc as per DPP list) & As-Built Design. Detail Design included documents for: Genio Civile, SCIA Antincendio, DILA (VNS report)"
+  },
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "Topographical survey in the route of the internal cable duct that connect the two areas"
+  },
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "Underground investigation (georadar) in the route of the internal cable duct that connect the two areas."
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Construction Manager/ Site Manager"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Supervisor - Civil-Mechanical & Electrical"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "Execution of the environmental works, environmental Mitigation and Restoration Works (according to AU decree). Vegetation zone for the visual mitigation (according to GTS GRE.EEC.S.27.IT.P.13318.00.076.01 and the project in terms of tree and shrub species, and planting arrangement.). Please note that Mitigation is required only in area A."
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Site camp needs (storage area + connettività) according to GRE.EEC.S.41.XX.A.00000.00.191.02_Construction_Site_Camp"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Unloading and Storage of SI / PCU/TC"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "UNLOADING AND STORAGE OF TRACKER"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Unloading and Storage of the tracker structures and equipments"
+  },
+  {
+    "CATEGORY": "Cleaning and Cabling of PV Mod.",
+    "DESCRIPTION": "Cleaning of the PV Modules to be carried out immediately before the final electrification and anyway in order to guarantee the optimal performance of the PV Park from the beginning."
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of back up parts as per Technical Specification"
+  },
+  {
+    "CATEGORY": "Roads",
+    "DESCRIPTION": "SURFACE COURSE: ASPHALT\nSupply and installation of asphalt finishing according to the design criteria and the local/federal codes.(asphalt milling >= 4 cm). To be considered for the entire route of the connection conduit that runs along Provincial Road SP340, according to the Provincia di Perugia's prescription: \"The section of SP 340 – III that will be traveled from km 0+400 to km 1+200 approximately will need to be milled to a depth of 4.00 cm and asphalted for the entire road surface\" (see the file ENEL Parere_signed.pdf 2 in \"Integrazioni AU\" folder)"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "EMBEDMENTS - POST-INSTALLED ANCHOR BOLTS: CHEMICAL SYSTEM - GALVANIZED\nSupply, transportation, installation and testing according to the design and the TS, including ancillary works."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "EMBEDMENTS - FOR STEEL REINFORCEMENTS EARTHING CONNECTION\nMaterial supply and installation according to the design and ENEL TS. Including conections with weld exothermics and conduits/embendments and all necessary tests by a specialized laboratory"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "DRILLING AND CONCRETING: DRILLING DIAMETER (foro di scavo 300 mm. La profondità dei fori cambia per tipologia di palo: outer/border/inner e di struttura:2x52/2x39/2x26 - come esplicitato nella tabella 6.1 pag. 24 del documento \"R00 250113 FOUND_DESIGN PIETRAFFITA\")\nIncluding all machinery, drilling/excavation in any material, soil disposal and trasportation to dump, croncreting and all ancillary activities necessary to carry out the work (e.g. tests, as prescribed)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "MECHANICAL ASSEMBLY OF TRACKERS  STRUCTURES (PV PANELS INSTALLATION EXCLUDED) 2X52\nIncluding all materials (e.g. coupling nuts and bolts, anchor bolts with specially provided inserts, expansion bolts, welding materials, shims, etc.) and activities necessary to carry out the mechanical installation (e.g. drillings; renovation of hot-dip galvanizing according to the structure manufacturer, if removed/damaged during installation; installation of motor, drive arm mechanism, dampers, spring and any other device necessary for the perfect functioning of the structure; implementation of defense procedures during construction phasis; etc.)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "MECHANICAL ASSEMBLY OF FIXED  STRUCTURES (PV PANELS INSTALLATION EXCLUDED) 2X39\nIncluding all materials (e.g. coupling nuts and bolts, anchor bolts with specially provided inserts, expansion bolts, welding materials, shims, etc.) and activities necessary to carry out the mechanical installation (e.g. drillings; renovation of hot-dip galvanizing according to the structure manufacturer, if removed/damaged during installation; any temporary structures or provisional works to ensure stability during assembly; etc.)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "MECHANICAL ASSEMBLY OF FIXED  STRUCTURES (PV PANELS INSTALLATION EXCLUDED) 2X26\nIncluding all materials (e.g. coupling nuts and bolts, anchor bolts with specially provided inserts, expansion bolts, welding materials, shims, etc.) and activities necessary to carry out the mechanical installation (e.g. drillings; renovation of hot-dip galvanizing according to the structure manufacturer, if removed/damaged during installation; any temporary structures or provisional works to ensure stability during assembly; etc.)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of solar cable connectors - for 4/6 mm2 solar cable"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of solar cable connectors - for 10 mm2 solar cable"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of termination/connector and interconnection for solar cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of solar cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Test of Solar Strings"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 50 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 70 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 95 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 120 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 150 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 185 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 240 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 300 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 400 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable connectors and interconnection"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 50 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 70 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 95 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 120 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 150 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 185 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 240 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 300 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 400 mm2 cable"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Supply of MV cable - 240 mm2, connectors excluded - TRATTO DI IMPIANTO"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Supply of MV cable - 240 mm2, connectors excluded - TRATTO DI CONNESSIONE"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 70mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 95 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 120 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 150 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 185 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 240 mm2 cable - TRATTO DI IMPIANTO"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 240 mm2 cable - TRATTO DI CONNESSIONE"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 300 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 400 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 500 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 630 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 70 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 95 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 120 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 150 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 185 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 240 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 300 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 400 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 500 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 630 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of MV cable connectors and interconnection - TRATTO DI IMPIANTO"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of MV cable connectors and interconnection - TRATTO DI CONNESSIONE"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 70 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 95 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 120 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 150 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 185 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 240 mm2 cable - TRATTO DI IMPIANTO"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 240 mm2 cable - TRATTO DI CONNESSIONE"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 300 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 400 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 500 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 630 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV aux power cable connectors (each connector quoted should have 5 or 3 terminations, according to the cable core quantity)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of termination/connector and interconnection for LV aux power cables"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV aux power cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of serial communication cable"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of serial communication connectors"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of serial communication cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of serial communication connectors and interconnection"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Testing of serial communication cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of coaxial communication cable"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of coaxial communication connectors"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of coaxial communication cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of coaxial communication connectors and interconnection"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Testing of coaxial communication cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of Fiber optic cable (single-mode, 24 wires)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of fiber optic termination"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of Fiber optic cable (single-mode, 24 wires)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of Fiber optic terminations and interconnection"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Testing of Fiber optic cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of bare stranded copper wire, cross section 25 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of insulated grounding cables, crosss section 6 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of insulated grounding cables, crosss section 16 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of insulated grounding cables, crosss section 25 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of insulated grounding cables, crosss section 35 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply, installation and interconnection of joints for earthing cable"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply, installation and interconnection of terminals for earthing cable"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply, installation and interconnection of earthing rods"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Testing Earthing System"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL MV TRENCH OE - 80 x 30 CM (MIN) - ONLY EARTH"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR OTHER EARTH TRENCH - (INSIDE MV TRENCH)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR MV TRENCH 1-2CR-RC - 70 x 28 CM / 70 x 64 CM - FOR N.1-2 THREE-PHASE MV LINE (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR MV TRENCH 3CRBI-RC - 140 x 70 CM (MIN) - FOR N.3-4 THREE-PHASE MV LINE (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR MV TRENCH 5CRBI-RC - 140 x 100 CM (MIN) - FOR N.5-6 THREE-PHASE MV LINE (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR LV-AC TRENCH 1C-RC 70 x 28 CM (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR LV-AC TRENCH 2C-RC  70 x 28 CM (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR LV-AC TRENCH 5C-RC  70 x 56 CM (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR LV-AC TRENCH 10C-RC  80 x 56 CM (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR LV-DC TRENCH 40 x 28 CM (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN) - 1 CORRUGATO"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR LV-DC TRENCH Cu4-RC  80 x 65 CM  (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "ADDITIONAL PRICE TO ITEM 20.01.04.00.29 FOR EACH THREE-PHASES LV LINE MORE IN THE SAME ROW"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR LV-DC TRENCH Cu 6BI-RC 70 x 50 CM (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR LV-DC TRENCH Cu 8BI-RC 65 x 60 CM (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "ADDITIONAL PRICE TO ITEM 20.01.04.00.32 FOR EACH THREE-PHASES LV LINE MORE IN 2 ROW"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL MV TRENCH 1C - 110 x48 CM (MIN) - N.1 THREE-PHASE MV LINE"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL MV TRENCH 2C - 70 x 28 CM (MIN) - N.1 THREE-PHASE MV LINES - TRATTO DI IMPIANTO"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL MV TRENCH 2C - 70 x 64 CM (MIN) - N.2 THREE-PHASE MV LINES - TRATTO DI IMPIANTO"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL MV TRENCH 2C - 100 x 28 CM (MIN) - INTERFERENZA CON CAVO AC - N.1 THREE-PHASE MV LINES - TRATTO DI IMPIANTO"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL MV TRENCH 2C - 70 x 28 CM (MIN) - N.1 THREE-PHASE MV LINES - TRATTO DI CONNESSIONE"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL MV TRENCH 3C - 110 x 110 CM (MIN) - N.3 THREE-PHASE MV LINES"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL MV TRENCH 4C - 110 x 140 CM (MIN) - N.4 THREE-PHASE MV LINES"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL MV TRENCH 4CBI - 120 x 80 CM (MIN) - N.4 THREE-PHASE MV LINES IN 2 ROW"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR OTHER MV TRENCH"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING + MECHANICAL PROTECTION (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL LV-AC TRENCH 1C 70 x 28 CM (MIN) - SOLO CAVI DI BASSA AC"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING + MECHANICAL PROTECTION  (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL LV-AC TRENCH 2C  70 x 28 CM (MIN) - SOLO CAVI DI BASSA AC"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING + MECHANICAL PROTECTION (INCLUDING SAND BED , IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL LV-AC TRENCH 5C  70 x 56 CM (MIN) - SOLO CAVI DI BASSA AC"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING + MECHANICAL PROTECTION  (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL LV-AC TRENCH 10C  80 x 56 CM (MIN) - SOLO CAVI DI BASSA AC"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL LV-DC TRENCH 1 CORRUGATO 40 x 28 CM (MIN) - SOLO CAVI SOLARI DC"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL LV-DC TRENCH 2 CORRUGATI  40 x 32 CM (MIN) - SOLO CAVI SOLARI DC"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL LV-AC TRENCH 1C + LV-DC TRENCH 1 CORRUGATO 70 x 28 CM (MIN) - CAVI SOLARI DC + CAVI DI BASSA AC"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL LV-AC TRENCH 1C + LV-DC TRENCH 2 CORRUGATI 70 x 32 CM (MIN) - CAVI SOLARI DC + CAVI DI BASSA AC"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL LV-AC TRENCH 1C + LV-DC TRENCH 3 CORRUGATI 70 x 44 CM (MIN) - CAVI SOLARI DC + CAVI DI BASSA AC"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL LV-AC TRENCH 2C + LV-DC TRENCH 1 CORRUGATO 70 x 28 CM (MIN) - CAVI SOLARI DC + CAVI DI BASSA AC"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL LV-AC TRENCH 2C + LV-DC TRENCH 2 CORRUGATi  70 x 32 CM (MIN) - CAVI SOLARI DC + CAVI DI BASSA AC"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING + MECHANICAL PROTECTION  (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL LV-AC TRENCH 5C + LV-DC TRENCH  70 x 56 CM (MIN) - CAVI SOLARI DC + CAVI DI BASSA AC"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING + MECHANICAL PROTECTION  (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL LV-AC TRENCH 10C + LV-DC TRENCH 80 x 56 CM (MIN) - CAVI SOLARI DC + CAVI DI BASSA AC"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "INTERNAL DEPTH=1,00 M (INTERNAL PLAN DIMENSIONS  1,00X1,00 M)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "INTERNAL DEPTH=1,00 M (INTERNAL PLAN DIMENSIONS  1,00X1,50 M)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "INTERNAL DEPTH=1,50 M (INTERNAL PLAN DIMENSIONS  1,50X2,00 M)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "INTERNAL DEPTH=1,50 M (INTERNAL PLAN DIMENSIONS  2,00X2,00 M)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "INTERNAL ANY DEPTH AND PLAN DIMENTIONS"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of rodent-proof, fire-proof sealant for all cable installation interfaces (underground/aerial), and equipment enclosure holes/openings (which could reduce overall equipment IP)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of rodent-proof, fire-proof sealant for all cable installation interfaces (underground/aerial), and equipment enclosure holes/openings (which could reduce overall equipment IP)"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Fornitura della User cabin/cabina utente (inclusa stanza per lo SCADA) - solo struttura/cabinato: involucro edilizio, in accordo alla specifica tecnica \"EGP Smart Technical Specification\" (GRE.EEC.S.21.IT.P.13318.00.099.00_SSTS - pag.93 -132)"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Fornitura della Delivery Cabins/ cabina di consegna - solo struttura/cabinato: involucro edilizio, in accordo alla specifica  tecnica di e-Distribuzione (TS21TS1182668 1)"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Allestimento Cabina Utente MT"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Allestimento Cabina di Consegna quadro MT"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Installation and Interconnection Works of the User Cabin"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Installation and Interconnection Works of the Delivery Cabin"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of video surveillance equipment according to ENEL-LINEA-GUIDA-SIS-FOTOVOLTAICI-rev03"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of video surveillance auxiliary power supply cables and terminations"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of video surveillance communication cables and terminations"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Complete Installation of the video surveillance system with all cabling and interconnections necessary"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Complete installation of string inverters with all accessories requested."
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply, installation and cabling of all field LV distribution boards (complete with all internal protections and wiring), necessary for the complete auxiliary supply of the trackers from the TC to the tracker actuator"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply and Installation of sun-shaded Supporting Structures for String Inverters and/or any additional field box (in case the Tracker's Supporting Structures cannot be used) , with all accessories requested as per EGP drawings and OEM installation manual"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply and Installation and Wiring of Pyranometers- excluding LV aux power cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply and Installation and Wiring of Module Temperature Sensors- excluding LV aux power cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply and Installation and Wiring of Soiling Devices- excluding LV aux power cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply, Installation and Wiring of meteo station (centralized metereological monitoring system) - excluding LV aux power cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Testing of all cables and electromechanical equipments (CCTV, lightning Protection System, Earthing System, etc)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation and Cabling of String Inverters, including accessories. Including Supply and Installation of Supporting Structures for String Inverters (in case the Tracker's Supporting Structures cannot be used)"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "LV/AC Power Cables (Single Core), connectors excluded (sizing depending on electrical study)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Terminal Connectors LV/AC Cables"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "LV/AC Cables & Connectors Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of Antilighting System for PV Modules Area, including accessories"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of Antilighting System for Cabin, including accessories"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "String Box Supply"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 50 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 70 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 95 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 120 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 150 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 185 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 240 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 300 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "LV Cables",
+    "DESCRIPTION": "Supply of LV/AC cable - 400 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of LV/AC cable connectors"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of LV/AC cable connectors"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation and connection of LV/AC cable"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Test of LV/AC Cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply and Installation of Terminals Connectors MV cable - Single Core"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "MV Cables Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply and Installation of Video Surveillance System"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Complete interconnection of the Transformation center"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Complete installation and cabling of string inverters, including accessories. Including Supply and Installation of sun-shaded Supporting Structures for string boxes (in case the Tracker's Supporting Structures cannot be used)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply, installation and cabling of all LV distribution boards (complete with all internal protections and wiring), necessary for the complete auxiliary supply of the trackers from the TC to the tracker actuator"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Water storage tanks\nAny water storage tanks used during the construction shall be left for the community after the construction phase"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Packaging to be re-used after construction phase by community\nImplement a system with local communities in order to re-use packaging after construction phase by community (e.g. wood for construction, plastic for storage, steel)"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Donation of cutted wood during construction\nImplement a system with local communities in order to donate cutted wood which could use it as firewood for heating/cooking or any other needs."
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Education of local workers\nImplement an hiring system, in coordination with EGP and Local Communities, of local people with the inclusion of Training activities for Workers on PV Modules Installation and Trackers Installation during the Construction Phase."
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Utilization of energy saving bulbs for the Construction Camp facilities"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Prefabricated buildings/containers powered by PV modules (with a minimum power of 2KW)\nactivity row nr.1 annex A Sustainable Solutions Check-list, according dedicated Technical specification inside the ANNEX C of General Requirements - Sustainability Requirements"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Streetlamps powered by PV modules, for the Lighting of the site camp area during construction phase\nactivity row nr.4 annex A Sustainable Solutions Check-list,  according dedicated Technical specification inside the ANNEX C of General Requirements - Sustainability Requirements"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Stand-alone PV plants auxiliary to energy generation for the construction site\nInclude the supply and installation of PV Modules, Cables, Inverters, Batteries, Power Regulator, Supporting Structures (Ground or rooftop), and any other equipment necessary necessary for the functioning of the system.\nThe System will be given for free to the Local Community once the Site Camp will be dismantled"
+  },
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "Improvement of local emergency station / equipments\nAcquisition of 2 additional defibrilliator for Site Needs that at the end of the Construction Site will be given for free to the local community to cover any necessities for improvement of the local emergency station."
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Insurance for Trackers Installation Activities"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Standard Safety Costs for Trackers Installation Activities"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Site Management Cost for Trackers Installation Activities"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Unloading and Storage of all the Equipment on Site"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Foundations installation: Only Ramming Poles (The supplier must define the percentage or ramming installation based on geotechnical studies)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Foundations installation: Pre-drilling & Ramming Pole (The supplier must define the percentage of predrilling and ramming installation based on geotechnical studies)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Foundations installation: Screw Solution (The supplier must define the percentage or screw solution based on geotechnical studies)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Foundations installation: Concrete Solution (The supplier must define the percentage or concrete installation based on geotechnical studies)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Installation of supporting structure including Engines, Electronic System and Cable"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Installation of Communication cable between Control Units/Headtrackers and their associated trackers \n(in case of wireless communication this item should not be quoted)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Installation of Meteo station and environmental sensors associated to the trackers and to the Control Units/Headtrackers"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Installation of the SCADA system (the communication cables from the Conversion Unit to the Control Units / Headtrackers and from the CU to the substation is not included)"
+  },
+  {
+    "CATEGORY": "PV Mod. Installation",
+    "DESCRIPTION": "Manual Mechanical PV Modules Installation (Nut & Bolt)"
+  },
+  {
+    "CATEGORY": "PV Mod. Installation",
+    "DESCRIPTION": "Manual Mechanical PV Modules Installation (Rivets)"
+  },
+  {
+    "CATEGORY": "Cleaning and Cabling of PV Mod.",
+    "DESCRIPTION": "PV Modules String Cabling"
+  },
+  {
+    "CATEGORY": "Cleaning and Cabling of PV Mod.",
+    "DESCRIPTION": "Cleaning of PV Modules"
+  },
+  {
+    "CATEGORY": "PV Mod. Installation",
+    "DESCRIPTION": "Manual Mechanical PV Modules Installation (Rivets) - (según EETT)"
+  },
+  {
+    "CATEGORY": "Roads",
+    "DESCRIPTION": "AGGREGATE SUB-BASE FOR PADS AND INTERNAL ROADS : SUPPLY AND INSTALLATION OF MATERIAL TYPE AS PER TS - FROM ON-SITE EXCAVATIONS, ON-SITE STORAGE OR IMPORTED FROM QUARRY (CBR>20%) INCLUDING LOADING, TRANSPORTATION UP TO THE SPECIFIC INSTALLATION POINT, SPREADING, LAYER (NOT EXCEEDING 30 CM),COMPACTATION  MINIMUM/ MEDIUM 95% /98% NORMAL PROCTOR DENSITY AND ALL NECESSARY IN- SITU TESTS (QUALITY CONTROL PLAN)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of video surveillance equipment"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of video surveillance auxiliary power supply cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of video surveillance communication cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of the video surveillance system"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Permeable fencing - the plant area will be equipped with a wire mesh fence entirely 10 cm away from the ground for the passage of small fauna - activity row nr.1 annex A SUS Project Plan"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Top soil conservation - conservation of soil layers: separately retaining and storing topsoil (0-20 cm) and sub-soil stripped from the construction areas for later use during reinstatement - activity row nr.2 annex A SUS Project Plan"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation Amphenol male connector (50%)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation Amphenol female connector (50%)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Unloading on site of the overall equipment"
+  },
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "Detail Design + BIM (Civil Design, Electrical Design, Cable Design etc as per DPP list) & As-Built Design. Detail Design included documents for: Genio Civile, SCIA Antincendio, DILA (VNS report)"
+  },
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "Topographical survey in the route of the internal cable duct that connect the two areas"
+  },
+  {
+    "CATEGORY": "General Costs",
+    "DESCRIPTION": "Underground investigation (georadar) in the route of the internal cable duct that connect the two areas."
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Construction Manager/ Site Manager"
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Supervisor - Civil-Mechanical & Electrical"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "Execution of the environmental works, environmental Mitigation and Restoration Works (according to AU decree). Vegetation zone for the visual mitigation (according to GTS GRE.EEC.S.27.IT.P.13318.00.076.01 and the project in terms of tree and shrub species, and planting arrangement.). Please note that Mitigation is required only in area A."
+  },
+  {
+    "CATEGORY": "Site Costs",
+    "DESCRIPTION": "Site camp needs (storage area + connettività) according to GRE.EEC.S.41.XX.A.00000.00.191.02_Construction_Site_Camp"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Unloading and Storage of SI / PCU/TC"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "UNLOADING AND STORAGE OF TRACKER"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Unloading and Storage of the tracker structures and equipments"
+  },
+  {
+    "CATEGORY": "Cleaning and Cabling of PV Mod.",
+    "DESCRIPTION": "Cleaning of the PV Modules to be carried out immediately before the final electrification and anyway in order to guarantee the optimal performance of the PV Park from the beginning."
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of back up parts as per Technical Specification"
+  },
+  {
+    "CATEGORY": "Roads",
+    "DESCRIPTION": "SURFACE COURSE: ASPHALT\nSupply and installation of asphalt finishing according to the design criteria and the local/federal codes.(asphalt milling >= 4 cm). To be considered for the entire route of the connection conduit that runs along Provincial Road SP340, according to the Provincia di Perugia's prescription: \"The section of SP 340 – III that will be traveled from km 0+400 to km 1+200 approximately will need to be milled to a depth of 4.00 cm and asphalted for the entire road surface\" (see the file ENEL Parere_signed.pdf 2 in \"Integrazioni AU\" folder)"
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "EMBEDMENTS - POST-INSTALLED ANCHOR BOLTS: CHEMICAL SYSTEM - GALVANIZED\nSupply, transportation, installation and testing according to the design and the TS, including ancillary works."
+  },
+  {
+    "CATEGORY": "Civil Works",
+    "DESCRIPTION": "EMBEDMENTS - FOR STEEL REINFORCEMENTS EARTHING CONNECTION\nMaterial supply and installation according to the design and ENEL TS. Including conections with weld exothermics and conduits/embendments and all necessary tests by a specialized laboratory"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "DRILLING AND CONCRETING: DRILLING DIAMETER (foro di scavo 300 mm. La profondità dei fori cambia per tipologia di palo: outer/border/inner e di struttura:2x52/2x39/2x26 - come esplicitato nella tabella 6.1 pag. 24 del documento \"R00 250113 FOUND_DESIGN PIETRAFFITA\")\nIncluding all machinery, drilling/excavation in any material, soil disposal and trasportation to dump, croncreting and all ancillary activities necessary to carry out the work (e.g. tests, as prescribed)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "MECHANICAL ASSEMBLY OF TRACKERS  STRUCTURES (PV PANELS INSTALLATION EXCLUDED) 2X52\nIncluding all materials (e.g. coupling nuts and bolts, anchor bolts with specially provided inserts, expansion bolts, welding materials, shims, etc.) and activities necessary to carry out the mechanical installation (e.g. drillings; renovation of hot-dip galvanizing according to the structure manufacturer, if removed/damaged during installation; installation of motor, drive arm mechanism, dampers, spring and any other device necessary for the perfect functioning of the structure; implementation of defense procedures during construction phasis; etc.)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "MECHANICAL ASSEMBLY OF FIXED  STRUCTURES (PV PANELS INSTALLATION EXCLUDED) 2X39\nIncluding all materials (e.g. coupling nuts and bolts, anchor bolts with specially provided inserts, expansion bolts, welding materials, shims, etc.) and activities necessary to carry out the mechanical installation (e.g. drillings; renovation of hot-dip galvanizing according to the structure manufacturer, if removed/damaged during installation; any temporary structures or provisional works to ensure stability during assembly; etc.)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "MECHANICAL ASSEMBLY OF FIXED  STRUCTURES (PV PANELS INSTALLATION EXCLUDED) 2X26\nIncluding all materials (e.g. coupling nuts and bolts, anchor bolts with specially provided inserts, expansion bolts, welding materials, shims, etc.) and activities necessary to carry out the mechanical installation (e.g. drillings; renovation of hot-dip galvanizing according to the structure manufacturer, if removed/damaged during installation; any temporary structures or provisional works to ensure stability during assembly; etc.)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of solar cable connectors - for 4/6 mm2 solar cable"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of solar cable connectors - for 10 mm2 solar cable"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of termination/connector and interconnection for solar cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of solar cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Test of Solar Strings"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 50 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 70 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 95 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 120 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 150 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 185 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 240 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 300 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV/AC cable connectors - for 400 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable connectors and interconnection"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 50 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 70 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 95 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 120 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 150 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 185 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 240 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 300 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV/AC cable - for 400 mm2 cable"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Supply of MV cable - 240 mm2, connectors excluded - TRATTO DI IMPIANTO"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Supply of MV cable - 240 mm2, connectors excluded - TRATTO DI CONNESSIONE"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 70mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 95 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 120 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 150 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 185 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 240 mm2 cable - TRATTO DI IMPIANTO"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 240 mm2 cable - TRATTO DI CONNESSIONE"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 300 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 400 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 500 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable connectors - for 630 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 70 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 95 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 120 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 150 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 185 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 240 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 300 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 400 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 500 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of MV cable joints (with all material needed) - for 630 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of MV cable connectors and interconnection - TRATTO DI IMPIANTO"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of MV cable connectors and interconnection - TRATTO DI CONNESSIONE"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 70 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 95 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 120 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 150 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 185 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 240 mm2 cable - TRATTO DI IMPIANTO"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 240 mm2 cable - TRATTO DI CONNESSIONE"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 300 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 400 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 500 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Instalation of MV cables - for 630 mm2 cable"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Supply of LV aux power cable connectors (each connector quoted should have 5 or 3 terminations, according to the cable core quantity)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of termination/connector and interconnection for LV aux power cables"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "Installation of LV aux power cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of serial communication cable"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of serial communication connectors"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of serial communication cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of serial communication connectors and interconnection"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Testing of serial communication cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of coaxial communication cable"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of coaxial communication connectors"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of coaxial communication cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of coaxial communication connectors and interconnection"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Testing of coaxial communication cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of Fiber optic cable (single-mode, 24 wires)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of fiber optic termination"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of Fiber optic cable (single-mode, 24 wires)"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation of Fiber optic terminations and interconnection"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Testing of Fiber optic cables"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of bare stranded copper wire, cross section 25 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of insulated grounding cables, crosss section 6 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of insulated grounding cables, crosss section 16 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of insulated grounding cables, crosss section 25 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply of insulated grounding cables, crosss section 35 mm2, connectors excluded"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply, installation and interconnection of joints for earthing cable"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply, installation and interconnection of terminals for earthing cable"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Supply, installation and interconnection of earthing rods"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Testing Earthing System"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL MV TRENCH OE - 80 x 30 CM (MIN) - ONLY EARTH"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR OTHER EARTH TRENCH - (INSIDE MV TRENCH)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR MV TRENCH 1-2CR-RC - 70 x 28 CM / 70 x 64 CM - FOR N.1-2 THREE-PHASE MV LINE (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR MV TRENCH 3CRBI-RC - 140 x 70 CM (MIN) - FOR N.3-4 THREE-PHASE MV LINE (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR MV TRENCH 5CRBI-RC - 140 x 100 CM (MIN) - FOR N.5-6 THREE-PHASE MV LINE (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR LV-AC TRENCH 1C-RC 70 x 28 CM (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR LV-AC TRENCH 2C-RC  70 x 28 CM (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR LV-AC TRENCH 5C-RC  70 x 56 CM (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR LV-AC TRENCH 10C-RC  80 x 56 CM (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR LV-DC TRENCH 40 x 28 CM (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN) - 1 CORRUGATO"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR LV-DC TRENCH Cu4-RC  80 x 65 CM  (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "ADDITIONAL PRICE TO ITEM 20.01.04.00.29 FOR EACH THREE-PHASES LV LINE MORE IN THE SAME ROW"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR LV-DC TRENCH Cu 6BI-RC 70 x 50 CM (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "TYPICAL ROAD CROSSING OF SOLAR LV-DC TRENCH Cu 8BI-RC 65 x 60 CM (SOLUTION WITH CONCRETE ENVELOPE, ACCORDING TO THE DESIGN)"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "ADDITIONAL PRICE TO ITEM 20.01.04.00.32 FOR EACH THREE-PHASES LV LINE MORE IN 2 ROW"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL MV TRENCH 1C - 110 x48 CM (MIN) - N.1 THREE-PHASE MV LINE"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN) FOR TYPICAL MV TRENCH 2C - 70 x 28 CM (MIN) - N.1 THREE-PHASE MV LINES - TRATTO DI IMPIANTO"
+  },
+  {
+    "CATEGORY": "Trenching",
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Earthing bare copper conductor 95 mm2 [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Earthing bare copper conductor 95 mm2 [Q] - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Earthing bare copper conductor 120mm2 [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Earthing bare copper conductor 120mm2 [Q] - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Earthing connection compression clamp  [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Earthing connection compression clamp  [Q] - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Pit and earth electrode D: 15mm - L: 1.5m [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Pit and earth electrode D: 15mm - L: 1.5m [Q] - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Earthing Cable terminations [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Earthing Cable terminations [Q] - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Complete Earthing System testing [L] - Test"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Fire resistant anti-rodent barrier and sealing  crossing [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Fire resistant anti-rodent barrier and sealing  crossing [Q] - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Control & recording system unit [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Control & recording system unit [Q] - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "CCVT panel HMI [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "CCVT panel HMI [Q] - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Power distribution panel [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Power distribution panel [Q] - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Cabling (cables, connections, terminations) [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Cabling (cables, connections, terminations) [Q] - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Conduit [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Conduit [Q] - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Security camera outdoor  [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Security camera outdoor [Q] - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Street light pole 4m [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Street light pole 4m [Q] - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Video surveillance and anti-intrusion system Test"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Patch panels [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Patch panels [Q] - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "FO switch [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "FO switch [Q] - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Surge arrester three poles for MV cable termination [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Surge arrester three poles for MV cable termination [Q] - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Wireless Temperature Cable Monitoring System (TCMS) [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Wireless Temperature Cable Monitoring System (TCMS) [Q] - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Pyranometers of Field Monitoring System - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Module Temperature Sensors of Field Monitoring System - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Soiling Devices of Field Monitoring System - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Dataloggers for Field Monitoring System (excluding LV aux power cables) - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation and Wiring of sensors and dataloggers of Field Monitoring System - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Central Meteorological Towers (including all the equipment and excluding LV aux power cables) - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Secondary Meteorological Towers (including all the equipment and excluding LV aux power cables) - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "Installation and Wiring of Meteorological Towers - Installation"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "PV Complete TC [Q] - Installation and Interconnection"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "String Inverters installation with all accessories requested [Q]"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "PCU/TC Fiscal Produced Energy Meetering System (Outdoor) [Q] - Supply"
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "PCU/TC Fiscal Produced Energy Meetering System  (Outdoor) [Q] - Installation"
+  },
+  {
+    "CATEGORY": "PV Mod. Installation",
+    "DESCRIPTION": "PV Modules String Cabling [Q] - Installation"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "SUPPLY of vibrated reinforced concrete DELIVERY CABIN (CABINA di CONSEGNA) in accordance with the local Regulation of TSO (in Italy is E-Distribuzione Technical Specification DG 2061) - Consisting of two rooms: MV Room, measurement room. Including all the following main and auxiliary components:\n- Fiscal Energy Meetering System\n- Lighting systems\n- Earthing system\n- MV, LV and communication cables -[Q] - Supply"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "SUPPLY MV SWG (Switchgear) for DELIVERY CABIN"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Installation and interconnection of vibrated reinforced concrete DELIVERY CABIN (CABINA di CONSEGNA) - Including all types of connections from outside the cabin: MV cables, LV cables, communication and control and primary earth grid, if necessary also consider self-shrinking joints for in-out connection with the cabin on existing line"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Supply and internal connections of vibrated reinforced concrete USER CABIN (CABINA UTENTE) according to paragraphs PPP.PVP.MVC.02 MV DISTRIBUTION CENTER and PPP.PVP.MVC.03 MV CENTER ENCLOSURE and IEC 62271-202 with IAC A Certification - Consisting of three rooms: MV room, transformer aux room, LV+SCADA room.\n\nElectrical part: All main and auxiliary components contained in the cabin:\n- Protection System Equipment (SPG/DG + SPI/DI + DDR)\n- Fiscal Energy Meetering System\n-  Gas vent channel MV SWG \n- Fire detection system\n- Air conditioning system\n- Anti-rodent system\n- Normal and emergency lighting system internal and external\n- Transformation room ventilation system \n- Normal + Emergency FM sockets\n- MV, LV, communication and control cables\n- Earthing system\n- Any other necessary components"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "USER CABIN - MV SWG IAC AFLR  GIS FREE or AIR (including CCI + GSM module) - Supply [Q]"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "USER CABIN - Auxiliary transformer - Supply [Q]"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "USER CABIN \nLV AUX distribution panel  - Supply [Q]\nUPS + Battery in accordance with IEC 016 - Supply [Q]\nFiscal&Total Produced Energy Meetering System (To be Installed in the measurement room of delivery cabin) - Supply [Q]\nFiscal Absorbed Energy Meetering System (LV AUX side) - Supply [Q]\nI&C communication panel - Supply [Q]"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Installation and interconnection of USER CABIN (CABINA UTENTE) -  Including Plant SCADA cabinet (Out of scope of suppl) and all types of connections from outside the cabin: MV cables, LV cables, communication and control, primary earth grid, I&C Communication panel."
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "SUPPLY of vibrated reinforced concrete SECTIONING CABIN (CABINA DI SEZIONAMENTO) in accordance with the local Regulation of TSO (in Italy is E-Distribuzione Technical Specification DG 2061) -   Including all the following main and auxiliary components:\n- Lighting systems\n- Earthing system\n- MV, LV and communication cables -[Q] - Supply"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "SUPPLY MV SWG (Switchgear) for SECTIONING CABIN (CABINA DI SEZIONAMENTO)"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "Installation and interconnection of vibrated reinforced concrete SECTIONING CABIN (CABINA DI SEZIONAMENTO) - Including all types of connections from outside the cabin: MV cables, LV cables, communication and control and primary earth grid."
+  },
+  {
+    "CATEGORY": "Electrical Works",
+    "DESCRIPTION": "PV Delivery Cabin Test"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "MV Cables - 3X visible helix cable - [Q] - Supply"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "MV Cables - 3X visible helix cable - [Q] - Installation/Laying"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "MV Cable joints [Q] - Supply"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "HORIZONTAL DIRECTIONAL DRILLING (HDD): CABLES/PIPES/CONDUITS DIAMETER  > 12 INCHES / 250 MM - installation"
+  },
+  {
+    "CATEGORY": "MV Cables",
+    "DESCRIPTION": "EXCAVATION AND BACKFILLING (INCLUDING SAND BED, IF NECESSARY ACCORDING TO THE DESIGN, REPLACING OF ROAD LAYERS - IF ANY- ALWAYS INCLUDED) FOR TYPICAL MV TRENCH 1C - 110 x48 CM (MIN) - N.1 THREE-PHASE MV LINE - installation"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Complete Electrical Tracker Installation - Engines, Electronic Systems and batteries (LV aux power and I&C cables excluded) [Q]"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "MECHANICAL ASSEMBLY OF TRACKERS  STRUCTURES (PV PANELS INSTALLATION EXCLUDED) -1x30 \nIncluding all materials (e.g. coupling nuts and bolts, anchor bolts with specially provided inserts, expansion bolts, welding materials, shims, etc.) and activities necessary to carry out the mechanical installation (e.g. drillings; renovation of hot-dip galvanizing according to the structure manufacturer, if removed/damaged during installation; installation of motor, drive arm mechanism, dampers, spring and any other device necessary for the perfect functioning of the structure; implementation of defense procedures during construction phasis; etc.)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "MECHANICAL ASSEMBLY OF TRACKERS  STRUCTURES (PV PANELS INSTALLATION EXCLUDED) -1x60 \nIncluding all materials (e.g. coupling nuts and bolts, anchor bolts with specially provided inserts, expansion bolts, welding materials, shims, etc.) and activities necessary to carry out the mechanical installation (e.g. drillings; renovation of hot-dip galvanizing according to the structure manufacturer, if removed/damaged during installation; installation of motor, drive arm mechanism, dampers, spring and any other device necessary for the perfect functioning of the structure; implementation of defense procedures during construction phasis; etc.)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "MECHANICAL ASSEMBLY OF TRACKERS  STRUCTURES (PV PANELS INSTALLATION EXCLUDED) -1x90 \nIncluding all materials (e.g. coupling nuts and bolts, anchor bolts with specially provided inserts, expansion bolts, welding materials, shims, etc.) and activities necessary to carry out the mechanical installation (e.g. drillings; renovation of hot-dip galvanizing according to the structure manufacturer, if removed/damaged during installation; installation of motor, drive arm mechanism, dampers, spring and any other device necessary for the perfect functioning of the structure; implementation of defense procedures during construction phasis; etc.)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "Installation of the Trackers Control And Data Acquisition System (the communication cables from the Conversion Unit to the Control Units / Headtrackers and from the CU to the substation is not included)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "DRILLING AND CONCRETING: DRILLING DIAMETER (150 mm < Æ ≤ 200 mm)\nIncluding all machinery, drilling/excavation in any material, soil disposal and trasportation to dump, croncreting and all ancillary activities necessary to carry out the work (e.g. tests, as prescribed)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "DRILLING, BACKFILING AND COMPACTING: DRILLING DIAMETER (150 mm < Æ ≤ 200 mm)\nIncluding all machinery, drilling/excavation in any material, soil disposal and trasportation to dump, backfilling, compaction, lining and all ancillary activities necessary to carry out the work (e.g. tests, as prescribed)"
+  },
+  {
+    "CATEGORY": "Tracker Inst.",
+    "DESCRIPTION": "INSURANCE COST FOR INSTALLATION ACTIVITIES"
+  }
+]
