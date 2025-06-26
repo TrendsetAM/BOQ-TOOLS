@@ -70,6 +70,7 @@ def generate_manual_categorization_excel(unmatched_descriptions: List[UnmatchedD
     # Save the workbook
     wb.save(filepath)
     logger.info(f"Manual categorization Excel file created: {filepath}")
+    print(f"[DEBUG] Manual categorization Excel created at: {filepath}, exists: {filepath.exists()}")
     
     return filepath
 
@@ -355,6 +356,8 @@ def process_manual_categorizations(excel_filepath: Path,
     try:
         # Read the Excel file using pandas
         df: pd.DataFrame = pd.read_excel(excel_filepath, sheet_name="Categorization")
+        print(f"[DEBUG] Loaded manual categorization file columns: {list(df.columns)}")
+        print(f"[DEBUG] First few rows:\n{df.head()}")
         logger.info(f"Successfully loaded Excel file with {len(df)} rows")
         
     except Exception as e:
@@ -1072,12 +1075,20 @@ def execute_row_categorization(
         update_progress(5, "Auto-categorizing rows...")
         from core.auto_categorizer import auto_categorize_dataset, collect_unmatched_descriptions
         auto_result = auto_categorize_dataset(mapped_df, category_dict)
+        print(f"[DEBUG] auto_categorize_dataset: total_rows={auto_result.total_rows}, matched_rows={auto_result.matched_rows}, unmatched_rows={auto_result.unmatched_rows}")
         auto_df = auto_result.dataframe
         all_stats['auto_stats'] = auto_result.match_statistics
         summary['auto_categorized'] = True
         
         update_progress(20, f"Collecting unmatched descriptions ({len(auto_result.unmatched_descriptions)})...")
-        unmatched_list = collect_unmatched_descriptions(auto_df, category_column='Category', description_column='Description')
+        # Pass the sheet name column if it exists
+        sheet_name_column = None
+        for col in auto_df.columns:
+            if col.lower() in ["sheet_name", "source_sheet", "sheet"]:
+                sheet_name_column = col
+                break
+        unmatched_list = collect_unmatched_descriptions(auto_df, category_column='Category', description_column='Description', sheet_name_column=sheet_name_column)
+        print(f"[DEBUG] unmatched_list: {unmatched_list}")
         all_stats['unmatched_count'] = len(unmatched_list)
         summary['unmatched_collected'] = True
         
@@ -1085,7 +1096,7 @@ def execute_row_categorization(
         update_progress(30, "Generating manual categorization Excel file...")
         from core.manual_categorizer import generate_manual_categorization_excel, process_manual_categorizations, apply_manual_categories, update_master_dictionary
         available_categories = list(category_dict.get_all_categories())
-        manual_excel_path = output_dir / f"manual_categorization_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        print(f"[DEBUG] About to call generate_manual_categorization_excel with {len(unmatched_list)} unmatched, output_dir={output_dir}")
         excel_path = generate_manual_categorization_excel(unmatched_list, available_categories, output_dir=output_dir)
         temp_files.append(excel_path)
         summary['manual_excel_generated'] = str(excel_path)
@@ -1121,9 +1132,13 @@ def execute_row_categorization(
         summary['dictionary_updated'] = True
         all_stats['update_result'] = update_result
         
+        # Only clean up temp files that are not the manual Excel file
         update_progress(95, "Cleanup and finalizing...")
         if cleanup_temp:
             for f in temp_files:
+                # Skip the manual Excel file
+                if str(f) == str(excel_path):
+                    continue
                 try:
                     Path(f).unlink(missing_ok=True)
                 except Exception as e:

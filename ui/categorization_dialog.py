@@ -366,6 +366,7 @@ class CategorizationDialog:
         """Open the manual categorization Excel file"""
         if self.categorization_result and 'summary' in self.categorization_result:
             excel_path = self.categorization_result['summary'].get('manual_excel_generated', '')
+            print(f"[DEBUG] UI trying to open: {excel_path}, exists: {os.path.exists(excel_path)}")
             if excel_path and os.path.exists(excel_path):
                 try:
                     os.startfile(excel_path)  # Windows
