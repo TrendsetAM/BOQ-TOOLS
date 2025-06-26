@@ -78,6 +78,11 @@ def _setup_categorization_sheet(worksheet, unmatched_descriptions: List[Unmatche
                                available_categories: List[str]):
     """Set up the main categorization worksheet"""
     
+    # If there are no unmatched descriptions, show a message and return early
+    if not unmatched_descriptions:
+        worksheet['A2'] = "No unmatched descriptions to categorize."
+        return
+    
     # Define styles
     header_font = Font(bold=True, color="FFFFFF")
     header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")

@@ -60,6 +60,7 @@ class RowClassificationInfo:
     section_title: Optional[str]
     validation_errors: List[str]
     reasoning: List[str]
+    row_data: Optional[List[str]] = None
 
 
 @dataclass
@@ -97,6 +98,7 @@ class SheetMapping:
     warnings: List[str]
     processing_time: float
     sheet_type: str  # User or classifier assigned type (e.g., 'BOQ', 'Info', 'Ignore')
+    sheet_data: Optional[List[List[str]]] = None  # Original sheet data for UI access
 
 
 @dataclass
@@ -523,7 +525,8 @@ class MappingGenerator:
                     hierarchical_level=row_info.hierarchical_level,
                     section_title=row_info.section_title,
                     validation_errors=row_info.validation_errors,
-                    reasoning=row_info.reasoning
+                    reasoning=row_info.reasoning,
+                    row_data=getattr(row_info, 'row_data', None)
                 )
                 row_classifications.append(row_class)
         else:
@@ -537,7 +540,8 @@ class MappingGenerator:
                     hierarchical_level=row_info.get('hierarchical_level'),
                     section_title=row_info.get('section_title'),
                     validation_errors=row_info.get('validation_errors', []),
-                    reasoning=row_info.get('reasoning', [])
+                    reasoning=row_info.get('reasoning', []),
+                    row_data=row_info.get('row_data', None)
                 )
                 row_classifications.append(row_class)
         
@@ -641,7 +645,8 @@ class MappingGenerator:
             processing_notes=processing_notes,
             warnings=warnings,
             processing_time=0.0,  # Would be calculated during actual processing
-            sheet_type=sheet_type
+            sheet_type=sheet_type,
+            sheet_data=sheet_data
         )
     
     def _determine_processing_status(self, overall_confidence: float, validation_summary: ValidationSummary,

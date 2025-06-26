@@ -5,7 +5,7 @@ Automatically categorizes dataset rows using the CategoryDictionary
 
 import logging
 import pandas as pd
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional, Any, Callable
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -136,7 +136,7 @@ def auto_categorize_dataset(dataframe: pd.DataFrame,
                           description_column: str = 'Description',
                           category_column: str = 'Category',
                           confidence_threshold: float = 0.8,
-                          progress_callback: Optional[callable] = None) -> CategorizationResult:
+                          progress_callback: Optional[Callable] = None) -> CategorizationResult:
     """
     Automatically categorize dataset rows using the CategoryDictionary
     
@@ -267,7 +267,7 @@ class AutoCategorizer:
                                description_column: str = 'Description',
                                category_column: str = 'Category',
                                confidence_threshold: float = 0.8,
-                               progress_callback: Optional[callable] = None) -> CategorizationResult:
+                               progress_callback: Optional[Callable] = None) -> CategorizationResult:
         """
         Automatically categorize dataset rows using the CategoryDictionary
         
@@ -311,7 +311,7 @@ class AutoCategorizer:
                                 category_column: str = 'Category',
                                 confidence_threshold: float = 0.8,
                                 auto_learn_threshold: float = 0.9,
-                                progress_callback: Optional[callable] = None) -> CategorizationResult:
+                                progress_callback: Optional[Callable] = None) -> CategorizationResult:
         """
         Categorize dataset with automatic learning of high-confidence matches
         

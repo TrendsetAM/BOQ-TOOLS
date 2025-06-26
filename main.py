@@ -12,7 +12,7 @@ import signal
 import threading
 import time
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Callable
 import traceback
 import json
 
@@ -195,7 +195,7 @@ class BOQApplicationController:
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
     
-    def process_file(self, file_path: Path, progress_callback: Optional[callable] = None, sheet_filter: Optional[List[str]] = None, sheet_types: Optional[Dict[str, str]] = None) -> FileMapping:
+    def process_file(self, file_path: Path, progress_callback: Optional[Callable] = None, sheet_filter: Optional[List[str]] = None, sheet_types: Optional[Dict[str, str]] = None) -> FileMapping:
         """
         Process a single Excel file through the complete pipeline
         

@@ -35,6 +35,7 @@ class RowClassification:
     validation_errors: List[str]
     hierarchical_level: Optional[int]
     section_title: Optional[str]
+    row_data: Optional[List[str]] = None
 
 
 @dataclass
@@ -51,7 +52,7 @@ class RowClassifier:
     Intelligent row classifier with data completeness scoring and pattern detection
     """
     
-    def __init__(self, min_completeness_threshold: float = 0.7):
+    def __init__(self, min_completeness_threshold: float = 0.4):
         """
         Initialize the row classifier
         
@@ -81,16 +82,16 @@ class RowClassifier:
             r'\bdeduct\b'
         ]
         
-        # Header/section break patterns
+        # Header/section break patterns - made less aggressive
         self.header_patterns = [
-            r'^[A-Z\s]+$',  # ALL CAPS
-            r'^[A-Z][a-z\s]+:$',  # Title case with colon
-            r'^[A-Z][a-z\s]+\([^)]+\)$',  # Title with parentheses
             r'^Section\s+\d+',
             r'^Chapter\s+\d+',
             r'^Part\s+\d+',
             r'^Division\s+\d+',
-            r'^Subdivision\s+\d+'
+            r'^Subdivision\s+\d+',
+            r'^[A-Z][a-z\s]+:$',  # Title case with colon
+            r'^[A-Z][a-z\s]+\([^)]+\)$',  # Title with parentheses
+            # Removed the overly broad ALL CAPS pattern
         ]
         
         # Hierarchical numbering patterns
@@ -121,18 +122,18 @@ class RowClassifier:
             r'\bvariation\b'
         ]
         
-        # Required columns for line items
+        # Required columns for line items - simple validation rule
         self.required_columns = [
-            ColumnType.DESCRIPTION,
-            ColumnType.QUANTITY,
-            ColumnType.UNIT_PRICE
+            ColumnType.DESCRIPTION,  # Description is required
+            ColumnType.UNIT_PRICE,   # Unit price is required
+            ColumnType.TOTAL_PRICE   # Total price is required
         ]
         
         # Optional columns that improve completeness
         self.optional_columns = [
-            ColumnType.CODE,
+            ColumnType.QUANTITY,
             ColumnType.UNIT,
-            ColumnType.TOTAL_PRICE
+            ColumnType.CODE
         ]
     
     def classify_rows(self, sheet_data: List[List[str]], 
@@ -166,7 +167,8 @@ class RowClassifier:
                     completeness_score=0.0,
                     validation_errors=[],
                     hierarchical_level=None,
-                    section_title=None
+                    section_title=None,
+                    row_data=None
                 )
                 classifications.append(classification)
         
@@ -187,7 +189,7 @@ class RowClassifier:
     
     def _classify_single_row(self, row_index: int, row_data: List[str], 
                            column_mapping: Dict[int, ColumnType]) -> RowClassification:
-        """Classify a single row"""
+        """Classify a single row using simple validation rules"""
         # Calculate completeness score
         completeness_score = self.calculate_completeness_score(row_data, column_mapping)
         
@@ -198,18 +200,15 @@ class RowClassifier:
         hierarchical_level = self._detect_hierarchical_level(row_data)
         section_title = self._extract_section_title(row_data)
         
-        # Determine row type
+        # Determine row type using simple validation rule
         row_type, confidence, reasoning = self._determine_row_type(
-            row_data, completeness_score, is_subtotal, is_header, is_notes, hierarchical_level
+            row_data, completeness_score, is_subtotal, is_header, is_notes, hierarchical_level, column_mapping
         )
         
-        # Validate if it's a line item
+        # Get validation errors for line items
         validation_errors = []
         if row_type == RowType.PRIMARY_LINE_ITEM:
             validation_errors = self.validate_line_item(row_data, column_mapping)
-            if validation_errors:
-                row_type = RowType.INVALID_LINE_ITEM
-                confidence *= 0.5  # Reduce confidence for invalid items
         
         return RowClassification(
             row_index=row_index,
@@ -219,7 +218,8 @@ class RowClassifier:
             completeness_score=completeness_score,
             validation_errors=validation_errors,
             hierarchical_level=hierarchical_level,
-            section_title=section_title
+            section_title=section_title,
+            row_data=row_data
         )
     
     def calculate_completeness_score(self, row_data: List[str], 
@@ -292,7 +292,7 @@ class RowClassifier:
     def validate_line_item(self, row_data: List[str], 
                           column_mapping: Dict[int, ColumnType]) -> List[str]:
         """
-        Validate a line item row
+        Validate a line item row using simple rule: description, unit price, total price
         
         Args:
             row_data: Row data as list of cell values
@@ -307,46 +307,39 @@ class RowClassifier:
             errors.append("No data or column mapping provided")
             return errors
         
-        # Check for required columns
-        for col_type in self.required_columns:
-            col_indices = [idx for idx, ct in column_mapping.items() if ct == col_type]
-            if not col_indices:
-                errors.append(f"Missing required column: {col_type.value}")
-                continue
-            
-            # Check if any of the required columns have data
-            has_data = False
-            for col_idx in col_indices:
-                if col_idx < len(row_data) and row_data[col_idx].strip():
-                    has_data = True
-                    break
-            
-            if not has_data:
-                errors.append(f"Missing data in required column: {col_type.value}")
+        # Simple validation rule: check for description, unit price, and total price
+        has_description = False
+        has_unit_price = False
+        has_total_price = False
         
-        # Validate numeric fields
+        # Check each column
         for col_idx, col_type in column_mapping.items():
-            if col_idx >= len(row_data):
-                continue
-            
-            cell_value = row_data[col_idx].strip()
-            if not cell_value:
-                continue
-            
-            # Validate quantity
-            if col_type == ColumnType.QUANTITY:
-                if not self._is_positive_numeric(cell_value):
-                    errors.append(f"Invalid quantity: '{cell_value}' (must be positive number)")
-            
-            # Validate unit price
-            elif col_type == ColumnType.UNIT_PRICE:
-                if not self._is_positive_numeric(cell_value):
-                    errors.append(f"Invalid unit price: '{cell_value}' (must be positive number)")
-            
-            # Validate total price
-            elif col_type == ColumnType.TOTAL_PRICE:
-                if not self._is_positive_numeric(cell_value):
-                    errors.append(f"Invalid total price: '{cell_value}' (must be positive number)")
+            if col_idx < len(row_data):
+                cell_value = row_data[col_idx].strip() if row_data[col_idx] else ""
+                
+                if col_type == ColumnType.DESCRIPTION:
+                    if cell_value:
+                        has_description = True
+                    else:
+                        errors.append("Missing description")
+                elif col_type == ColumnType.UNIT_PRICE:
+                    if self._is_positive_numeric(cell_value):
+                        has_unit_price = True
+                    else:
+                        errors.append(f"Invalid unit price: '{cell_value}' (must be positive number)")
+                elif col_type == ColumnType.TOTAL_PRICE:
+                    if self._is_positive_numeric(cell_value):
+                        has_total_price = True
+                    else:
+                        errors.append(f"Invalid total price: '{cell_value}' (must be positive number)")
+        
+        # Check if all required fields are present
+        if not has_description:
+            errors.append("Missing description")
+        if not has_unit_price:
+            errors.append("Missing or invalid unit price")
+        if not has_total_price:
+            errors.append("Missing or invalid total price")
         
         return errors
     
@@ -482,70 +475,67 @@ class RowClassifier:
     
     def _determine_row_type(self, row_data: List[str], completeness_score: float,
                            is_subtotal: bool, is_header: bool, is_notes: bool,
-                           hierarchical_level: Optional[int]) -> Tuple[RowType, float, List[str]]:
-        """Determine the type of a row based on patterns and completeness"""
+                           hierarchical_level: Optional[int], column_mapping: Dict[int, ColumnType]) -> Tuple[RowType, float, List[str]]:
+        """Determine the type of a row based on simple validation rules (only required columns)"""
+        print(f"[DEBUG] row_data (len={len(row_data)}): {row_data}")
         reasoning = []
         confidence = 0.0
-        
-        # Check for blank/separator rows first
-        non_empty_cells = sum(1 for cell in row_data if cell and cell.strip())
-        if non_empty_cells == 0:
-            reasoning.append("No non-empty cells found")
-            return RowType.BLANK_SEPARATOR, 0.9, reasoning
-        
-        # Check for subtotal patterns
-        if is_subtotal:
-            reasoning.append("Subtotal patterns detected")
-            confidence = 0.8
-            return RowType.SUBTOTAL_ROW, confidence, reasoning
-        
-        # Check for header patterns
-        if is_header:
-            reasoning.append("Header/section break patterns detected")
-            if hierarchical_level is not None:
-                reasoning.append(f"Hierarchical level {hierarchical_level} detected")
-            confidence = 0.85
-            return RowType.HEADER_SECTION_BREAK, confidence, reasoning
-        
-        # Check for notes patterns
-        if is_notes:
-            reasoning.append("Notes/comment patterns detected")
-            confidence = 0.75
-            return RowType.NOTES_COMMENTS, confidence, reasoning
-        
-        # Check for primary line items
-        if completeness_score >= self.min_completeness_threshold:
-            reasoning.append(f"High completeness score: {completeness_score:.2f}")
-            confidence = 0.8 + (completeness_score * 0.2)
-            return RowType.PRIMARY_LINE_ITEM, confidence, reasoning
-        
-        # Check for partial line items
-        elif completeness_score > 0.3:
-            reasoning.append(f"Moderate completeness score: {completeness_score:.2f}")
-            confidence = 0.6
-            return RowType.PRIMARY_LINE_ITEM, confidence, reasoning
-        
-        # Default to notes/comments for low completeness
+        # Only check required columns for classification
+        required_types = [ColumnType.DESCRIPTION, ColumnType.UNIT_PRICE, ColumnType.TOTAL_PRICE]
+        required_values = {}
+        for req_type in required_types:
+            # Find the first column index mapped to this required type
+            col_indices = [idx for idx, ctype in column_mapping.items() if ctype == req_type]
+            val = ''
+            if col_indices:
+                idx = col_indices[0]
+                val = row_data[idx] if idx < len(row_data) else ''
+            required_values[req_type] = val
+            print(f"[DEBUG] Required {req_type}: col {col_indices[0] if col_indices else 'N/A'} value='{val}'")
+        # Now use only these for classification
+        has_description = bool(required_values[ColumnType.DESCRIPTION].strip())
+        has_unit_price = self._is_positive_numeric(required_values[ColumnType.UNIT_PRICE])
+        has_total_price = self._is_positive_numeric(required_values[ColumnType.TOTAL_PRICE])
+        if has_description and has_unit_price and has_total_price:
+            reasoning.append("Row has description, unit price, and total price - VALID line item")
+            confidence = 0.95
+            row_type = RowType.PRIMARY_LINE_ITEM
         else:
-            reasoning.append(f"Low completeness score: {completeness_score:.2f}")
-            confidence = 0.5
-            return RowType.NOTES_COMMENTS, confidence, reasoning
+            missing_fields = []
+            if not has_description:
+                missing_fields.append("description")
+            if not has_unit_price:
+                missing_fields.append("unit price")
+            if not has_total_price:
+                missing_fields.append("total price")
+            reasoning.append(f"Missing required fields: {', '.join(missing_fields)} - INVALID line item")
+            confidence = 0.9
+            row_type = RowType.INVALID_LINE_ITEM
+        print(f"[DEBUG] Final row_type: {row_type}, Reasoning: {reasoning}")
+        return row_type, confidence, reasoning
     
     def _is_positive_numeric(self, value: str) -> bool:
-        """Check if value is a positive number"""
+        """Check if value is a positive number (including 0), supports European formats"""
         try:
-            # Remove currency symbols and commas
-            clean_value = re.sub(r'[\$€£¥₹,]', '', value)
+            # Remove currency symbols, commas, and all whitespace (including non-breaking)
+            print(f"[DEBUG] _is_positive_numeric: raw value='{value}'")
+            clean_value = re.sub(r'[\$€£¥₹,\s\u00A0]', '', value)
+            # Replace decimal comma with dot if present
+            if ',' in value and value.count(',') == 1 and '.' not in value:
+                clean_value = clean_value.replace(',', '.')
+            print(f"[DEBUG] _is_positive_numeric: cleaned value='{clean_value}'")
             num = float(clean_value)
-            return num > 0
+            return num >= 0
         except (ValueError, TypeError):
+            print(f"[DEBUG] _is_positive_numeric: failed to parse '{value}'")
             return False
     
     def _is_numeric(self, value: str) -> bool:
-        """Check if value is numeric"""
+        """Check if value is numeric, supports European formats"""
         try:
-            # Remove currency symbols and commas
-            clean_value = re.sub(r'[\$€£¥₹,]', '', value)
+            clean_value = re.sub(r'[\$€£¥₹,\s\u00A0]', '', value)
+            if ',' in value and value.count(',') == 1 and '.' not in value:
+                clean_value = clean_value.replace(',', '.')
             float(clean_value)
             return True
         except (ValueError, TypeError):
