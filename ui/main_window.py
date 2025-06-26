@@ -58,6 +58,15 @@ try:
 except ImportError:
     PREVIEW_AVAILABLE = False
 
+# Import categorization dialogs
+try:
+    from ui.categorization_dialog import show_categorization_dialog
+    from ui.category_review_dialog import show_category_review_dialog
+    from ui.categorization_stats_dialog import show_categorization_stats_dialog
+    CATEGORIZATION_AVAILABLE = True
+except ImportError:
+    CATEGORIZATION_AVAILABLE = False
+
 # Color coding for confidence
 def confidence_color(score):
     if score >= 0.8:
@@ -1168,8 +1177,229 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             self._hidden_column_mapping_widgets = []
 
     def _on_confirm_row_review(self):
+        """Handle row review confirmation and start categorization"""
         # Placeholder for row review confirmation logic
-        messagebox.showinfo("Row Review Confirmed", "Row review has been confirmed! (Implement your logic here)")
+        self._update_status("Row review confirmed. Starting categorization process...")
+        
+        # Get the current file mapping
+        current_tab = self.notebook.select()
+        if not current_tab:
+            messagebox.showwarning("Warning", "No file selected for categorization")
+            return
+        
+        # Find the file mapping for the current tab
+        file_mapping = None
+        for file_key, file_data in self.controller.current_files.items():
+            if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == current_tab:
+                file_mapping = file_data['file_mapping']
+                break
+        
+        if not file_mapping:
+            messagebox.showerror("Error", "Could not find file mapping for categorization")
+            return
+        
+        # Start categorization process
+        self._start_categorization(file_mapping)
+    
+    def _start_categorization(self, file_mapping):
+        """Start the categorization process"""
+        if not CATEGORIZATION_AVAILABLE:
+            messagebox.showerror("Error", "Categorization components not available")
+            return
+        
+        try:
+            # Show categorization dialog
+            dialog = show_categorization_dialog(
+                parent=self.root,
+                controller=self.controller,
+                file_mapping=file_mapping,
+                on_complete=self._on_categorization_complete
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to start categorization: {e}")
+            messagebox.showerror("Error", f"Failed to start categorization: {str(e)}")
+    
+    def _on_categorization_complete(self, final_dataframe, categorization_result):
+        """Handle categorization completion"""
+        try:
+            # Update the file mapping with categorized data
+            current_tab = self.notebook.select()
+            for file_key, file_data in self.controller.current_files.items():
+                if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == current_tab:
+                    # Store the categorized data
+                    file_data['categorized_dataframe'] = final_dataframe
+                    file_data['categorization_result'] = categorization_result
+                    
+                    # Update the file mapping
+                    file_mapping = file_data['file_mapping']
+                    file_mapping.categorized_dataframe = final_dataframe
+                    file_mapping.categorization_result = categorization_result
+                    
+                    # Show success message
+                    messagebox.showinfo("Success", 
+                                      "Categorization completed successfully!\n"
+                                      "You can now review categories or export the data.")
+                    
+                    # Add categorization buttons to the tab
+                    self._add_categorization_buttons(current_tab, file_mapping)
+                    
+                    self._update_status("Categorization completed successfully")
+                    break
+                    
+        except Exception as e:
+            logger.error(f"Error handling categorization completion: {e}")
+            messagebox.showerror("Error", f"Error handling categorization completion: {str(e)}")
+    
+    def _add_categorization_buttons(self, tab, file_mapping):
+        """Add categorization action buttons to the tab"""
+        # Find or create the categorization buttons frame
+        categorization_frame = None
+        
+        # Look for existing categorization frame
+        for widget in tab.winfo_children():
+            if hasattr(widget, 'categorization_frame'):
+                categorization_frame = widget
+                break
+        
+        if not categorization_frame:
+            # Create new categorization frame
+            categorization_frame = ttk.LabelFrame(tab, text="Categorization Actions")
+            categorization_frame.categorization_frame = True  # Mark it
+            
+            # Add it after the row review section
+            categorization_frame.grid(row=5, column=0, sticky=tk.EW, padx=5, pady=5)
+        
+        # Clear existing buttons
+        for widget in categorization_frame.winfo_children():
+            widget.destroy()
+        
+        # Create buttons
+        button_frame = ttk.Frame(categorization_frame)
+        button_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        # Review Categories button
+        review_btn = ttk.Button(button_frame, text="Review Categories", 
+                               command=lambda: self._review_categories(file_mapping))
+        review_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Show Statistics button
+        stats_btn = ttk.Button(button_frame, text="Show Statistics", 
+                              command=lambda: self._show_categorization_stats(file_mapping))
+        stats_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Export Categorized Data button
+        export_btn = ttk.Button(button_frame, text="Export Categorized Data", 
+                               command=lambda: self._export_categorized_data(file_mapping))
+        export_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Re-run Categorization button
+        rerun_btn = ttk.Button(button_frame, text="Re-run Categorization", 
+                              command=lambda: self._start_categorization(file_mapping))
+        rerun_btn.pack(side=tk.LEFT)
+    
+    def _review_categories(self, file_mapping):
+        """Open category review dialog"""
+        if not CATEGORIZATION_AVAILABLE:
+            messagebox.showerror("Error", "Category review not available")
+            return
+        
+        try:
+            # Get the categorized dataframe
+            dataframe = getattr(file_mapping, 'categorized_dataframe', None)
+            if dataframe is None:
+                messagebox.showwarning("Warning", "No categorized data available for review")
+                return
+            
+            # Show category review dialog
+            dialog = show_category_review_dialog(
+                parent=self.root,
+                dataframe=dataframe,
+                on_save=self._on_category_review_save
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to open category review: {e}")
+            messagebox.showerror("Error", f"Failed to open category review: {str(e)}")
+    
+    def _on_category_review_save(self, updated_dataframe):
+        """Handle category review save"""
+        try:
+            # Update the file mapping with the modified dataframe
+            current_tab = self.notebook.select()
+            for file_key, file_data in self.controller.current_files.items():
+                if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == current_tab:
+                    file_mapping = file_data['file_mapping']
+                    file_mapping.categorized_dataframe = updated_dataframe
+                    file_data['categorized_dataframe'] = updated_dataframe
+                    
+                    messagebox.showinfo("Success", "Category changes saved successfully!")
+                    self._update_status("Category changes saved")
+                    break
+                    
+        except Exception as e:
+            logger.error(f"Error saving category changes: {e}")
+            messagebox.showerror("Error", f"Error saving category changes: {str(e)}")
+    
+    def _show_categorization_stats(self, file_mapping):
+        """Show categorization statistics dialog"""
+        if not CATEGORIZATION_AVAILABLE:
+            messagebox.showerror("Error", "Statistics dialog not available")
+            return
+        
+        try:
+            # Get the categorized dataframe
+            dataframe = getattr(file_mapping, 'categorized_dataframe', None)
+            if dataframe is None:
+                messagebox.showwarning("Warning", "No categorized data available for statistics")
+                return
+            
+            # Get categorization result
+            categorization_result = getattr(file_mapping, 'categorization_result', None)
+            
+            # Show statistics dialog
+            dialog = show_categorization_stats_dialog(
+                parent=self.root,
+                dataframe=dataframe,
+                categorization_result=categorization_result
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to show statistics: {e}")
+            messagebox.showerror("Error", f"Failed to show statistics: {str(e)}")
+    
+    def _export_categorized_data(self, file_mapping):
+        """Export categorized data"""
+        try:
+            # Get the categorized dataframe
+            dataframe = getattr(file_mapping, 'categorized_dataframe', None)
+            if dataframe is None:
+                messagebox.showwarning("Warning", "No categorized data available for export")
+                return
+            
+            # Use the existing export functionality
+            from tkinter import filedialog
+            
+            file_path = filedialog.asksaveasfilename(
+                title="Export Categorized Data",
+                defaultextension=".xlsx",
+                filetypes=[("Excel files", "*.xlsx"), ("CSV files", "*.csv"), ("All files", "*.*")]
+            )
+            
+            if file_path:
+                if file_path.endswith('.csv'):
+                    dataframe.to_csv(file_path, index=False)
+                elif file_path.endswith('.xlsx'):
+                    dataframe.to_excel(file_path, index=False)
+                else:
+                    dataframe.to_csv(file_path, index=False)
+                
+                messagebox.showinfo("Success", f"Categorized data exported to: {file_path}")
+                self._update_status(f"Exported categorized data to: {file_path}")
+                
+        except Exception as e:
+            logger.error(f"Failed to export categorized data: {e}")
+            messagebox.showerror("Error", f"Failed to export categorized data: {str(e)}")
 
     def run(self):
         """Start the main application loop."""

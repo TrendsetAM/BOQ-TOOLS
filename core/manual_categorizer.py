@@ -13,6 +13,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.utils import get_column_letter
 import shutil
+import tempfile
 
 from core.auto_categorizer import UnmatchedDescription
 from core.category_dictionary import CategoryDictionary
@@ -1016,3 +1017,146 @@ def update_master_dictionary(
         'total_skipped': len(skipped)
     }
     return summary 
+
+
+def execute_row_categorization(
+    mapped_df,
+    category_dict_path: Path = Path('config/category_dictionary.json'),
+    output_dir: Path = Path('examples'),
+    user_manual_excel: Path = None,
+    cleanup_temp: bool = True,
+    progress_callback=None
+) -> dict:
+    """
+    Orchestrate the full row categorization process.
+    Args:
+        mapped_df: The mapped DataFrame to categorize
+        category_dict_path: Path to the category dictionary JSON
+        output_dir: Directory for outputs and temp files
+        user_manual_excel: Optional path to user-completed manual categorization Excel
+        cleanup_temp: Whether to clean up temp files
+        progress_callback: Optional function(percent, message) for progress updates
+    Returns:
+        dict with 'final_dataframe', 'summary', 'all_stats', 'rollback_performed', 'error' (if any)
+    """
+    import shutil
+    import traceback
+    from datetime import datetime
+    from core.category_dictionary import CategoryDictionary
+    
+    temp_files = []
+    rollback_performed = False
+    error = None
+    summary = {}
+    all_stats = {}
+    final_df = None
+    backup_dict_path = None
+    
+    def update_progress(percent, message):
+        if progress_callback:
+            progress_callback(percent, message)
+        else:
+            print(f"[{percent:.0f}%] {message}")
+    
+    try:
+        update_progress(0, "Loading category dictionary...")
+        category_dict = CategoryDictionary(category_dict_path)
+        summary['category_dict_loaded'] = True
+        all_stats['initial_dict_size'] = len(category_dict.mappings)
+        
+        update_progress(5, "Auto-categorizing rows...")
+        from core.auto_categorizer import auto_categorize_dataset, collect_unmatched_descriptions
+        auto_result = auto_categorize_dataset(mapped_df, category_dict)
+        auto_df = auto_result.dataframe
+        all_stats['auto_stats'] = auto_result.match_statistics
+        summary['auto_categorized'] = True
+        
+        update_progress(20, f"Collecting unmatched descriptions ({len(auto_result.unmatched_descriptions)})...")
+        unmatched_list = collect_unmatched_descriptions(auto_df, category_column='Category', description_column='Description')
+        all_stats['unmatched_count'] = len(unmatched_list)
+        summary['unmatched_collected'] = True
+        
+        # Generate manual categorization Excel
+        update_progress(30, "Generating manual categorization Excel file...")
+        from core.manual_categorizer import generate_manual_categorization_excel, process_manual_categorizations, apply_manual_categories, update_master_dictionary
+        available_categories = list(category_dict.get_all_categories())
+        manual_excel_path = output_dir / f"manual_categorization_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        excel_path = generate_manual_categorization_excel(unmatched_list, available_categories, output_dir=output_dir)
+        temp_files.append(excel_path)
+        summary['manual_excel_generated'] = str(excel_path)
+        update_progress(40, f"Manual categorization Excel generated at {excel_path}")
+        
+        # If user provided a completed Excel, use it; else, prompt user
+        if user_manual_excel and Path(user_manual_excel).exists():
+            manual_excel_to_use = Path(user_manual_excel)
+            update_progress(45, f"Using user-provided manual Excel: {manual_excel_to_use}")
+        else:
+            manual_excel_to_use = excel_path
+            update_progress(45, f"Please fill in the manual categorization Excel: {manual_excel_to_use}")
+            # In a real workflow, you might pause here for user input
+        
+        # Process manual categorizations
+        update_progress(60, "Processing manual categorizations from Excel...")
+        manual_cats = process_manual_categorizations(manual_excel_to_use)
+        all_stats['manual_categorization_count'] = len(manual_cats)
+        summary['manual_categorization_processed'] = True
+        
+        # Apply manual categorizations
+        update_progress(75, "Applying manual categorizations to DataFrame...")
+        apply_result = apply_manual_categories(auto_df, manual_cats)
+        final_df = apply_result['updated_dataframe']
+        all_stats['apply_stats'] = apply_result['statistics']
+        summary['manual_categorization_applied'] = True
+        
+        # Backup dictionary before update
+        update_progress(85, "Updating master dictionary with manual categorizations...")
+        backup_dir = output_dir / "dict_backups"
+        update_result = update_master_dictionary(category_dict, manual_cats, backup_dir=backup_dir)
+        backup_dict_path = update_result['backup_path']
+        summary['dictionary_updated'] = True
+        all_stats['update_result'] = update_result
+        
+        update_progress(95, "Cleanup and finalizing...")
+        if cleanup_temp:
+            for f in temp_files:
+                try:
+                    Path(f).unlink(missing_ok=True)
+                except Exception as e:
+                    print(f"Warning: Could not delete temp file {f}: {e}")
+        update_progress(100, "Row categorization process complete.")
+        
+        return {
+            'final_dataframe': final_df,
+            'summary': summary,
+            'all_stats': all_stats,
+            'rollback_performed': rollback_performed,
+            'error': None
+        }
+    except Exception as exc:
+        error = str(exc)
+        traceback_str = traceback.format_exc()
+        print(f"[ERROR] {error}\n{traceback_str}")
+        summary['error'] = error
+        # Rollback: restore dictionary from backup if it was made
+        if backup_dict_path and Path(backup_dict_path).exists():
+            try:
+                shutil.copy2(backup_dict_path, category_dict_path)
+                rollback_performed = True
+                print(f"[ROLLBACK] Restored category dictionary from backup: {backup_dict_path}")
+            except Exception as e:
+                print(f"[ROLLBACK ERROR] Failed to restore backup: {e}")
+        # Clean up temp files
+        if cleanup_temp:
+            for f in temp_files:
+                try:
+                    Path(f).unlink(missing_ok=True)
+                except Exception as e:
+                    print(f"Warning: Could not delete temp file {f}: {e}")
+        return {
+            'final_dataframe': None,
+            'summary': summary,
+            'all_stats': all_stats,
+            'rollback_performed': rollback_performed,
+            'error': error,
+            'traceback': traceback_str
+        } 

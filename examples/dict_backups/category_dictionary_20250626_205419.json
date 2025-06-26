@@ -7250,20 +7250,20 @@
     }
   ],
   "categories": [
-    "site costs",
-    "lv cables",
-    "civil works",
-    "mv cables",
     "cleaning and cabling of pv mod.",
-    "pv mod. installation",
-    "trenching",
-    "general costs",
-    "earth movement",
     "solar cables",
     "electrical works",
+    "trenching",
+    "civil works",
+    "pv mod. installation",
+    "roads",
     "oem building",
-    "tracker inst.",
-    "roads"
+    "general costs",
+    "site costs",
+    "earth movement",
+    "mv cables",
+    "lv cables",
+    "tracker inst."
   ],
   "metadata": {
     "total_mappings": 906,
