@@ -21,21 +21,22 @@ from core.category_dictionary import CategoryDictionary
 logger = logging.getLogger(__name__)
 
 
-def generate_manual_categorization_excel(unmatched_descriptions: List[UnmatchedDescription],
+def generate_manual_categorization_excel(review_descriptions: List,
                                         available_categories: List[str],
                                         output_dir: Optional[Path] = None) -> Path:
     """
-    Generate Excel file for manual categorization of unmatched descriptions
+    Generate Excel file for manual categorization of descriptions that need review
+    (unmatched, fuzzy, and partial matches)
     
     Args:
-        unmatched_descriptions: List of UnmatchedDescription objects
+        review_descriptions: List of ManualReviewDescription or UnmatchedDescription objects
         available_categories: List of available categories for dropdown
         output_dir: Output directory (default: current directory)
         
     Returns:
         Path to the created Excel file
     """
-    logger.info(f"Generating manual categorization Excel file for {len(unmatched_descriptions)} descriptions")
+    logger.info(f"Generating manual categorization Excel file for {len(review_descriptions)} descriptions")
     
     # Create output directory if it doesn't exist
     if output_dir is None:
@@ -62,7 +63,7 @@ def generate_manual_categorization_excel(unmatched_descriptions: List[UnmatchedD
     ws_instructions = wb.create_sheet("Instructions", 1)
     
     # Set up the main categorization sheet
-    _setup_categorization_sheet(ws_categorize, unmatched_descriptions, available_categories)
+    _setup_categorization_sheet(ws_categorize, review_descriptions, available_categories)
     
     # Set up the instructions sheet
     _setup_instructions_sheet(ws_instructions, available_categories)
@@ -75,13 +76,13 @@ def generate_manual_categorization_excel(unmatched_descriptions: List[UnmatchedD
     return filepath
 
 
-def _setup_categorization_sheet(worksheet, unmatched_descriptions: List[UnmatchedDescription], 
+def _setup_categorization_sheet(worksheet, review_descriptions: List, 
                                available_categories: List[str]):
     """Set up the main categorization worksheet"""
     
-    # If there are no unmatched descriptions, show a message and return early
-    if not unmatched_descriptions:
-        worksheet['A2'] = "No unmatched descriptions to categorize."
+    # If there are no descriptions to review, show a message and return early
+    if not review_descriptions:
+        worksheet['A2'] = "No descriptions to categorize."
         return
     
     # Define styles
@@ -96,8 +97,8 @@ def _setup_categorization_sheet(worksheet, unmatched_descriptions: List[Unmatche
         bottom=Side(style='thin')
     )
     
-    # Set up headers
-    headers = ["Description", "Source_Sheet", "Frequency", "Category", "Notes"]
+    # Set up headers - include auto-category and match type for ManualReviewDescription objects
+    headers = ["Description", "Source_Sheet", "Frequency", "Auto_Category", "Match_Type", "Confidence", "Category", "Notes"]
     for col, header in enumerate(headers, 1):
         cell = worksheet.cell(row=1, column=col, value=header)
         cell.font = header_font
@@ -106,15 +107,29 @@ def _setup_categorization_sheet(worksheet, unmatched_descriptions: List[Unmatche
         cell.border = border
     
     # Add data
-    for row, desc in enumerate(unmatched_descriptions, 2):
+    for row, desc in enumerate(review_descriptions, 2):
         worksheet.cell(row=row, column=1, value=desc.description)
         worksheet.cell(row=row, column=2, value=desc.source_sheet_name)
         worksheet.cell(row=row, column=3, value=desc.frequency)
-        worksheet.cell(row=row, column=4, value="")  # Category (to be filled manually)
-        worksheet.cell(row=row, column=5, value="")  # Notes (to be filled manually)
+        
+        # Handle both UnmatchedDescription and ManualReviewDescription objects
+        if hasattr(desc, 'auto_category'):
+            # ManualReviewDescription object
+            worksheet.cell(row=row, column=4, value=desc.auto_category or "")
+            worksheet.cell(row=row, column=5, value=desc.match_type)
+            worksheet.cell(row=row, column=6, value=f"{desc.confidence:.2f}" if desc.confidence > 0 else "")
+            worksheet.cell(row=row, column=7, value=desc.auto_category or "")  # Pre-fill with auto-category
+            worksheet.cell(row=row, column=8, value="")  # Notes (to be filled manually)
+        else:
+            # UnmatchedDescription object (backward compatibility)
+            worksheet.cell(row=row, column=4, value="")  # Auto_Category
+            worksheet.cell(row=row, column=5, value="none")  # Match_Type
+            worksheet.cell(row=row, column=6, value="")  # Confidence
+            worksheet.cell(row=row, column=7, value="")  # Category (to be filled manually)
+            worksheet.cell(row=row, column=8, value="")  # Notes (to be filled manually)
         
         # Apply borders to all cells
-        for col in range(1, 6):
+        for col in range(1, 9):
             worksheet.cell(row=row, column=col).border = border
     
     # Set up data validation for Category column
@@ -131,15 +146,18 @@ def _setup_categorization_sheet(worksheet, unmatched_descriptions: List[Unmatche
     )
     worksheet.add_data_validation(category_validation)
     
-    # Apply validation to Category column (column D)
-    category_validation.add(f'D2:D{len(unmatched_descriptions) + 1}')
+    # Apply validation to Category column (column G)
+    category_validation.add(f'G2:G{len(review_descriptions) + 1}')
     
     # Set column widths
     worksheet.column_dimensions['A'].width = 60  # Description
     worksheet.column_dimensions['B'].width = 20  # Source_Sheet
     worksheet.column_dimensions['C'].width = 12  # Frequency
-    worksheet.column_dimensions['D'].width = 25  # Category
-    worksheet.column_dimensions['E'].width = 30  # Notes
+    worksheet.column_dimensions['D'].width = 25  # Auto_Category
+    worksheet.column_dimensions['E'].width = 15  # Match_Type
+    worksheet.column_dimensions['F'].width = 12  # Confidence
+    worksheet.column_dimensions['G'].width = 25  # Category
+    worksheet.column_dimensions['H'].width = 30  # Notes
     
     # Add conditional formatting for frequency
     from openpyxl.formatting.rule import ColorScaleRule
@@ -149,7 +167,16 @@ def _setup_categorization_sheet(worksheet, unmatched_descriptions: List[Unmatche
         end_type='max',
         end_color='FF6B6B'
     )
-    worksheet.conditional_formatting.add(f'C2:C{len(unmatched_descriptions) + 1}', frequency_rule)
+    worksheet.conditional_formatting.add(f'C2:C{len(review_descriptions) + 1}', frequency_rule)
+    
+    # Add conditional formatting for confidence
+    confidence_rule = ColorScaleRule(
+        start_type='min',
+        start_color='FF6B6B',  # Red for low confidence
+        end_type='max',
+        end_color='4CAF50'     # Green for high confidence
+    )
+    worksheet.conditional_formatting.add(f'F2:F{len(review_descriptions) + 1}', confidence_rule)
     
     # Freeze the header row
     worksheet.freeze_panes = "A2"
@@ -523,10 +550,10 @@ def validate_excel_file_structure(filepath: Path) -> Dict[str, Any]:
             ws = wb["Categorization"]
             
             # Check headers
-            expected_headers = ["Description", "Source_Sheet", "Frequency", "Category", "Notes"]
+            expected_headers = ["Description", "Source_Sheet", "Frequency", "Auto_Category", "Match_Type", "Confidence", "Category", "Notes"]
             actual_headers = []
             
-            for col in range(1, 6):  # First 5 columns
+            for col in range(1, 9):  # First 8 columns
                 cell_value = ws.cell(row=1, column=col).value
                 actual_headers.append(str(cell_value) if cell_value else "")
             
@@ -1080,24 +1107,32 @@ def execute_row_categorization(
         all_stats['auto_stats'] = auto_result.match_statistics
         summary['auto_categorized'] = True
         
-        update_progress(20, f"Collecting unmatched descriptions ({len(auto_result.unmatched_descriptions)})...")
+        update_progress(20, f"Collecting descriptions for manual review...")
         # Pass the sheet name column if it exists
         sheet_name_column = None
         for col in auto_df.columns:
             if col.lower() in ["sheet_name", "source_sheet", "sheet"]:
                 sheet_name_column = col
                 break
-        unmatched_list = collect_unmatched_descriptions(auto_df, category_column='Category', description_column='Description', sheet_name_column=sheet_name_column)
-        print(f"[DEBUG] unmatched_list: {unmatched_list}")
-        all_stats['unmatched_count'] = len(unmatched_list)
-        summary['unmatched_collected'] = True
+        from core.auto_categorizer import collect_descriptions_for_manual_review
+        review_list = collect_descriptions_for_manual_review(
+            auto_df, 
+            category_dict, 
+            category_column='Category', 
+            description_column='Description', 
+            sheet_name_column=sheet_name_column,
+            confidence_threshold=0.8
+        )
+        print(f"[DEBUG] review_list: {len(review_list)} descriptions for manual review")
+        all_stats['review_count'] = len(review_list)
+        summary['review_collected'] = True
         
         # Generate manual categorization Excel
         update_progress(30, "Generating manual categorization Excel file...")
         from core.manual_categorizer import generate_manual_categorization_excel, process_manual_categorizations, apply_manual_categories, update_master_dictionary
         available_categories = list(category_dict.get_all_categories())
-        print(f"[DEBUG] About to call generate_manual_categorization_excel with {len(unmatched_list)} unmatched, output_dir={output_dir}")
-        excel_path = generate_manual_categorization_excel(unmatched_list, available_categories, output_dir=output_dir)
+        print(f"[DEBUG] About to call generate_manual_categorization_excel with {len(review_list)} review descriptions, output_dir={output_dir}")
+        excel_path = generate_manual_categorization_excel(review_list, available_categories, output_dir=output_dir)
         temp_files.append(excel_path)
         summary['manual_excel_generated'] = str(excel_path)
         update_progress(40, f"Manual categorization Excel generated at {excel_path}")

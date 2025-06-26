@@ -26,6 +26,21 @@ class UnmatchedDescription:
 
 
 @dataclass
+class ManualReviewDescription:
+    """Represents a description that needs manual review (unmatched, fuzzy, or partial matches)"""
+    description: str
+    source_sheet_name: str
+    row_number: int
+    original_index: int
+    frequency: int = 1
+    sample_rows: List[int] = field(default_factory=list)
+    auto_category: Optional[str] = None  # Category assigned by auto-categorization
+    match_type: str = 'none'  # 'none', 'fuzzy', 'partial'
+    confidence: float = 0.0
+    matched_dictionary_string: Optional[str] = None  # For fuzzy matches, the dictionary string that was matched
+
+
+@dataclass
 class CategorizationResult:
     """Result of automatic categorization process"""
     dataframe: pd.DataFrame
@@ -449,4 +464,127 @@ Top Categories:
             
         except Exception as e:
             logger.error(f"Error exporting categorization report: {e}")
-            return False 
+            return False
+
+
+def collect_descriptions_for_manual_review(dataframe: pd.DataFrame,
+                                         category_dictionary: CategoryDictionary,
+                                         category_column: str = 'Category',
+                                         description_column: str = 'Description',
+                                         sheet_name_column: Optional[str] = None,
+                                         confidence_threshold: float = 0.8) -> List[ManualReviewDescription]:
+    """
+    Collect descriptions for manual review (unmatched, fuzzy, and partial matches)
+    Excludes only exact matches from manual review
+    
+    Args:
+        dataframe: Categorized DataFrame
+        category_dictionary: CategoryDictionary instance used for categorization
+        category_column: Name of the category column
+        description_column: Name of the description column
+        sheet_name_column: Name of the sheet name column (optional)
+        confidence_threshold: Confidence threshold used for categorization
+        
+    Returns:
+        List of ManualReviewDescription objects with metadata
+    """
+    logger.info(f"Collecting descriptions for manual review from {len(dataframe)} rows")
+    
+    # Validate inputs
+    if category_column not in dataframe.columns:
+        raise ValueError(f"Category column '{category_column}' not found in DataFrame")
+    
+    if description_column not in dataframe.columns:
+        raise ValueError(f"Description column '{description_column}' not found in DataFrame")
+    
+    # Initialize collection for unique descriptions
+    unique_descriptions: Dict[str, ManualReviewDescription] = {}
+    
+    # Process each row
+    for index, row in dataframe.iterrows():
+        description = str(row[description_column]).strip()
+        
+        # Skip empty descriptions
+        if not description or description.lower() in ['nan', 'none', '']:
+            continue
+        
+        # Get the current category and determine if it needs manual review
+        current_category = str(row[category_column]).strip()
+        needs_review = False
+        match_type = 'none'
+        confidence = 0.0
+        matched_dict_str = None
+        
+        # Check if this row needs manual review
+        if not current_category or current_category.lower() in ['nan', 'none', '']:
+            # Unmatched - needs review
+            needs_review = True
+            match_type = 'none'
+        else:
+            # Check if this was a fuzzy or partial match by re-running categorization
+            match = category_dictionary.find_category(description, confidence_threshold)
+            if match.match_type in ['fuzzy', 'partial']:
+                needs_review = True
+                match_type = match.match_type
+                confidence = match.confidence
+                current_category = match.matched_category
+                
+                # For fuzzy matches, find the matched dictionary string
+                if match.match_type == 'fuzzy':
+                    best_similarity = 0.0
+                    for dict_desc, mapping in category_dictionary.mappings.items():
+                        similarity = category_dictionary._calculate_fuzzy_similarity(description.lower().strip(), dict_desc)
+                        if similarity > best_similarity:
+                            best_similarity = similarity
+                            matched_dict_str = dict_desc
+            # Exact matches don't need review
+        
+        if needs_review:
+            # Normalize description for deduplication
+            normalized_desc = description.lower()
+            
+            # Get source information
+            source_sheet = str(row.get(sheet_name_column, 'Unknown')) if sheet_name_column else 'Unknown'
+            row_number = safe_int(index) + 1  # Convert to 1-based row numbering
+            
+            if normalized_desc in unique_descriptions:
+                # Update existing entry
+                existing = unique_descriptions[normalized_desc]
+                existing.frequency += 1
+                existing.sample_rows.append(row_number)
+                logger.debug(f"Duplicate description found: '{description[:50]}...' (frequency: {existing.frequency})")
+            else:
+                # Create new entry
+                review_desc = ManualReviewDescription(
+                    description=description,
+                    source_sheet_name=source_sheet,
+                    row_number=row_number,
+                    original_index=safe_int(index),
+                    frequency=1,
+                    sample_rows=[row_number],
+                    auto_category=current_category,
+                    match_type=match_type,
+                    confidence=confidence,
+                    matched_dictionary_string=matched_dict_str
+                )
+                unique_descriptions[normalized_desc] = review_desc
+                logger.debug(f"New description for manual review: '{description[:50]}...' (type: {match_type})")
+    
+    # Convert to list and sort by frequency (most frequent first)
+    review_list = list(unique_descriptions.values())
+    review_list.sort(key=lambda x: x.frequency, reverse=True)
+    
+    # Log statistics
+    logger.info(f"Collected {len(review_list)} unique descriptions for manual review")
+    logger.info(f"Total frequency: {sum(desc.frequency for desc in review_list)}")
+    
+    # Log breakdown by match type
+    match_type_counts = {}
+    for desc in review_list:
+        match_type_counts[desc.match_type] = match_type_counts.get(desc.match_type, 0) + 1
+    
+    logger.info(f"Match type breakdown for manual review:")
+    for match_type, count in match_type_counts.items():
+        logger.info(f"  {match_type}: {count}")
+    
+    return review_list 
