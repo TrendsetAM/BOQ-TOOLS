@@ -15,6 +15,17 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class UnmatchedDescription:
+    """Represents an unmatched description with metadata"""
+    description: str
+    source_sheet_name: str
+    row_number: int
+    original_index: int
+    frequency: int = 1
+    sample_rows: List[int] = None
+
+
+@dataclass
 class CategorizationResult:
     """Result of automatic categorization process"""
     dataframe: pd.DataFrame
@@ -24,6 +35,100 @@ class CategorizationResult:
     matched_rows: int
     unmatched_rows: int
     match_rate: float
+
+
+def collect_unmatched_descriptions(dataframe: pd.DataFrame,
+                                 category_column: str = 'Category',
+                                 description_column: str = 'Description',
+                                 sheet_name_column: Optional[str] = None) -> List[UnmatchedDescription]:
+    """
+    Collect unmatched descriptions from categorized DataFrame
+    
+    Args:
+        dataframe: Categorized DataFrame
+        category_column: Name of the category column
+        description_column: Name of the description column
+        sheet_name_column: Name of the sheet name column (optional)
+        
+    Returns:
+        List of UnmatchedDescription objects with metadata
+    """
+    logger.info(f"Collecting unmatched descriptions from {len(dataframe)} rows")
+    
+    # Validate inputs
+    if category_column not in dataframe.columns:
+        raise ValueError(f"Category column '{category_column}' not found in DataFrame")
+    
+    if description_column not in dataframe.columns:
+        raise ValueError(f"Description column '{description_column}' not found in DataFrame")
+    
+    # Find rows with empty/null categories
+    unmatched_mask = dataframe[category_column].isna() | (dataframe[category_column] == '') | (dataframe[category_column].isnull())
+    unmatched_df = dataframe[unmatched_mask].copy()
+    
+    logger.info(f"Found {len(unmatched_df)} rows with unmatched descriptions")
+    
+    # Initialize collection for unique descriptions
+    unique_descriptions: Dict[str, UnmatchedDescription] = {}
+    
+    # Process each unmatched row
+    for index, row in unmatched_df.iterrows():
+        description = str(row[description_column]).strip()
+        
+        # Skip empty descriptions
+        if not description or description.lower() in ['nan', 'none', '']:
+            continue
+        
+        # Normalize description for deduplication
+        normalized_desc = description.lower()
+        
+        # Get source information
+        source_sheet = row.get(sheet_name_column, 'Unknown') if sheet_name_column else 'Unknown'
+        row_number = index + 1  # Convert to 1-based row numbering
+        
+        if normalized_desc in unique_descriptions:
+            # Update existing entry
+            existing = unique_descriptions[normalized_desc]
+            existing.frequency += 1
+            existing.sample_rows.append(row_number)
+            logger.debug(f"Duplicate description found: '{description[:50]}...' (frequency: {existing.frequency})")
+        else:
+            # Create new entry
+            unmatched_desc = UnmatchedDescription(
+                description=description,
+                source_sheet_name=source_sheet,
+                row_number=row_number,
+                original_index=index,
+                frequency=1,
+                sample_rows=[row_number]
+            )
+            unique_descriptions[normalized_desc] = unmatched_desc
+            logger.debug(f"New unmatched description: '{description[:50]}...'")
+    
+    # Convert to list and sort by frequency (most frequent first)
+    unmatched_list = list(unique_descriptions.values())
+    unmatched_list.sort(key=lambda x: x.frequency, reverse=True)
+    
+    logger.info(f"Collected {len(unmatched_list)} unique unmatched descriptions")
+    logger.info(f"Total frequency: {sum(desc.frequency for desc in unmatched_list)}")
+    
+    # Log some statistics
+    if unmatched_list:
+        max_freq = max(desc.frequency for desc in unmatched_list)
+        min_freq = min(desc.frequency for desc in unmatched_list)
+        avg_freq = sum(desc.frequency for desc in unmatched_list) / len(unmatched_list)
+        
+        logger.info(f"Frequency statistics:")
+        logger.info(f"  Max frequency: {max_freq}")
+        logger.info(f"  Min frequency: {min_freq}")
+        logger.info(f"  Average frequency: {avg_freq:.2f}")
+        
+        # Show top unmatched descriptions
+        logger.info(f"Top 5 unmatched descriptions:")
+        for i, desc in enumerate(unmatched_list[:5]):
+            logger.info(f"  {i+1}. '{desc.description[:60]}...' (frequency: {desc.frequency})")
+    
+    return unmatched_list
 
 
 def auto_categorize_dataset(dataframe: pd.DataFrame, 
@@ -176,101 +281,30 @@ class AutoCategorizer:
         Returns:
             CategorizationResult with categorized DataFrame and statistics
         """
-        logger.info(f"Starting automatic categorization of {len(dataframe)} rows")
-        
-        # Validate inputs
-        if description_column not in dataframe.columns:
-            raise ValueError(f"Description column '{description_column}' not found in DataFrame")
-        
-        # Create a copy to avoid modifying the original
-        df = dataframe.copy()
-        
-        # Initialize results tracking
-        total_rows = len(df)
-        matched_rows = 0
-        unmatched_rows = 0
-        unmatched_descriptions = []
-        match_types = {'exact': 0, 'partial': 0, 'fuzzy': 0, 'none': 0}
-        
-        # Add category column if it doesn't exist
-        if category_column not in df.columns:
-            df[category_column] = ''
-        
-        # Process each row
-        for index, row in df.iterrows():
-            try:
-                # Get description from the row
-                description = str(row[description_column]).strip()
-                
-                if not description or description.lower() in ['nan', 'none', '']:
-                    # Skip empty descriptions
-                    unmatched_rows += 1
-                    continue
-                
-                # Look up category in dictionary
-                match = self.category_dictionary.find_category(description, confidence_threshold)
-                
-                # Track match statistics
-                match_types[match.match_type] += 1
-                
-                if match.matched_category:
-                    # Assign the matched category
-                    df.at[index, category_column] = match.matched_category
-                    matched_rows += 1
-                    logger.debug(f"Row {index}: '{description[:50]}...' -> {match.matched_category} "
-                               f"(confidence: {match.confidence:.2f}, type: {match.match_type})")
-                else:
-                    # No match found
-                    df.at[index, category_column] = ''
-                    unmatched_rows += 1
-                    unmatched_descriptions.append(description)
-                    logger.debug(f"Row {index}: '{description[:50]}...' -> No match")
-                
-                # Progress callback
-                if progress_callback:
-                    progress = (index + 1) / total_rows * 100
-                    progress_callback(progress, f"Processing row {index + 1}/{total_rows}")
-                
-            except Exception as e:
-                logger.error(f"Error processing row {index}: {e}")
-                unmatched_rows += 1
-                unmatched_descriptions.append(f"ERROR: {str(row.get(description_column, 'Unknown'))}")
-                continue
-        
-        # Calculate final statistics
-        match_rate = matched_rows / total_rows if total_rows > 0 else 0.0
-        
-        match_statistics = {
-            'total_rows': total_rows,
-            'matched_rows': matched_rows,
-            'unmatched_rows': unmatched_rows,
-            'match_rate': match_rate,
-            'match_types': match_types,
-            'confidence_threshold': confidence_threshold,
-            'unique_categories_found': len(df[category_column].dropna().unique()),
-            'category_distribution': df[category_column].value_counts().to_dict()
-        }
-        
-        # Log results
-        logger.info(f"Categorization completed:")
-        logger.info(f"  Total rows: {total_rows}")
-        logger.info(f"  Matched rows: {matched_rows} ({match_rate:.1%})")
-        logger.info(f"  Unmatched rows: {unmatched_rows}")
-        logger.info(f"  Match types: {match_types}")
-        logger.info(f"  Unique categories assigned: {match_statistics['unique_categories_found']}")
-        
-        # Create result object
-        result = CategorizationResult(
-            dataframe=df,
-            unmatched_descriptions=unmatched_descriptions,
-            match_statistics=match_statistics,
-            total_rows=total_rows,
-            matched_rows=matched_rows,
-            unmatched_rows=unmatched_rows,
-            match_rate=match_rate
+        return auto_categorize_dataset(
+            dataframe, self.category_dictionary, description_column, 
+            category_column, confidence_threshold, progress_callback
         )
+    
+    def collect_unmatched_descriptions(self, dataframe: pd.DataFrame,
+                                     category_column: str = 'Category',
+                                     description_column: str = 'Description',
+                                     sheet_name_column: Optional[str] = None) -> List[UnmatchedDescription]:
+        """
+        Collect unmatched descriptions from categorized DataFrame
         
-        return result
+        Args:
+            dataframe: Categorized DataFrame
+            category_column: Name of the category column
+            description_column: Name of the description column
+            sheet_name_column: Name of the sheet name column (optional)
+            
+        Returns:
+            List of UnmatchedDescription objects with metadata
+        """
+        return collect_unmatched_descriptions(
+            dataframe, category_column, description_column, sheet_name_column
+        )
     
     def categorize_with_learning(self, dataframe: pd.DataFrame,
                                 description_column: str = 'Description',
