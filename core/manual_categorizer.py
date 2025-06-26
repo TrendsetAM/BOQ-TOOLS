@@ -5,9 +5,10 @@ Generates Excel files for manual categorization of unmatched descriptions
 
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 import openpyxl
+import pandas as pd
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.utils import get_column_letter
@@ -312,3 +313,297 @@ def create_categorization_summary(dataframe, category_column: str = 'Category') 
     }
     
     return summary 
+
+
+def process_manual_categorizations(excel_filepath: Path, 
+                                  description_column: str = "Description",
+                                  category_column: str = "Category",
+                                  source_sheet_column: str = "Source_Sheet",
+                                  notes_column: str = "Notes") -> Dict[str, str]:
+    """
+    Process user-completed manual categorization Excel file
+    
+    Args:
+        excel_filepath: Path to the completed Excel file
+        description_column: Name of the description column
+        category_column: Name of the category column
+        source_sheet_column: Name of the source sheet column
+        notes_column: Name of the notes column
+        
+    Returns:
+        Dictionary mapping descriptions to their manually assigned categories
+        
+    Raises:
+        FileNotFoundError: If the Excel file doesn't exist
+        ValueError: If the file is corrupted or missing required columns
+        KeyError: If required data is missing
+    """
+    logger.info(f"Processing manual categorizations from {excel_filepath}")
+    
+    # Validate file exists
+    if not excel_filepath.exists():
+        raise FileNotFoundError(f"Manual categorization file not found: {excel_filepath}")
+    
+    try:
+        # Read the Excel file using pandas
+        df: pd.DataFrame = pd.read_excel(excel_filepath, sheet_name="Categorization")
+        logger.info(f"Successfully loaded Excel file with {len(df)} rows")
+        
+    except Exception as e:
+        logger.error(f"Failed to read Excel file: {e}")
+        raise ValueError(f"Failed to read Excel file {excel_filepath}: {e}")
+    
+    # Validate required columns exist
+    required_columns = [description_column, category_column, source_sheet_column]
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    
+    if missing_columns:
+        available_columns = list(df.columns)
+        logger.error(f"Missing required columns: {missing_columns}")
+        logger.error(f"Available columns: {available_columns}")
+        raise ValueError(f"Missing required columns: {missing_columns}. Available columns: {available_columns}")
+    
+    # Clean and validate data
+    logger.info("Cleaning and validating data...")
+    
+    # Remove rows where description is empty or null
+    initial_count = len(df)
+    df = df.dropna(subset=[description_column])
+    df = df[df[description_column].astype(str).str.strip() != '']
+    
+    if len(df) < initial_count:
+        logger.warning(f"Removed {initial_count - len(df)} rows with empty descriptions")
+    
+    # Clean description column
+    df[description_column] = df[description_column].astype(str).str.strip()
+    
+    # Clean category column and filter for rows with categories
+    df[category_column] = df[category_column].astype(str).str.strip()
+    df = df[df[category_column] != '']
+    df = df[df[category_column] != 'nan']
+    
+    if len(df) == 0:
+        logger.warning("No valid categorizations found in the file")
+        return {}
+    
+    # Clean source sheet column
+    if source_sheet_column in df.columns:
+        df[source_sheet_column] = df[source_sheet_column].astype(str).str.strip()
+        df[source_sheet_column] = df[source_sheet_column].replace('nan', 'Unknown')
+    
+    # Clean notes column
+    if notes_column in df.columns:
+        df[notes_column] = df[notes_column].astype(str).str.strip()
+        df[notes_column] = df[notes_column].replace('nan', '')
+    
+    # Create mapping dictionary
+    categorization_mapping = {}
+    duplicate_descriptions = []
+    
+    for index, row in df.iterrows():
+        description = str(row[description_column]).lower()  # Normalize to lowercase
+        category = str(row[category_column])
+        
+        # Check for duplicates
+        if description in categorization_mapping:
+            duplicate_descriptions.append(description)
+            logger.warning(f"Duplicate description found: '{description}' with categories '{categorization_mapping[description]}' and '{category}'")
+            # Keep the last occurrence (most recent)
+        
+        categorization_mapping[description] = category
+    
+    # Log summary
+    logger.info(f"Successfully processed {len(categorization_mapping)} manual categorizations")
+    if duplicate_descriptions:
+        logger.warning(f"Found {len(set(duplicate_descriptions))} duplicate descriptions")
+    
+    # Validate mapping quality
+    _validate_categorization_mapping(categorization_mapping)
+    
+    return categorization_mapping
+
+
+def _validate_categorization_mapping(mapping: Dict[str, str]) -> None:
+    """
+    Validate the categorization mapping for quality issues
+    
+    Args:
+        mapping: Dictionary mapping descriptions to categories
+        
+    Raises:
+        ValueError: If validation fails
+    """
+    if not mapping:
+        logger.warning("Empty categorization mapping")
+        return
+    
+    # Check for empty or invalid categories
+    invalid_categories = []
+    for description, category in mapping.items():
+        if not category or category.strip() == '':
+            invalid_categories.append(description)
+    
+    if invalid_categories:
+        logger.warning(f"Found {len(invalid_categories)} descriptions with empty categories")
+        for desc in invalid_categories[:5]:  # Show first 5
+            logger.warning(f"  Empty category for: '{desc}'")
+    
+    # Check for very short descriptions (potential data quality issues)
+    short_descriptions = [desc for desc in mapping.keys() if len(desc.strip()) < 3]
+    if short_descriptions:
+        logger.warning(f"Found {len(short_descriptions)} very short descriptions (< 3 chars)")
+        for desc in short_descriptions[:5]:  # Show first 5
+            logger.warning(f"  Very short description: '{desc}'")
+    
+    # Check category distribution
+    category_counts = {}
+    for category in mapping.values():
+        category_counts[category] = category_counts.get(category, 0) + 1
+    
+    logger.info(f"Category distribution: {category_counts}")
+    
+    # Warn if any category has very few items (potential typos)
+    for category, count in category_counts.items():
+        if count == 1:
+            logger.info(f"Category '{category}' has only 1 item - verify spelling")
+
+
+def validate_excel_file_structure(filepath: Path) -> Dict[str, Any]:
+    """
+    Validate the structure of a manual categorization Excel file
+    
+    Args:
+        filepath: Path to the Excel file
+        
+    Returns:
+        Dictionary with validation results
+    """
+    logger.info(f"Validating Excel file structure: {filepath}")
+    
+    validation_result = {
+        'is_valid': False,
+        'errors': [],
+        'warnings': [],
+        'file_info': {},
+        'sheet_info': {}
+    }
+    
+    try:
+        # Check if file exists
+        if not filepath.exists():
+            validation_result['errors'].append(f"File not found: {filepath}")
+            return validation_result
+        
+        # Load workbook
+        wb = openpyxl.load_workbook(filepath, read_only=True)
+        
+        # Check required sheets
+        required_sheets = ["Categorization", "Instructions"]
+        missing_sheets = [sheet for sheet in required_sheets if sheet not in wb.sheetnames]
+        
+        if missing_sheets:
+            validation_result['errors'].append(f"Missing required sheets: {missing_sheets}")
+            validation_result['errors'].append(f"Available sheets: {wb.sheetnames}")
+        else:
+            validation_result['sheet_info']['available_sheets'] = wb.sheetnames
+        
+        # Check Categorization sheet structure
+        if "Categorization" in wb.sheetnames:
+            ws = wb["Categorization"]
+            
+            # Check headers
+            expected_headers = ["Description", "Source_Sheet", "Frequency", "Category", "Notes"]
+            actual_headers = []
+            
+            for col in range(1, 6):  # First 5 columns
+                cell_value = ws.cell(row=1, column=col).value
+                actual_headers.append(str(cell_value) if cell_value else "")
+            
+            missing_headers = [h for h in expected_headers if h not in actual_headers]
+            if missing_headers:
+                validation_result['errors'].append(f"Missing headers: {missing_headers}")
+                validation_result['warnings'].append(f"Actual headers: {actual_headers}")
+            else:
+                validation_result['sheet_info']['headers'] = actual_headers
+            
+            # Check data rows
+            data_row_count = 0
+            for row in range(2, ws.max_row + 1):
+                description = ws.cell(row=row, column=1).value
+                if description and str(description).strip():
+                    data_row_count += 1
+            
+            validation_result['sheet_info']['data_rows'] = data_row_count
+            
+            if data_row_count == 0:
+                validation_result['warnings'].append("No data rows found in Categorization sheet")
+        
+        # File information
+        validation_result['file_info'] = {
+            'file_size': filepath.stat().st_size,
+            'last_modified': datetime.fromtimestamp(filepath.stat().st_mtime),
+            'file_path': str(filepath)
+        }
+        
+        # Determine if file is valid
+        validation_result['is_valid'] = len(validation_result['errors']) == 0
+        
+        logger.info(f"Validation completed. Valid: {validation_result['is_valid']}")
+        if validation_result['errors']:
+            logger.error(f"Validation errors: {validation_result['errors']}")
+        if validation_result['warnings']:
+            logger.warning(f"Validation warnings: {validation_result['warnings']}")
+        
+        return validation_result
+        
+    except Exception as e:
+        validation_result['errors'].append(f"Error during validation: {e}")
+        logger.error(f"Validation error: {e}")
+        return validation_result
+
+
+def get_categorization_statistics(mapping: Dict[str, str]) -> Dict[str, Any]:
+    """
+    Generate statistics about manual categorizations
+    
+    Args:
+        mapping: Dictionary mapping descriptions to categories
+        
+    Returns:
+        Dictionary with statistics
+    """
+    if not mapping:
+        return {
+            'total_categorizations': 0,
+            'unique_categories': 0,
+            'category_distribution': {},
+            'average_description_length': 0,
+            'shortest_description': '',
+            'longest_description': ''
+        }
+    
+    # Basic counts
+    total_categorizations = len(mapping)
+    unique_categories = len(set(mapping.values()))
+    
+    # Category distribution
+    category_distribution = {}
+    for category in mapping.values():
+        category_distribution[category] = category_distribution.get(category, 0) + 1
+    
+    # Description length statistics
+    description_lengths = [len(desc) for desc in mapping.keys()]
+    avg_length = sum(description_lengths) / len(description_lengths)
+    
+    shortest_desc = min(mapping.keys(), key=len)
+    longest_desc = max(mapping.keys(), key=len)
+    
+    return {
+        'total_categorizations': total_categorizations,
+        'unique_categories': unique_categories,
+        'category_distribution': category_distribution,
+        'average_description_length': round(avg_length, 2),
+        'shortest_description': shortest_desc,
+        'longest_description': longest_desc,
+        'description_length_range': f"{min(description_lengths)} - {max(description_lengths)}"
+    } 
