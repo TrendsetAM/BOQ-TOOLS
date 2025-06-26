@@ -7,7 +7,7 @@ import logging
 import pandas as pd
 from typing import Dict, List, Tuple, Optional, Any, Callable
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from core.category_dictionary import CategoryDictionary, CategoryMatch
 
@@ -22,7 +22,7 @@ class UnmatchedDescription:
     row_number: int
     original_index: int
     frequency: int = 1
-    sample_rows: List[int] = None
+    sample_rows: List[int] = field(default_factory=list)
 
 
 @dataclass
@@ -35,6 +35,14 @@ class CategorizationResult:
     matched_rows: int
     unmatched_rows: int
     match_rate: float
+
+
+# Helper function to safely convert index to int
+def safe_int(val):
+    try:
+        return int(val)
+    except Exception:
+        return 0
 
 
 def collect_unmatched_descriptions(dataframe: pd.DataFrame,
@@ -83,8 +91,8 @@ def collect_unmatched_descriptions(dataframe: pd.DataFrame,
         normalized_desc = description.lower()
         
         # Get source information
-        source_sheet = row.get(sheet_name_column, 'Unknown') if sheet_name_column else 'Unknown'
-        row_number = index + 1  # Convert to 1-based row numbering
+        source_sheet = str(row.get(sheet_name_column, 'Unknown')) if sheet_name_column else 'Unknown'
+        row_number = safe_int(index) + 1  # Convert to 1-based row numbering
         
         if normalized_desc in unique_descriptions:
             # Update existing entry
@@ -98,7 +106,7 @@ def collect_unmatched_descriptions(dataframe: pd.DataFrame,
                 description=description,
                 source_sheet_name=source_sheet,
                 row_number=row_number,
-                original_index=index,
+                original_index=safe_int(index),
                 frequency=1,
                 sample_rows=[row_number]
             )
@@ -174,32 +182,33 @@ def auto_categorize_dataset(dataframe: pd.DataFrame,
     # Process each row
     for index, row in df.iterrows():
         try:
-            # Get description from the row
             description = str(row[description_column]).strip()
-            
             if not description or description.lower() in ['nan', 'none', '']:
-                # Skip empty descriptions
                 unmatched_rows += 1
                 continue
-            
-            # Look up category in dictionary
+
             match = category_dictionary.find_category(description, confidence_threshold)
-            
-            # Track match statistics
             match_types[match.match_type] += 1
-            
+
             if match.matched_category:
-                # Assign the matched category
                 df.at[index, category_column] = match.matched_category
                 matched_rows += 1
-                logger.debug(f"Row {index}: '{description[:50]}...' -> {match.matched_category} "
-                           f"(confidence: {match.confidence:.2f}, type: {match.match_type})")
+                if match.match_type == 'fuzzy':
+                    # Find the best matching dictionary string for fuzzy
+                    best_dict_str = None
+                    best_similarity = 0.0
+                    for dict_desc, mapping in category_dictionary.mappings.items():
+                        similarity = category_dictionary._calculate_fuzzy_similarity(description.lower().strip(), dict_desc)
+                        if similarity > best_similarity:
+                            best_similarity = similarity
+                            best_dict_str = dict_desc
+                    print(f"[CATEGORIZATION] '{description}' → '{match.matched_category}' (type: {match.match_type}, confidence: {match.confidence:.2f}, matched to: '{best_dict_str}')")
+                else:
+                    print(f"[CATEGORIZATION] '{description}' → '{match.matched_category}' (type: {match.match_type}, confidence: {match.confidence:.2f})")
             else:
-                # No match found
                 df.at[index, category_column] = ''
                 unmatched_rows += 1
-                unmatched_descriptions.append(description)
-                logger.debug(f"Row {index}: '{description[:50]}...' -> No match")
+                print(f"[CATEGORIZATION] '{description}' → UNMATCHED")
             
             # Progress callback
             if progress_callback:

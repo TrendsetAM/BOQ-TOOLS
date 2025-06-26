@@ -5726,3 +5726,171 @@ UnboundLocalError: cannot access local variable 'logging' where it is not associ
 2025-06-27 00:17:01,440 [INFO] core.manual_categorizer:     - 'Topographical survey...'
 2025-06-27 00:17:01,441 [INFO] core.manual_categorizer:     - 'Geological and geotechnical including surveys and electrical...'
 2025-06-27 00:17:01,441 [INFO] core.manual_categorizer:     - 'Underground investigation of existing utilities / foundation...'
+2025-06-27 00:24:14,116 [INFO] root: Logging system initialized
+2025-06-27 00:24:14,116 [INFO] root: Configuration loaded successfully
+2025-06-27 00:24:14,117 [INFO] core.sheet_classifier: Sheet Classifier initialized
+2025-06-27 00:24:14,118 [INFO] core.column_mapper: Loaded canonical mappings from C:\Users\Admin\AppData\Roaming\BOQ-TOOLS\canonical_mappings.json
+2025-06-27 00:24:14,119 [INFO] core.column_mapper: Column Mapper initialized
+2025-06-27 00:24:14,119 [INFO] core.row_classifier: Row Classifier initialized
+2025-06-27 00:24:14,119 [INFO] core.validator: Data Validator initialized
+2025-06-27 00:24:14,119 [INFO] core.mapping_generator: Mapping Generator initialized
+2025-06-27 00:24:14,120 [INFO] utils.export: ExcelExporter initialized.
+2025-06-27 00:24:14,120 [INFO] root: Core components initialized successfully
+2025-06-27 00:24:14,121 [INFO] root: Settings loaded successfully
+2025-06-27 00:24:14,121 [INFO] root: BOQ Tools v1.0.0 initialized successfully
+2025-06-27 00:24:20,091 [INFO] core.file_processor: Detected file format: xlsx
+2025-06-27 00:24:20,652 [INFO] core.file_processor: Successfully loaded Excel file: GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-06-27 00:24:20,652 [INFO] core.file_processor: Total sheets: 35
+2025-06-27 00:24:20,653 [INFO] core.file_processor: Found 12 visible sheets out of 35 total
+2025-06-27 00:24:30,147 [INFO] root: Processing file: C:\Users\Admin\Documents\GitHub\BOQ-TOOLS\examples\GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-06-27 00:24:30,147 [INFO] core.file_processor: Detected file format: xlsx
+2025-06-27 00:24:30,708 [INFO] core.file_processor: Successfully loaded Excel file: GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-06-27 00:24:30,708 [INFO] core.file_processor: Total sheets: 35
+2025-06-27 00:24:30,709 [INFO] core.file_processor: Found 12 visible sheets out of 35 total
+2025-06-27 00:24:30,710 [INFO] core.file_processor: Found 12 visible sheets out of 35 total
+2025-06-27 00:24:30,862 [INFO] core.column_mapper: Processing sheet mapping for 107 rows
+2025-06-27 00:24:30,866 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-06-27 00:24:30,868 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.63
+2025-06-27 00:24:30,868 [INFO] core.row_classifier: Classifying 107 rows
+2025-06-27 00:24:30,966 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 42, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 65}
+2025-06-27 00:24:30,969 [INFO] core.mapping_generator: Generating unified file mapping structure
+2025-06-27 00:24:30,969 [INFO] core.mapping_generator: File mapping generated successfully: 1 sheets, global confidence: 0.59
+2025-06-27 00:24:30,969 [INFO] root: File processing completed: C:\Users\Admin\Documents\GitHub\BOQ-TOOLS\examples\GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-06-27 00:24:38,717 [INFO] core.row_classifier: Row Classifier initialized
+2025-06-27 00:24:38,717 [INFO] core.column_mapper: Processing sheet mapping for 107 rows
+2025-06-27 00:24:38,720 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-06-27 00:24:38,723 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.63
+2025-06-27 00:24:38,725 [INFO] core.row_classifier: Classifying 107 rows
+2025-06-27 00:24:38,819 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 42, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 65}
+2025-06-27 00:24:41,372 [INFO] ui.main_window: Categorization: Processed 1 BOQ sheets, 42 valid rows for DataFrame.
+2025-06-27 00:24:41,373 [INFO] ui.main_window: Categorization: DataFrame columns: ['ignore', 'remarks', 'code', 'Description', 'unit', 'quantity', 'unit_price', 'total_price', 'Source_Sheet']
+2025-06-27 00:24:41,377 [INFO] ui.main_window: Categorization: First 3 rows: [{'ignore': '', 'remarks': '', 'code': '', 'Description': 'Cost of Bank Guarantee (Down Payment, Execution, Warranty - exclusion of FX, Tracker, SI, PCU, TC supply)', 'unit': 'ls', 'quantity': '1', 'unit_price': '115580', 'total_price': '115580', 'Source_Sheet': 'Miscellaneous'}, {'ignore': '', 'remarks': '', 'code': '', 'Description': 'Cleaning of the PV Modules to be carried out immediately before the final electrification and anyway in order to guarantee the optimal performance of the PV Park from the beginning.', 'unit': 'N° PV Modules', 'quantity': '15390', 'unit_price': '2.528438888605358', 'total_price': '38912.674495636464', 'Source_Sheet': 'Miscellaneous'}, {'ignore': '', 'remarks': 'Applicable For LS', 'code': '', 'Description': 'Topographical survey', 'unit': 'ls', 'quantity': '1', 'unit_price': '7848.274310231031', 'total_price': '7848.274310231031', 'Source_Sheet': 'Miscellaneous'}]
+2025-06-27 00:24:41,378 [INFO] ui.main_window: Categorization: First 10 Description values: ['Cost of Bank Guarantee (Down Payment, Execution, Warranty - exclusion of FX, Tracker, SI, PCU, TC supply)', 'Cleaning of the PV Modules to be carried out immediately before the final electrification and anyway in order to guarantee the optimal performance of the PV Park from the beginning.', 'Topographical survey', 'Geological and geotechnical including surveys and electrical grounding parameters.', 'Underground investigation of existing utilities / foundations', 'Executive Civil Design', 'Red Lines Civil Design', 'External Roads Executive Design', 'External Roads Red Lines Design', 'As Built Civil Design']
+2025-06-27 00:24:41,433 [INFO] core.category_dictionary: Loaded 906 mappings from config\category_dictionary.json
+2025-06-27 00:24:41,434 [INFO] core.category_dictionary: Category Dictionary initialized with 906 mappings
+2025-06-27 00:24:41,436 [INFO] core.auto_categorizer: Starting automatic categorization of 42 rows
+2025-06-27 00:24:41,564 [INFO] core.auto_categorizer: Categorization completed:
+2025-06-27 00:24:41,564 [INFO] core.auto_categorizer:   Total rows: 42
+2025-06-27 00:24:41,565 [INFO] core.auto_categorizer:   Matched rows: 40 (95.2%)
+2025-06-27 00:24:41,565 [INFO] core.auto_categorizer:   Unmatched rows: 2
+2025-06-27 00:24:41,565 [INFO] core.auto_categorizer:   Match types: {'exact': 38, 'partial': 0, 'fuzzy': 2, 'none': 2}
+2025-06-27 00:24:41,565 [INFO] core.auto_categorizer:   Unique categories assigned: 6
+2025-06-27 00:24:41,570 [INFO] core.auto_categorizer: Collecting unmatched descriptions from 42 rows
+2025-06-27 00:24:41,571 [INFO] core.auto_categorizer: Found 2 rows with unmatched descriptions
+2025-06-27 00:24:41,571 [INFO] core.auto_categorizer: Collected 2 unique unmatched descriptions
+2025-06-27 00:24:41,572 [INFO] core.auto_categorizer: Total frequency: 2
+2025-06-27 00:24:41,572 [INFO] core.auto_categorizer: Frequency statistics:
+2025-06-27 00:24:41,572 [INFO] core.auto_categorizer:   Max frequency: 1
+2025-06-27 00:24:41,572 [INFO] core.auto_categorizer:   Min frequency: 1
+2025-06-27 00:24:41,572 [INFO] core.auto_categorizer:   Average frequency: 1.00
+2025-06-27 00:24:41,572 [INFO] core.auto_categorizer: Top 5 unmatched descriptions:
+2025-06-27 00:24:41,572 [INFO] core.auto_categorizer:   1. 'All necessary measures to minimize the impacts of the projec...' (frequency: 1)
+2025-06-27 00:24:41,573 [INFO] core.auto_categorizer:   2. 'Unloading and Storage of PV Modules...' (frequency: 1)
+2025-06-27 00:24:41,574 [INFO] core.manual_categorizer: Generating manual categorization Excel file for 2 descriptions
+2025-06-27 00:24:41,616 [INFO] core.manual_categorizer: Manual categorization Excel file created: examples\manual_categorization_20250627_002441.xlsx
+2025-06-27 00:24:41,626 [INFO] core.manual_categorizer: Processing manual categorizations from examples\manual_categorization_20250627_002441.xlsx
+2025-06-27 00:24:41,669 [INFO] core.manual_categorizer: Successfully loaded Excel file with 2 rows
+2025-06-27 00:24:41,669 [INFO] core.manual_categorizer: Cleaning and validating data...
+2025-06-27 00:24:41,673 [WARNING] core.manual_categorizer: No valid categorizations found in the file
+2025-06-27 00:24:41,674 [INFO] core.manual_categorizer: Applying 0 manual categorizations to DataFrame
+2025-06-27 00:24:41,675 [INFO] core.manual_categorizer: Initial unmatched rows: 2
+2025-06-27 00:24:41,678 [INFO] core.manual_categorizer: Manual categorization application completed:
+2025-06-27 00:24:41,680 [INFO] core.manual_categorizer:   Total rows: 42
+2025-06-27 00:24:41,680 [INFO] core.manual_categorizer:   Initial unmatched: 2
+2025-06-27 00:24:41,680 [INFO] core.manual_categorizer:   Rows updated: 0
+2025-06-27 00:24:41,680 [INFO] core.manual_categorizer:   Final unmatched: 2
+2025-06-27 00:24:41,681 [INFO] core.manual_categorizer:   Coverage rate: 95.2%
+2025-06-27 00:24:41,681 [INFO] core.manual_categorizer:   Exact matches: 0
+2025-06-27 00:24:41,681 [INFO] core.manual_categorizer:   Case-insensitive matches: 0
+2025-06-27 00:24:41,681 [INFO] core.manual_categorizer:   Remaining unmatched descriptions: 2
+2025-06-27 00:24:41,681 [INFO] core.manual_categorizer:   Sample remaining unmatched:
+2025-06-27 00:24:41,682 [INFO] core.manual_categorizer:     - 'All necessary measures to minimize the impacts of the projec...'
+2025-06-27 00:24:41,682 [INFO] core.manual_categorizer:     - 'Unloading and Storage of PV Modules...'
+2025-06-27 00:24:41,684 [INFO] core.manual_categorizer: Updating master dictionary with 0 manual categorizations...
+2025-06-27 00:24:41,688 [INFO] core.manual_categorizer: Backup of old dictionary created at: examples\dict_backups\category_dictionary_20250627_002441.json
+2025-06-27 00:24:41,709 [INFO] core.category_dictionary: Dictionary saved to config\category_dictionary.json
+2025-06-27 00:24:41,709 [INFO] core.manual_categorizer: Updated dictionary saved to config\category_dictionary.json
+2025-06-27 00:31:39,778 [INFO] root: Logging system initialized
+2025-06-27 00:31:39,779 [INFO] root: Configuration loaded successfully
+2025-06-27 00:31:39,779 [INFO] core.sheet_classifier: Sheet Classifier initialized
+2025-06-27 00:31:39,780 [INFO] core.column_mapper: Loaded canonical mappings from C:\Users\Admin\AppData\Roaming\BOQ-TOOLS\canonical_mappings.json
+2025-06-27 00:31:39,781 [INFO] core.column_mapper: Column Mapper initialized
+2025-06-27 00:31:39,781 [INFO] core.row_classifier: Row Classifier initialized
+2025-06-27 00:31:39,781 [INFO] core.validator: Data Validator initialized
+2025-06-27 00:31:39,781 [INFO] core.mapping_generator: Mapping Generator initialized
+2025-06-27 00:31:39,782 [INFO] utils.export: ExcelExporter initialized.
+2025-06-27 00:31:39,782 [INFO] root: Core components initialized successfully
+2025-06-27 00:31:39,783 [INFO] root: Settings loaded successfully
+2025-06-27 00:31:39,783 [INFO] root: BOQ Tools v1.0.0 initialized successfully
+2025-06-27 00:31:50,470 [INFO] core.file_processor: Detected file format: xlsx
+2025-06-27 00:31:51,268 [INFO] core.file_processor: Successfully loaded Excel file: GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-06-27 00:31:51,269 [INFO] core.file_processor: Total sheets: 35
+2025-06-27 00:31:51,269 [INFO] core.file_processor: Found 12 visible sheets out of 35 total
+2025-06-27 00:32:00,745 [INFO] root: Processing file: C:\Users\Admin\Documents\GitHub\BOQ-TOOLS\examples\GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-06-27 00:32:00,746 [INFO] core.file_processor: Detected file format: xlsx
+2025-06-27 00:32:01,308 [INFO] core.file_processor: Successfully loaded Excel file: GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-06-27 00:32:01,308 [INFO] core.file_processor: Total sheets: 35
+2025-06-27 00:32:01,309 [INFO] core.file_processor: Found 12 visible sheets out of 35 total
+2025-06-27 00:32:01,310 [INFO] core.file_processor: Found 12 visible sheets out of 35 total
+2025-06-27 00:32:01,473 [INFO] core.column_mapper: Processing sheet mapping for 107 rows
+2025-06-27 00:32:01,477 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-06-27 00:32:01,480 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.63
+2025-06-27 00:32:01,481 [INFO] core.row_classifier: Classifying 107 rows
+2025-06-27 00:32:01,571 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 42, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 65}
+2025-06-27 00:32:01,573 [INFO] core.mapping_generator: Generating unified file mapping structure
+2025-06-27 00:32:01,573 [INFO] core.mapping_generator: File mapping generated successfully: 1 sheets, global confidence: 0.59
+2025-06-27 00:32:01,574 [INFO] root: File processing completed: C:\Users\Admin\Documents\GitHub\BOQ-TOOLS\examples\GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-06-27 00:32:05,704 [INFO] core.row_classifier: Row Classifier initialized
+2025-06-27 00:32:05,705 [INFO] core.column_mapper: Processing sheet mapping for 107 rows
+2025-06-27 00:32:05,708 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-06-27 00:32:05,711 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.63
+2025-06-27 00:32:05,713 [INFO] core.row_classifier: Classifying 107 rows
+2025-06-27 00:32:05,802 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 42, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 65}
+2025-06-27 00:32:07,883 [INFO] ui.main_window: Categorization: Processed 1 BOQ sheets, 42 valid rows for DataFrame.
+2025-06-27 00:32:07,884 [INFO] ui.main_window: Categorization: DataFrame columns: ['ignore', 'remarks', 'code', 'Description', 'unit', 'quantity', 'unit_price', 'total_price', 'Source_Sheet']
+2025-06-27 00:32:07,886 [INFO] ui.main_window: Categorization: First 3 rows: [{'ignore': '', 'remarks': '', 'code': '', 'Description': 'Cost of Bank Guarantee (Down Payment, Execution, Warranty - exclusion of FX, Tracker, SI, PCU, TC supply)', 'unit': 'ls', 'quantity': '1', 'unit_price': '115580', 'total_price': '115580', 'Source_Sheet': 'Miscellaneous'}, {'ignore': '', 'remarks': '', 'code': '', 'Description': 'Cleaning of the PV Modules to be carried out immediately before the final electrification and anyway in order to guarantee the optimal performance of the PV Park from the beginning.', 'unit': 'N° PV Modules', 'quantity': '15390', 'unit_price': '2.528438888605358', 'total_price': '38912.674495636464', 'Source_Sheet': 'Miscellaneous'}, {'ignore': '', 'remarks': 'Applicable For LS', 'code': '', 'Description': 'Topographical survey', 'unit': 'ls', 'quantity': '1', 'unit_price': '7848.274310231031', 'total_price': '7848.274310231031', 'Source_Sheet': 'Miscellaneous'}]
+2025-06-27 00:32:07,887 [INFO] ui.main_window: Categorization: First 10 Description values: ['Cost of Bank Guarantee (Down Payment, Execution, Warranty - exclusion of FX, Tracker, SI, PCU, TC supply)', 'Cleaning of the PV Modules to be carried out immediately before the final electrification and anyway in order to guarantee the optimal performance of the PV Park from the beginning.', 'Topographical survey', 'Geological and geotechnical including surveys and electrical grounding parameters.', 'Underground investigation of existing utilities / foundations', 'Executive Civil Design', 'Red Lines Civil Design', 'External Roads Executive Design', 'External Roads Red Lines Design', 'As Built Civil Design']
+2025-06-27 00:32:07,937 [INFO] core.category_dictionary: Loaded 906 mappings from config\category_dictionary.json
+2025-06-27 00:32:07,939 [INFO] core.category_dictionary: Category Dictionary initialized with 906 mappings
+2025-06-27 00:32:07,959 [INFO] core.auto_categorizer: Starting automatic categorization of 42 rows
+2025-06-27 00:32:08,107 [INFO] core.auto_categorizer: Categorization completed:
+2025-06-27 00:32:08,107 [INFO] core.auto_categorizer:   Total rows: 42
+2025-06-27 00:32:08,108 [INFO] core.auto_categorizer:   Matched rows: 40 (95.2%)
+2025-06-27 00:32:08,108 [INFO] core.auto_categorizer:   Unmatched rows: 2
+2025-06-27 00:32:08,108 [INFO] core.auto_categorizer:   Match types: {'exact': 38, 'partial': 0, 'fuzzy': 2, 'none': 2}
+2025-06-27 00:32:08,108 [INFO] core.auto_categorizer:   Unique categories assigned: 6
+2025-06-27 00:32:08,112 [INFO] core.auto_categorizer: Collecting unmatched descriptions from 42 rows
+2025-06-27 00:32:08,116 [INFO] core.auto_categorizer: Found 2 rows with unmatched descriptions
+2025-06-27 00:32:08,116 [INFO] core.auto_categorizer: Collected 2 unique unmatched descriptions
+2025-06-27 00:32:08,117 [INFO] core.auto_categorizer: Total frequency: 2
+2025-06-27 00:32:08,117 [INFO] core.auto_categorizer: Frequency statistics:
+2025-06-27 00:32:08,117 [INFO] core.auto_categorizer:   Max frequency: 1
+2025-06-27 00:32:08,117 [INFO] core.auto_categorizer:   Min frequency: 1
+2025-06-27 00:32:08,117 [INFO] core.auto_categorizer:   Average frequency: 1.00
+2025-06-27 00:32:08,117 [INFO] core.auto_categorizer: Top 5 unmatched descriptions:
+2025-06-27 00:32:08,118 [INFO] core.auto_categorizer:   1. 'All necessary measures to minimize the impacts of the projec...' (frequency: 1)
+2025-06-27 00:32:08,118 [INFO] core.auto_categorizer:   2. 'Unloading and Storage of PV Modules...' (frequency: 1)
+2025-06-27 00:32:08,121 [INFO] core.manual_categorizer: Generating manual categorization Excel file for 2 descriptions
+2025-06-27 00:32:08,159 [INFO] core.manual_categorizer: Manual categorization Excel file created: examples\manual_categorization_20250627_003208.xlsx
+2025-06-27 00:32:08,167 [INFO] core.manual_categorizer: Processing manual categorizations from examples\manual_categorization_20250627_003208.xlsx
+2025-06-27 00:32:08,203 [INFO] core.manual_categorizer: Successfully loaded Excel file with 2 rows
+2025-06-27 00:32:08,204 [INFO] core.manual_categorizer: Cleaning and validating data...
+2025-06-27 00:32:08,209 [WARNING] core.manual_categorizer: No valid categorizations found in the file
+2025-06-27 00:32:08,214 [INFO] core.manual_categorizer: Applying 0 manual categorizations to DataFrame
+2025-06-27 00:32:08,215 [INFO] core.manual_categorizer: Initial unmatched rows: 2
+2025-06-27 00:32:08,218 [INFO] core.manual_categorizer: Manual categorization application completed:
+2025-06-27 00:32:08,218 [INFO] core.manual_categorizer:   Total rows: 42
+2025-06-27 00:32:08,218 [INFO] core.manual_categorizer:   Initial unmatched: 2
+2025-06-27 00:32:08,218 [INFO] core.manual_categorizer:   Rows updated: 0
+2025-06-27 00:32:08,219 [INFO] core.manual_categorizer:   Final unmatched: 2
+2025-06-27 00:32:08,219 [INFO] core.manual_categorizer:   Coverage rate: 95.2%
+2025-06-27 00:32:08,219 [INFO] core.manual_categorizer:   Exact matches: 0
+2025-06-27 00:32:08,219 [INFO] core.manual_categorizer:   Case-insensitive matches: 0
+2025-06-27 00:32:08,219 [INFO] core.manual_categorizer:   Remaining unmatched descriptions: 2
+2025-06-27 00:32:08,219 [INFO] core.manual_categorizer:   Sample remaining unmatched:
+2025-06-27 00:32:08,220 [INFO] core.manual_categorizer:     - 'All necessary measures to minimize the impacts of the projec...'
+2025-06-27 00:32:08,220 [INFO] core.manual_categorizer:     - 'Unloading and Storage of PV Modules...'
+2025-06-27 00:32:08,222 [INFO] core.manual_categorizer: Updating master dictionary with 0 manual categorizations...
+2025-06-27 00:32:08,227 [INFO] core.manual_categorizer: Backup of old dictionary created at: examples\dict_backups\category_dictionary_20250627_003208.json
+2025-06-27 00:32:08,249 [INFO] core.category_dictionary: Dictionary saved to config\category_dictionary.json
+2025-06-27 00:32:08,249 [INFO] core.manual_categorizer: Updated dictionary saved to config\category_dictionary.json
