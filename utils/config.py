@@ -28,6 +28,7 @@ class ColumnType(Enum):
     UNIT = "unit"
     CODE = "code"
     REMARKS = "remarks"
+    IGNORE = "ignore"
 
 
 @dataclass

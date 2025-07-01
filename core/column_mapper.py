@@ -646,10 +646,10 @@ class ColumnMapper:
                     mapping.reasoning.append(f"Demoted from '{original_type}' to '{second_best_type.value}' due to uniqueness constraint.")
                     logger.debug(f"Demoted column '{mapping.original_header}' from {original_type} to {second_best_type.value} (uniqueness constraint)")
                 else:
-                    mapping.mapped_type = ColumnType.REMARKS
+                    mapping.mapped_type = ColumnType.IGNORE
                     mapping.confidence = 0.0
-                    mapping.reasoning.append(f"Demoted from '{original_type}' to 'remarks' due to uniqueness constraint (no alternatives).")
-                    logger.debug(f"Demoted column '{mapping.original_header}' from {original_type} to remarks (uniqueness constraint, no alternatives)")
+                    mapping.reasoning.append(f"Demoted from '{original_type}' to 'ignore' due to uniqueness constraint (no alternatives).")
+                    logger.debug(f"Demoted column '{mapping.original_header}' from {original_type} to ignore (uniqueness constraint, no alternatives)")
         return all_mappings
     
     def _find_best_column_match(self, normalized_header: str, col_idx: int, 

@@ -583,7 +583,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             return
         # Radio button options for mapped type
         mapped_type_options = [
-            "description", "quantity", "unit_price", "total_price", "unit", "code", "remarks", "ignore"
+            "description", "quantity", "unit_price", "total_price", "unit", "code", "ignore"
         ]
         required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
         # Dialog to edit mapped type
