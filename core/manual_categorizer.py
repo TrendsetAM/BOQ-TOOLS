@@ -135,7 +135,7 @@ def _setup_categorization_sheet(worksheet, review_descriptions: List,
     # Set up data validation for Category column
     category_validation = DataValidation(
         type="list",
-        formula1=f'"{",".join(available_categories)}"',
+        formula1=f'"{",".join(get_manual_categorization_categories())}"',
         allow_blank=True,
         showErrorMessage=True,
         errorTitle="Invalid Category",
@@ -200,7 +200,7 @@ def _setup_instructions_sheet(worksheet, available_categories: List[str]):
         ("", "3. Optionally add notes in the 'Notes' column"),
         ("", "4. Save the file when complete"),
         ("", ""),
-        ("Available Categories", f"The following categories are available: {', '.join(available_categories)}"),
+        ("Available Categories", f"The following categories are available: {', '.join(get_manual_categorization_categories())}"),
         ("", ""),
         ("Tips", "- Descriptions are sorted by frequency (most frequent first)"),
         ("", "- Use the 'Notes' column to record any special considerations"),
@@ -208,7 +208,7 @@ def _setup_instructions_sheet(worksheet, available_categories: List[str]):
         ("", "- You can add new categories by editing the dropdown list"),
         ("", ""),
         ("File Information", f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"),
-        ("", f"Total descriptions to categorize: {len(available_categories)}")
+        ("", f"Total descriptions to categorize: {len(get_manual_categorization_categories())}")
     ]
     
     # Add instructions to worksheet
@@ -1215,3 +1215,26 @@ def execute_row_categorization(
             'error': error,
             'traceback': traceback_str
         } 
+
+def get_manual_categorization_categories() -> List[str]:
+    """Get the list of categories for manual categorization in the desired order and format"""
+    return [
+        "General Costs",
+        "Site Costs",
+        "Civil Works",
+        "Earth Movement",
+        "Roads",
+        "OEM Building",
+        "Electrical Works", 
+        "Solar Cables",
+        "LV Cables",
+        "MV Cables",
+        "Trenching",
+        "PV Mod. Installation",
+        "Cleaning and Cabling of PV Mod.",
+        "Tracker Inst.",
+    ]
+
+def get_manual_categorization_categories_lowercase() -> List[str]:
+    """Get the same list but in lowercase for internal processing"""
+    return [cat.lower() for cat in get_manual_categorization_categories()] 
