@@ -688,11 +688,6 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 tree.item(selection[0], tags=("required",))
             else:
                 tree.item(selection[0], tags=())
-            # Show confirmation message
-            messagebox.showinfo(
-                "Mapping Updated", 
-                f"Column '{column_name}' has been mapped to '{new_type}' with 100% confidence.{learning_message}"
-            )
             dialog.destroy()
         
         # Buttons
@@ -795,16 +790,6 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             total_saved += saved
             total_failed += failed
             total_already += already
-        
-        # Show column mapping summary
-        messagebox.showinfo(
-            "Column Mappings Saved",
-            f"Saved {total_saved} new column mappings for all sheets.\n"
-            f"Already present: {total_already}\n"
-            f"Failed: {total_failed}\n\n"
-            f"Now triggering row mapping with updated column mappings..."
-        )
-        self._update_status(f"Saved {total_saved} new column mappings. Triggering row mapping...")
         
         # Trigger row mapping with updated column mappings
         self._trigger_row_mapping()
@@ -945,20 +930,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             
             # Show success message
             if updated_sheets:
-                messagebox.showinfo(
-                    "Row Mapping Complete",
-                    f"Row mapping completed for {len(updated_sheets)} sheets:\n"
-                    f"{', '.join(updated_sheets)}\n\n"
-                    f"The sheet tabs have been updated with the new row classifications."
-                )
                 self._update_status(f"Row mapping completed for {len(updated_sheets)} sheets.")
-            else:
-                messagebox.showwarning(
-                    "Row Mapping Skipped",
-                    "Row mapping was skipped because original sheet data was not available.\n"
-                    "Please reload the file to enable row mapping functionality."
-                )
-                self._update_status("Row mapping skipped - original data not available.")
                 
             # After row mapping is complete and data is available:
             # Show the Row Review section with correct data
