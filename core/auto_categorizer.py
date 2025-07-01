@@ -188,7 +188,7 @@ def auto_categorize_dataset(dataframe: pd.DataFrame,
     matched_rows = 0
     unmatched_rows = 0
     unmatched_descriptions = []
-    match_types = {'exact': 0, 'partial': 0, 'fuzzy': 0, 'none': 0}
+    match_types = {'exact': 0, 'none': 0}
     
     # Add category column if it doesn't exist
     if category_column not in df.columns:
@@ -208,18 +208,7 @@ def auto_categorize_dataset(dataframe: pd.DataFrame,
             if match.matched_category:
                 df.at[index, category_column] = match.matched_category
                 matched_rows += 1
-                if match.match_type == 'fuzzy':
-                    # Find the best matching dictionary string for fuzzy
-                    best_dict_str = None
-                    best_similarity = 0.0
-                    for dict_desc, mapping in category_dictionary.mappings.items():
-                        similarity = category_dictionary._calculate_fuzzy_similarity(description.lower().strip(), dict_desc)
-                        if similarity > best_similarity:
-                            best_similarity = similarity
-                            best_dict_str = dict_desc
-                    print(f"[CATEGORIZATION] '{description}' → '{match.matched_category}' (type: {match.match_type}, confidence: {match.confidence:.2f}, matched to: '{best_dict_str}')")
-                else:
-                    print(f"[CATEGORIZATION] '{description}' → '{match.matched_category}' (type: {match.match_type}, confidence: {match.confidence:.2f})")
+                print(f"[CATEGORIZATION] '{description}' → '{match.matched_category}' (type: {match.match_type}, confidence: {match.confidence:.2f})")
             else:
                 df.at[index, category_column] = ''
                 unmatched_rows += 1
@@ -407,8 +396,6 @@ Unmatched Rows: {stats['unmatched_rows']}
 
 Match Type Breakdown:
   - Exact Matches: {stats['match_types']['exact']}
-  - Partial Matches: {stats['match_types']['partial']}
-  - Fuzzy Matches: {stats['match_types']['fuzzy']}
   - No Matches: {stats['match_types']['none']}
 
 Categories Found: {stats['unique_categories_found']}
@@ -520,24 +507,7 @@ def collect_descriptions_for_manual_review(dataframe: pd.DataFrame,
             # Unmatched - needs review
             needs_review = True
             match_type = 'none'
-        else:
-            # Check if this was a fuzzy or partial match by re-running categorization
-            match = category_dictionary.find_category(description, confidence_threshold)
-            if match.match_type in ['fuzzy', 'partial']:
-                needs_review = True
-                match_type = match.match_type
-                confidence = match.confidence
-                current_category = match.matched_category
-                
-                # For fuzzy matches, find the matched dictionary string
-                if match.match_type == 'fuzzy':
-                    best_similarity = 0.0
-                    for dict_desc, mapping in category_dictionary.mappings.items():
-                        similarity = category_dictionary._calculate_fuzzy_similarity(description.lower().strip(), dict_desc)
-                        if similarity > best_similarity:
-                            best_similarity = similarity
-                            matched_dict_str = dict_desc
-            # Exact matches don't need review
+        # Exact matches don't need review
         
         if needs_review:
             # Normalize description for deduplication

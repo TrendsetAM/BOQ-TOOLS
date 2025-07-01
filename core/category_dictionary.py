@@ -8,7 +8,7 @@ import logging
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Any
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ class CategoryMatch:
     confidence: float
     match_type: str  # 'exact', 'partial', 'fuzzy', 'none'
     original_description: str
-    suggestions: List[str] = None
+    suggestions: List[str] = field(default_factory=list)
 
 
 class CategoryDictionary:
@@ -226,11 +226,11 @@ class CategoryDictionary:
     
     def find_category(self, description: str, threshold: float = 0.8) -> CategoryMatch:
         """
-        Find category for a given description
+        Find category for a given description (exact matches only)
         
         Args:
             description: Item description to categorize
-            threshold: Minimum confidence threshold for matches
+            threshold: Minimum confidence threshold for matches (not used for exact matches)
             
         Returns:
             CategoryMatch with match results
@@ -248,7 +248,7 @@ class CategoryDictionary:
                 suggestions=[]
             )
         
-        # Try exact match first
+        # Try exact match only
         if normalized_desc in self.mappings:
             mapping = self.mappings[normalized_desc]
             mapping.usage_count += 1
@@ -261,49 +261,6 @@ class CategoryDictionary:
                 suggestions=[]
             )
         
-        # Try partial matches
-        partial_matches = []
-        for dict_desc, mapping in self.mappings.items():
-            if self._is_partial_match(normalized_desc, dict_desc):
-                partial_matches.append((mapping, self._calculate_partial_confidence(normalized_desc, dict_desc)))
-        
-        if partial_matches:
-            # Sort by confidence and return best match
-            partial_matches.sort(key=lambda x: x[1], reverse=True)
-            best_match, confidence = partial_matches[0]
-            
-            if confidence >= threshold:
-                best_match.usage_count += 1
-                return CategoryMatch(
-                    description=normalized_desc,
-                    matched_category=best_match.category,
-                    confidence=confidence,
-                    match_type='partial',
-                    original_description=original_desc,
-                    suggestions=[m.category for m, _ in partial_matches[1:3]]  # Top 3 suggestions
-                )
-        
-        # Try fuzzy matching
-        fuzzy_matches = []
-        for dict_desc, mapping in self.mappings.items():
-            similarity = self._calculate_fuzzy_similarity(normalized_desc, dict_desc)
-            if similarity >= threshold:
-                fuzzy_matches.append((mapping, similarity))
-        
-        if fuzzy_matches:
-            fuzzy_matches.sort(key=lambda x: x[1], reverse=True)
-            best_match, confidence = fuzzy_matches[0]
-            
-            best_match.usage_count += 1
-            return CategoryMatch(
-                description=normalized_desc,
-                matched_category=best_match.category,
-                confidence=confidence,
-                match_type='fuzzy',
-                original_description=original_desc,
-                suggestions=[m.category for m, _ in fuzzy_matches[1:3]]
-            )
-        
         # No match found
         return CategoryMatch(
             description=normalized_desc,
@@ -313,72 +270,6 @@ class CategoryDictionary:
             original_description=original_desc,
             suggestions=list(self.categories)[:5]  # Top 5 categories as suggestions
         )
-    
-    def _is_partial_match(self, desc1: str, desc2: str) -> bool:
-        """Check if two descriptions partially match"""
-        words1 = set(desc1.split())
-        words2 = set(desc2.split())
-        
-        if not words1 or not words2:
-            return False
-        
-        # Check if any significant words match
-        common_words = words1.intersection(words2)
-        significant_words = [w for w in common_words if len(w) > 2]  # Ignore short words
-        
-        return len(significant_words) > 0
-    
-    def _calculate_partial_confidence(self, desc1: str, desc2: str) -> float:
-        """Calculate confidence for partial matches"""
-        words1 = set(desc1.split())
-        words2 = set(desc2.split())
-        
-        if not words1 or not words2:
-            return 0.0
-        
-        common_words = words1.intersection(words2)
-        significant_words = [w for w in common_words if len(w) > 2]
-        
-        # Calculate Jaccard similarity for significant words
-        if len(significant_words) == 0:
-            return 0.0
-        
-        union_size = len(words1.union(words2))
-        if union_size == 0:
-            return 0.0
-        
-        return len(significant_words) / union_size
-    
-    def _calculate_fuzzy_similarity(self, desc1: str, desc2: str) -> float:
-        """Calculate fuzzy string similarity using simple algorithm"""
-        if desc1 == desc2:
-            return 1.0
-        
-        if not desc1 or not desc2:
-            return 0.0
-        
-        # Simple character-based similarity
-        len1, len2 = len(desc1), len(desc2)
-        max_len = max(len1, len2)
-        
-        if max_len == 0:
-            return 0.0
-        
-        # Count matching characters in sequence
-        matches = 0
-        i, j = 0, 0
-        
-        while i < len1 and j < len2:
-            if desc1[i] == desc2[j]:
-                matches += 1
-                i += 1
-                j += 1
-            elif len1 > len2:
-                i += 1
-            else:
-                j += 1
-        
-        return matches / max_len
     
     def get_all_categories(self) -> List[str]:
         """Get all available categories"""
