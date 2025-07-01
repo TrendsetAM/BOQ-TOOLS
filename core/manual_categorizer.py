@@ -1127,65 +1127,48 @@ def execute_row_categorization(
         all_stats['review_count'] = len(review_list)
         summary['review_collected'] = True
         
+        # Check if manual categorization is needed
+        if len(review_list) == 0:
+            # All rows were auto-categorized successfully
+            update_progress(100, "All rows auto-categorized successfully - no manual categorization needed.")
+            summary['all_auto_categorized'] = True
+            summary['manual_categorization_needed'] = False
+            
+            return {
+                'final_dataframe': auto_df,  # Return auto-categorized DataFrame as final result
+                'summary': summary,
+                'all_stats': all_stats,
+                'rollback_performed': rollback_performed,
+                'error': None,
+                'manual_excel_path': None,
+                'review_list': [],
+                'category_dict': category_dict
+            }
+        
         # Generate manual categorization Excel
         update_progress(30, "Generating manual categorization Excel file...")
-        from core.manual_categorizer import generate_manual_categorization_excel, process_manual_categorizations, apply_manual_categories, update_master_dictionary
+        from core.manual_categorizer import generate_manual_categorization_excel
         available_categories = list(category_dict.get_all_categories())
         print(f"[DEBUG] About to call generate_manual_categorization_excel with {len(review_list)} review descriptions, output_dir={output_dir}")
         excel_path = generate_manual_categorization_excel(review_list, available_categories, output_dir=output_dir)
         temp_files.append(excel_path)
         summary['manual_excel_generated'] = str(excel_path)
+        summary['manual_categorization_needed'] = True
         update_progress(40, f"Manual categorization Excel generated at {excel_path}")
         
-        # If user provided a completed Excel, use it; else, prompt user
-        if user_manual_excel and Path(user_manual_excel).exists():
-            manual_excel_to_use = Path(user_manual_excel)
-            update_progress(45, f"Using user-provided manual Excel: {manual_excel_to_use}")
-        else:
-            manual_excel_to_use = excel_path
-            update_progress(45, f"Please fill in the manual categorization Excel: {manual_excel_to_use}")
-            # In a real workflow, you might pause here for user input
-        
-        # Process manual categorizations
-        update_progress(60, "Processing manual categorizations from Excel...")
-        manual_cats = process_manual_categorizations(manual_excel_to_use)
-        all_stats['manual_categorization_count'] = len(manual_cats)
-        summary['manual_categorization_processed'] = True
-        
-        # Apply manual categorizations
-        update_progress(75, "Applying manual categorizations to DataFrame...")
-        apply_result = apply_manual_categories(auto_df, manual_cats)
-        final_df = apply_result['updated_dataframe']
-        all_stats['apply_stats'] = apply_result['statistics']
-        summary['manual_categorization_applied'] = True
-        
-        # Backup dictionary before update
-        update_progress(85, "Updating master dictionary with manual categorizations...")
-        backup_dir = output_dir / "dict_backups"
-        update_result = update_master_dictionary(category_dict, manual_cats, backup_dir=backup_dir)
-        backup_dict_path = update_result['backup_path']
-        summary['dictionary_updated'] = True
-        all_stats['update_result'] = update_result
-        
-        # Only clean up temp files that are not the manual Excel file
-        update_progress(95, "Cleanup and finalizing...")
-        if cleanup_temp:
-            for f in temp_files:
-                # Skip the manual Excel file
-                if str(f) == str(excel_path):
-                    continue
-                try:
-                    Path(f).unlink(missing_ok=True)
-                except Exception as e:
-                    print(f"Warning: Could not delete temp file {f}: {e}")
-        update_progress(100, "Row categorization process complete.")
+        # Stop here - let the UI handle manual categorization
+        # The user will need to complete the Excel file and upload it back
+        update_progress(100, "Manual categorization Excel file ready for user input.")
         
         return {
-            'final_dataframe': final_df,
+            'final_dataframe': auto_df,  # Return auto-categorized DataFrame
             'summary': summary,
             'all_stats': all_stats,
             'rollback_performed': rollback_performed,
-            'error': None
+            'error': None,
+            'manual_excel_path': str(excel_path),
+            'review_list': review_list,
+            'category_dict': category_dict
         }
     except Exception as exc:
         error = str(exc)
@@ -1233,6 +1216,7 @@ def get_manual_categorization_categories() -> List[str]:
         "PV Mod. Installation",
         "Cleaning and Cabling of PV Mod.",
         "Tracker Inst.",
+        "Other",
     ]
 
 def get_manual_categorization_categories_lowercase() -> List[str]:

@@ -406,6 +406,7 @@ class MainWindow:
         self.progress_var.set(0)
 
     def _populate_file_tab(self, tab, file_mapping):
+        print("[DEBUG] _populate_file_tab called for tab:", tab)
         """Populates a tab with the processed data from a file mapping."""
         # Debug: print all sheet names and their types
         print('DEBUG: Sheets in file_mapping:')
@@ -1283,163 +1284,334 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
     def _on_categorization_complete(self, final_dataframe, categorization_result):
         """Handle categorization completion"""
         try:
-            # Update the file mapping with categorized data
-            current_tab = self.notebook.select()
+            current_tab_path = self.notebook.select()
+            current_tab = self.notebook.select(current_tab_path)  # Get the actual tab widget
+            print("[DEBUG] Current tab path:", current_tab_path)
+            print("[DEBUG] Current tab widget:", current_tab)
+            print("[DEBUG] File mapping tabs:", [str(file_data['file_mapping'].tab) for file_data in self.controller.current_files.values()])
+            print("[DEBUG] Number of files:", len(self.controller.current_files))
+            
             for file_key, file_data in self.controller.current_files.items():
-                if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == current_tab:
+                print("[DEBUG] Checking file_key:", file_key)
+                print("[DEBUG] file_data['file_mapping'].tab:", file_data['file_mapping'].tab)
+                print("[DEBUG] hasattr check:", hasattr(file_data['file_mapping'], 'tab'))
+                print("[DEBUG] tab comparison:", str(file_data['file_mapping'].tab) == str(current_tab_path))
+                
+                if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
+                    print("[DEBUG] Found matching tab, storing data...")
                     # Store the categorized data
                     file_data['categorized_dataframe'] = final_dataframe
                     file_data['categorization_result'] = categorization_result
-                    
                     # Update the file mapping
                     file_mapping = file_data['file_mapping']
                     file_mapping.categorized_dataframe = final_dataframe
                     file_mapping.categorization_result = categorization_result
-                    
-                    # Show success message
-                    messagebox.showinfo("Success", 
-                                      "Categorization completed successfully!\n"
-                                      "You can now review categories or export the data.")
-                    
-                    # Add categorization buttons to the tab
-                    self._add_categorization_buttons(current_tab, file_mapping)
-                    
-                    self._update_status("Categorization completed successfully")
+                    print("[DEBUG] About to call _show_final_categorized_data...")
+                    # Show the final data grid in the main window - use the actual tab widget from file_mapping
+                    self._show_final_categorized_data(file_mapping.tab, final_dataframe, categorization_result)
+                    self._update_status("Categorization completed successfully - showing final data")
+                    print("[DEBUG] _show_final_categorized_data call completed")
                     break
-                    
+                else:
+                    print("[DEBUG] Tab mismatch or no tab attribute")
         except Exception as e:
+            print("[DEBUG] Exception in _on_categorization_complete:", e)
+            import traceback
+            traceback.print_exc()
             logger.error(f"Error handling categorization completion: {e}")
             messagebox.showerror("Error", f"Error handling categorization completion: {str(e)}")
     
-    def _add_categorization_buttons(self, tab, file_mapping):
-        """Add categorization action buttons to the tab"""
-        # Find or create the categorization buttons frame
-        categorization_frame = None
-        
-        # Look for existing categorization frame
-        for widget in tab.winfo_children():
-            if hasattr(widget, 'categorization_frame'):
-                categorization_frame = widget
-                break
-        
-        if not categorization_frame:
-            # Create new categorization frame
-            categorization_frame = ttk.LabelFrame(tab, text="Categorization Actions")
-            categorization_frame.categorization_frame = True  # Mark it
-            
-            # Add it after the row review section
-            categorization_frame.grid(row=5, column=0, sticky=tk.EW, padx=5, pady=5)
-        
-        # Clear existing buttons
-        for widget in categorization_frame.winfo_children():
-            widget.destroy()
-        
-        # Create buttons
-        button_frame = ttk.Frame(categorization_frame)
-        button_frame.pack(fill=tk.X, padx=10, pady=10)
-        
-        # Review Categories button
-        review_btn = ttk.Button(button_frame, text="Review Categories", 
-                               command=lambda: self._review_categories(file_mapping))
-        review_btn.pack(side=tk.LEFT, padx=(0, 5))
-        
-        # Show Statistics button
-        stats_btn = ttk.Button(button_frame, text="Show Statistics", 
-                              command=lambda: self._show_categorization_stats(file_mapping))
-        stats_btn.pack(side=tk.LEFT, padx=(0, 5))
-        
-        # Export Categorized Data button
-        export_btn = ttk.Button(button_frame, text="Export Categorized Data", 
-                               command=lambda: self._export_categorized_data(file_mapping))
-        export_btn.pack(side=tk.LEFT, padx=(0, 5))
-        
-        # Re-run Categorization button
-        rerun_btn = ttk.Button(button_frame, text="Re-run Categorization", 
-                              command=lambda: self._start_categorization(file_mapping))
-        rerun_btn.pack(side=tk.LEFT)
-    
-    def _review_categories(self, file_mapping):
-        """Open category review dialog"""
-        if not CATEGORIZATION_AVAILABLE:
-            messagebox.showerror("Error", "Category review not available")
-            return
-        
+    def _get_final_display_columns(self, file_mapping):
+        # Get the mapped types in the order the user mapped them
+        if hasattr(file_mapping, 'column_mappings'):
+            mapped_types = [getattr(cm, 'mapped_type', None) for cm in file_mapping.column_mappings]
+            # Remove None and duplicates, preserve order
+            seen = set()
+            ordered_types = []
+            for t in mapped_types:
+                if t and t not in seen:
+                    ordered_types.append(t)
+                    seen.add(t)
+            # Add standard columns not mapped by user at the end
+            std_order = ['code', 'sheet', 'category', 'description', 'quantity', 'unit_price', 'total_price', 'unit']
+            for t in std_order:
+                if t not in ordered_types:
+                    ordered_types.append(t)
+            return ordered_types
+        else:
+            return ['code', 'sheet', 'category', 'description', 'quantity', 'unit_price', 'total_price', 'unit']
+
+    def _build_final_grid_dataframe(self, file_mapping):
+        import pandas as pd
+        rows = []
+        # Determine required types and display order as in row review
+        if self.column_mapper and hasattr(self.column_mapper, 'config'):
+            required_types = [col_type.value for col_type in self.column_mapper.config.get_required_columns()]
+        else:
+            required_types = ["description", "quantity", "unit_price", "total_price", "unit", "code"]
+        # Row review display order
+        display_column_order = ["code", "sheet", "category", "description", "unit", "quantity", "unit_price", "total_price"]
+        # Build mapping from mapped_type to column index for each sheet
+        for sheet in getattr(file_mapping, 'sheets', []):
+            if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
+                continue
+            mapped_type_to_index = {}
+            if hasattr(sheet, 'column_mappings'):
+                for cm in sheet.column_mappings:
+                    mapped_type_to_index[getattr(cm, 'mapped_type', None)] = cm.column_index
+            validity_dict = self.row_validity.get(sheet.sheet_name, {})
+            if hasattr(sheet, 'row_classifications'):
+                for rc in sheet.row_classifications:
+                    # Only include valid rows
+                    is_valid = getattr(rc, 'row_type', None) == RowType.PRIMARY_LINE_ITEM or getattr(rc, 'row_type', None) == 'primary_line_item'
+                    if not is_valid:
+                        continue
+                    row_data = getattr(rc, 'row_data', None)
+                    if row_data is None and hasattr(sheet, 'sheet_data'):
+                        try:
+                            row_data = sheet.sheet_data[rc.row_index]
+                        except Exception:
+                            row_data = None
+                    if row_data is None:
+                        row_data = []
+                    row_dict = {}
+                    # Add columns in display order, fill with values if mapped
+                    for col in display_column_order:
+                        if col == 'sheet':
+                            row_dict['sheet'] = sheet.sheet_name
+                        elif col == 'category':
+                            # PATCH: Fill from final_dataframe if available
+                            category_value = ''
+                            if hasattr(file_mapping, 'categorized_dataframe') and file_mapping.categorized_dataframe is not None:
+                                df = file_mapping.categorized_dataframe
+                                # Try to match by Description and Sheet if possible
+                                desc = ''
+                                idx = mapped_type_to_index.get('description')
+                                if idx is not None and idx < len(row_data):
+                                    desc = row_data[idx]
+                                sheet_col = sheet.sheet_name
+                                # Try to find the row in the categorized_dataframe
+                                if 'Description' in df.columns:
+                                    match = df[(df['Description'] == desc) & (df.get('Source_Sheet', sheet_col) == sheet_col)]
+                                    if not match.empty and 'Category' in match.columns:
+                                        category_value = match.iloc[0]['Category']
+                                    elif not match.empty and 'category' in match.columns:
+                                        category_value = match.iloc[0]['category']
+                                elif 'category' in df.columns:
+                                    match = df[df['category'] == desc]
+                                    if not match.empty:
+                                        category_value = match.iloc[0]['category']
+                            # Fallback to rc.category if not found
+                            if not category_value:
+                                category_value = getattr(rc, 'category', '')
+                            row_dict['category'] = category_value
+                        else:
+                            idx = mapped_type_to_index.get(col)
+                            val = row_data[idx] if idx is not None and idx < len(row_data) else ""
+                            # Apply number formatting for specific columns
+                            if col in ['unit_price', 'total_price']:
+                                val = format_number(val, is_currency=True)
+                            elif col == 'quantity':
+                                val = format_number(val, is_currency=False)
+                            row_dict[col] = val
+                    rows.append(row_dict)
+        # Build DataFrame
+        if rows:
+            df = pd.DataFrame(rows)
+            # PATCH: If 'category' column is empty but 'Category' exists in categorized_dataframe, fill it
+            if 'category' in df.columns and hasattr(file_mapping, 'categorized_dataframe') and file_mapping.categorized_dataframe is not None:
+                cat_df = file_mapping.categorized_dataframe
+                if 'Description' in df.columns and 'Description' in cat_df.columns and 'Category' in cat_df.columns:
+                    df = df.merge(cat_df[['Description', 'Category']], on='Description', how='left', suffixes=('', '_cat'))
+                    # Fix: ensure both are Series for combine_first
+                    if 'category' in df.columns and 'Category' in df.columns:
+                        df['category'] = pd.Series(df['Category']).combine_first(pd.Series(df['category']))
+                        df.drop(columns=['Category'], inplace=True)
+            # Only keep columns in display order that are present
+            columns = [col for col in display_column_order if col in df.columns]
+            df = df[columns]
+        else:
+            df = pd.DataFrame(columns=display_column_order)
+        return df
+
+    def _show_final_categorized_data(self, tab, final_dataframe, categorization_result):
+        print("[DEBUG] _show_final_categorized_data called for tab:", tab)
         try:
-            # Get the categorized dataframe
-            dataframe = getattr(file_mapping, 'categorized_dataframe', None)
-            if dataframe is None:
-                messagebox.showwarning("Warning", "No categorized data available for review")
-                return
-            
-            # Show category review dialog
-            dialog = show_category_review_dialog(
-                parent=self.root,
-                dataframe=dataframe,
-                on_save=self._on_category_review_save
-            )
-            
+            # Get file_mapping for this tab
+            file_mapping = None
+            for file_data in self.controller.current_files.values():
+                if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == tab:
+                    file_mapping = file_data['file_mapping']
+                    break
+            # Build the DataFrame for the final grid using row review logic
+            display_df = self._build_final_grid_dataframe(file_mapping)
+            # Clear the current tab content
+            for widget in tab.winfo_children():
+                widget.destroy()
+            # DEBUG: Add a big label to confirm this method is running
+            debug_label = ttk.Label(tab, text="FINAL GRID SHOWN", background="lightblue", font=("TkDefaultFont", 18, "bold"))
+            debug_label.grid(row=0, column=0, sticky=tk.EW, pady=10)
+            # Create main frame
+            main_frame = ttk.Frame(tab)
+            main_frame.grid(row=1, column=0, sticky=tk.NSEW, padx=10, pady=10)
+            # Configure grid weights
+            tab.grid_rowconfigure(0, weight=0)
+            tab.grid_rowconfigure(1, weight=1)
+            tab.grid_columnconfigure(0, weight=1)
+            main_frame.grid_rowconfigure(1, weight=1)
+            main_frame.grid_columnconfigure(0, weight=1)
+            # Title and instructions
+            title_label = ttk.Label(main_frame, text="Final Categorized Data", font=("TkDefaultFont", 14, "bold"))
+            title_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
+            instructions = """
+            Review the categorized data below. You can make corrections by double-clicking on any cell and editing the values.\nChanges will be saved when you click 'Apply Changes' or 'Export Data'.
+            """
+            instruction_label = ttk.Label(main_frame, text=instructions, wraplength=800, justify=tk.LEFT)
+            instruction_label.grid(row=1, column=0, sticky=tk.W, pady=(0, 10))
+            # Create frame for the treeview
+            tree_frame = ttk.Frame(main_frame)
+            tree_frame.grid(row=2, column=0, sticky=tk.NSEW, pady=(0, 10))
+            tree_frame.grid_rowconfigure(0, weight=1)
+            tree_frame.grid_columnconfigure(0, weight=1)
+            # Only show columns that exist in the DataFrame
+            final_display_columns = list(display_df.columns)
+            tree = ttk.Treeview(tree_frame, columns=final_display_columns, show='headings', height=20)
+            for col in final_display_columns:
+                tree.heading(col, text=col.capitalize() if col != '#' else '#')
+                tree.column(col, width=150, minwidth=100)
+            vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
+            hsb = ttk.Scrollbar(tree_frame, orient="horizontal", command=tree.xview)
+            tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+            tree.grid(row=0, column=0, sticky=tk.NSEW)
+            vsb.grid(row=0, column=1, sticky=tk.NS)
+            hsb.grid(row=1, column=0, sticky=tk.EW)
+            self._populate_final_data_treeview(tree, display_df, final_display_columns)
+            self._enable_final_data_editing(tree, display_df)
+            button_frame = ttk.Frame(main_frame)
+            button_frame.grid(row=3, column=0, pady=(10, 0))
+            apply_button = ttk.Button(button_frame, text="Apply Changes", 
+                                     command=lambda: self._apply_final_data_changes(tree, display_df, tab))
+            apply_button.pack(side=tk.LEFT, padx=(0, 5))
+            export_button = ttk.Button(button_frame, text="Export Data", 
+                                      command=lambda: self._export_final_data(display_df))
+            export_button.pack(side=tk.LEFT, padx=(0, 5))
+            stats_button = ttk.Button(button_frame, text="View Statistics", 
+                                     command=lambda: self._show_categorization_stats_from_final(tab, display_df, categorization_result))
+            stats_button.pack(side=tk.LEFT, padx=(0, 5))
+            back_button = ttk.Button(button_frame, text="Back to Original View", 
+                                    command=lambda: self._restore_original_view(tab))
+            back_button.pack(side=tk.LEFT)
+            tab.final_data_tree = tree
+            tab.final_dataframe = display_df
+            tab.categorization_result = categorization_result
         except Exception as e:
-            logger.error(f"Failed to open category review: {e}")
-            messagebox.showerror("Error", f"Failed to open category review: {str(e)}")
+            print("[DEBUG] Exception in _show_final_categorized_data:", e)
+            import traceback
+            traceback.print_exc()
     
-    def _on_category_review_save(self, updated_dataframe):
-        """Handle category review save"""
+    def _populate_final_data_treeview(self, tree, dataframe, columns):
+        """Populate the treeview with data from the final DataFrame"""
+        # Clear existing items
+        for item in tree.get_children():
+            tree.delete(item)
+        
+        # Add data rows
+        for index, row in dataframe.iterrows():
+            values = []
+            for col in columns:
+                value = row.get(col, '')
+                if pd.isna(value):
+                    value = ''
+                values.append(str(value))
+            tree.insert('', 'end', values=values, tags=(f'row_{index}',))
+    
+    def _enable_final_data_editing(self, tree, dataframe):
+        """Enable editing capabilities for the final data treeview"""
+        def on_double_click(event):
+            try:
+                # Get the clicked item and column
+                item = tree.selection()[0]
+                column = tree.identify_column(event.x)
+                col_num = int(column[1]) - 1  # Convert column identifier to index
+                
+                # Get current value
+                current_values = tree.item(item, 'values')
+                current_value = current_values[col_num] if col_num < len(current_values) else ''
+                
+                # Create entry widget for editing
+                entry = ttk.Entry(tree)
+                entry.insert(0, str(current_value))
+                entry.select_range(0, tk.END)
+                
+                # Position entry widget
+                bbox = tree.bbox(item, column)
+                if bbox:
+                    entry.place(x=bbox[0], y=bbox[1], width=bbox[2]-bbox[0], height=bbox[3]-bbox[1])
+                    
+                    def save_edit(event=None):
+                        try:
+                            new_value = entry.get()
+                            values = list(tree.item(item, 'values'))
+                            if col_num < len(values):
+                                values[col_num] = new_value
+                                tree.item(item, values=values)
+                            entry.destroy()
+                        except Exception as e:
+                            print(f"[DEBUG] Error saving edit: {e}")
+                            entry.destroy()
+                    
+                    def cancel_edit(event=None):
+                        entry.destroy()
+                    
+                    entry.bind('<Return>', save_edit)
+                    entry.bind('<FocusOut>', save_edit)
+                    entry.bind('<Escape>', cancel_edit)
+                    entry.focus()
+                    print(f"[DEBUG] Double-click editing enabled for column {col_num}, value: {current_value}")
+            except Exception as e:
+                print(f"[DEBUG] Error in double-click editing: {e}")
+        
+        tree.bind('<Double-1>', on_double_click)
+        print("[DEBUG] Double-click binding added to treeview")
+    
+    def _apply_final_data_changes(self, tree, dataframe, tab):
+        """Apply changes made in the grid to the final DataFrame"""
         try:
-            # Update the file mapping with the modified dataframe
+            # Get all items from treeview
+            items = tree.get_children()
+            
+            # Create a new DataFrame with the updated values
+            updated_data = []
+            columns = [tree.heading(col)['text'] for col in tree['columns']]
+            
+            for item in items:
+                values = tree.item(item, 'values')
+                row_data = dict(zip(columns, values))
+                updated_data.append(row_data)
+            
+            # Update the DataFrame
+            updated_dataframe = pd.DataFrame(updated_data)
+            
+            # Update stored references
+            tab.final_dataframe = updated_dataframe
+            
+            # Update the file mapping
             current_tab = self.notebook.select()
             for file_key, file_data in self.controller.current_files.items():
                 if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == current_tab:
                     file_mapping = file_data['file_mapping']
                     file_mapping.categorized_dataframe = updated_dataframe
                     file_data['categorized_dataframe'] = updated_dataframe
-                    
-                    messagebox.showinfo("Success", "Category changes saved successfully!")
-                    self._update_status("Category changes saved")
                     break
                     
-        except Exception as e:
-            logger.error(f"Error saving category changes: {e}")
-            messagebox.showerror("Error", f"Error saving category changes: {str(e)}")
-    
-    def _show_categorization_stats(self, file_mapping):
-        """Show categorization statistics dialog"""
-        if not CATEGORIZATION_AVAILABLE:
-            messagebox.showerror("Error", "Statistics dialog not available")
-            return
-        
-        try:
-            # Get the categorized dataframe
-            dataframe = getattr(file_mapping, 'categorized_dataframe', None)
-            if dataframe is None:
-                messagebox.showwarning("Warning", "No categorized data available for statistics")
-                return
-            
-            # Get categorization result
-            categorization_result = getattr(file_mapping, 'categorization_result', None)
-            
-            # Show statistics dialog
-            dialog = show_categorization_stats_dialog(
-                parent=self.root,
-                dataframe=dataframe,
-                categorization_result=categorization_result
-            )
+            messagebox.showinfo("Success", "Changes applied successfully!")
             
         except Exception as e:
-            logger.error(f"Failed to show statistics: {e}")
-            messagebox.showerror("Error", f"Failed to show statistics: {str(e)}")
+            messagebox.showerror("Error", f"Failed to apply changes: {str(e)}")
     
-    def _export_categorized_data(self, file_mapping):
-        """Export categorized data"""
+    def _export_final_data(self, dataframe):
+        """Export the final categorized data"""
         try:
-            # Get the categorized dataframe
-            dataframe = getattr(file_mapping, 'categorized_dataframe', None)
-            if dataframe is None:
-                messagebox.showwarning("Warning", "No categorized data available for export")
-                return
-            
-            # Use the existing export functionality
-            from tkinter import filedialog
-            
             file_path = filedialog.asksaveasfilename(
                 title="Export Categorized Data",
                 defaultextension=".xlsx",
@@ -1454,12 +1626,50 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 else:
                     dataframe.to_csv(file_path, index=False)
                 
-                messagebox.showinfo("Success", f"Categorized data exported to: {file_path}")
-                self._update_status(f"Exported categorized data to: {file_path}")
+                messagebox.showinfo("Success", f"Data exported to: {file_path}")
+                self._update_status(f"Exported data to: {file_path}")
                 
         except Exception as e:
-            logger.error(f"Failed to export categorized data: {e}")
-            messagebox.showerror("Error", f"Failed to export categorized data: {str(e)}")
+            messagebox.showerror("Error", f"Failed to export data: {str(e)}")
+    
+    def _show_categorization_stats_from_final(self, tab, dataframe, categorization_result):
+        """Show categorization statistics from the final data view"""
+        if not CATEGORIZATION_AVAILABLE:
+            messagebox.showerror("Error", "Statistics dialog not available")
+            return
+        
+        try:
+            dialog = show_categorization_stats_dialog(
+                parent=self.root,
+                dataframe=dataframe,
+                categorization_result=categorization_result
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to show statistics: {e}")
+            messagebox.showerror("Error", f"Failed to show statistics: {str(e)}")
+    
+    def _restore_original_view(self, tab):
+        """Restore the original tab view with categorization buttons"""
+        try:
+            # Get the file mapping for this tab
+            current_tab = self.notebook.select()
+            for file_key, file_data in self.controller.current_files.items():
+                if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == current_tab:
+                    file_mapping = file_data['file_mapping']
+                    
+                    # Restore the original view
+                    self._populate_file_tab(tab, file_mapping)
+                    
+                    # Add categorization buttons
+                    self._add_categorization_buttons(tab, file_mapping)
+                    
+                    self._update_status("Restored original view")
+                    break
+                
+        except Exception as e:
+            logger.error(f"Error restoring original view: {e}")
+            messagebox.showerror("Error", f"Error restoring original view: {str(e)}")
 
     def run(self):
         """Start the main application loop."""

@@ -7295,149 +7295,28 @@
       "created_date": null,
       "usage_count": 0,
       "notes": null
-    },
-    {
-      "description": "all necessary measures to minimize the impacts of the project on landscape and other environmental components (e.g. natural and phisycal screens, noise barriers,…) - opera di mitigazione perimetrale realizzata in accordo alle  specifiche tecniche riportate nelle prescrizioni autorizzative del decreto di au",
-      "category": "civil works",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null
-    },
-    {
-      "description": "unloading and storage of pv modules",
-      "category": "electrical works",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null
-    },
-    {
-      "description": "cleaning up explosives and remnants of war",
-      "category": "civil works",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null
-    },
-    {
-      "description": "active anti-rodent system [l] - supply",
-      "category": "electrical works",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null
-    },
-    {
-      "description": "active anti-rodent system [l] - installation",
-      "category": "electrical works",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null
-    },
-    {
-      "description": "supply of vibrated reinforced concrete delivery cabin (cabina di consegna) in accordance with the local regulation of tso (in italy is e-distribuzione technical specification dg 2061) - consisting of two rooms: mv room, measurement room. including all the following main and auxiliary components:\n- fiscal energy meetering system\n- lighting systems\n- earthing system\n- mv, lv and communication cables -[q] - supply\n- elevation structure and foundation (including excavation, backfilling, disposal, and concretes), ground zero slab all fully completed at civil level as indicated in the specification.\nearthworks and drainages for platform and area finishing (e.g. sidewalk if needed) excluded.",
-      "category": "other",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null
-    },
-    {
-      "description": "supply and internal connections of vibrated reinforced concrete user cabin (cabina utente) according to paragraphs ppp.pvp.mvc.02 mv distribution center and ppp.pvp.mvc.03 mv center enclosure and iec 62271-202 with iac a certification - consisting of three rooms: mv room, transformer aux room, lv+scada room.\n\nelectrical part: all main and auxiliary components contained in the cabin:\n- protection system equipment (spg/dg + spi/di + ddr)\n- fiscal energy meetering system\n-  gas vent channel mv swg \n- fire detection system\n- air conditioning system\n- anti-rodent system\n- normal and emergency lighting system internal and external\n- transformation room ventilation system \n- normal + emergency fm sockets\n- mv, lv, communication and control cables\n- earthing system\n- any other necessary components\n- elevation structure and foundation (including excavation, backfilling, disposal, and concretes), ground zero slab all fully completed at civil level as indicated in the specification.\nearthworks and drainages for platform and area finishing (e.g. sidewalk if needed) excluded.",
-      "category": "other",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null
-    },
-    {
-      "description": "electrical diesel generator 100kva [q] - supply",
-      "category": "electrical works",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null
-    },
-    {
-      "description": "electrical diesel generator 100kva [q] - installation",
-      "category": "electrical works",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null
-    },
-    {
-      "description": "supply of spare parts for embop as per technical specification",
-      "category": "electrical works",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null
-    },
-    {
-      "description": "items listed in the document psc/ess for health, safety and environmental measures tailored for the project",
-      "category": "general costs",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null
-    },
-    {
-      "description": "hse plans:\n\nhealth & safety plan\nrisk assesment\nlifting plan\nexcavation plan\nenvironmental plan\nenvironmentali risk assessment\nwaste management plan\nstorm water management plan\nerosion management plan\nemergency plan\ntraffic management plan",
-      "category": "general costs",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null
-    },
-    {
-      "description": "active safety  device to avoid collision or accidents",
-      "category": "general costs",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null
-    },
-    {
-      "description": "sus plan",
-      "category": "general costs",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null
-    },
-    {
-      "description": "as per linea guida security rev03 + elenco elementi security boq",
-      "category": "general costs",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null
     }
   ],
   "categories": [
+    "civil works",
+    "electrical works",
+    "roads",
     "site costs",
-    "lv cables",
-    "cleaning and cabling of pv mod.",
+    "earth movement",
     "general costs",
+    "tracker inst.",
+    "trenching",
+    "oem building",
+    "equipment",
+    "pv mod. installation",
+    "lv cables",
     "mv cables",
     "solar cables",
-    "trenching",
-    "earth movement",
-    "tracker inst.",
-    "equipment",
-    "electrical works",
-    "other",
-    "roads",
-    "pv mod. installation",
-    "oem building",
-    "civil works"
+    "cleaning and cabling of pv mod."
   ],
   "metadata": {
-    "total_mappings": 927,
-    "total_categories": 16,
+    "total_mappings": 912,
+    "total_categories": 15,
     "last_updated": "C:\\Users\\Admin\\Documents\\GitHub\\BOQ-TOOLS"
   }
 }

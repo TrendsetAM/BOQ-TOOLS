@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable
 import logging
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -191,17 +192,15 @@ class CategorizationDialog:
         
         # Update step based on progress
         if percent < 20:
-            self.current_step.set("Step 1/6: Loading category dictionary")
+            self.current_step.set("Step 1/4: Loading category dictionary")
         elif percent < 40:
-            self.current_step.set("Step 2/6: Auto-categorizing rows")
+            self.current_step.set("Step 2/4: Auto-categorizing rows")
         elif percent < 60:
-            self.current_step.set("Step 3/6: Collecting unmatched descriptions")
-        elif percent < 80:
-            self.current_step.set("Step 4/6: Generating manual categorization file")
-        elif percent < 95:
-            self.current_step.set("Step 5/6: Processing manual categorizations")
+            self.current_step.set("Step 3/4: Collecting unmatched descriptions")
+        elif percent < 100:
+            self.current_step.set("Step 4/4: Generating manual categorization file")
         else:
-            self.current_step.set("Step 6/6: Finalizing categorization")
+            self.current_step.set("Ready for manual categorization")
     
     def _show_manual_categorization_step(self):
         """Show the manual categorization step"""
@@ -322,6 +321,22 @@ class CategorizationDialog:
         
         # Configure grid weights
         stats_frame.grid_columnconfigure(0, weight=1)
+        
+        # Add buttons for navigation
+        button_frame = ttk.Frame(stats_frame)
+        button_frame.grid(row=row+1, column=0, pady=(20, 0))
+        
+        stats_button = ttk.Button(button_frame, text="View Statistics", 
+                                 command=self._show_statistics_step)
+        stats_button.pack(side=tk.LEFT, padx=(0, 5))
+        
+        export_button = ttk.Button(button_frame, text="Export Data", 
+                                  command=self._export_categorized_data)
+        export_button.pack(side=tk.LEFT, padx=(0, 5))
+        
+        finalize_button = ttk.Button(button_frame, text="Finalize", 
+                                    command=self._finalize_categorization)
+        finalize_button.pack(side=tk.LEFT)
     
     def _show_review_step(self):
         """Show final review step"""
@@ -392,35 +407,94 @@ class CategorizationDialog:
         
         if file_path:
             try:
-                from core.manual_categorizer import process_manual_categorizations, apply_manual_categories
+                from core.manual_categorizer import process_manual_categorizations, apply_manual_categories, update_master_dictionary
+                from core.category_dictionary import CategoryDictionary
                 
                 # Process the uploaded file
                 manual_cats = process_manual_categorizations(Path(file_path))
                 
                 if manual_cats:
-                    # Apply the manual categorizations
-                    mapped_df = self._get_dataframe_from_mapping()
-                    if mapped_df is not None:
-                        apply_result = apply_manual_categories(mapped_df, manual_cats)
+                    # Get the auto-categorized DataFrame from the categorization result
+                    if self.categorization_result and 'final_dataframe' in self.categorization_result:
+                        auto_df = self.categorization_result['final_dataframe']
+                        
+                        # Apply the manual categorizations to the auto-categorized DataFrame
+                        apply_result = apply_manual_categories(auto_df, manual_cats)
                         self.final_dataframe = apply_result['updated_dataframe']
                         
                         # Update the categorization result
                         if self.categorization_result:
                             self.categorization_result['all_stats']['apply_stats'] = apply_result['statistics']
+                            self.categorization_result['all_stats']['manual_categorization_count'] = len(manual_cats)
                         
                         messagebox.showinfo("Success", 
                                           f"Successfully applied {len(manual_cats)} manual categorizations")
                         
-                        # Move to next step
+                        # Prompt user to update dictionary
+                        self._prompt_dictionary_update(manual_cats)
+                        
+                        # Delete the temporary Excel file
+                        self._cleanup_temp_files()
+                        
+                        # Move to statistics step
                         self._show_statistics_step()
                         self.next_button.config(state=tk.NORMAL)
                     else:
-                        messagebox.showerror("Error", "No data available for categorization")
+                        messagebox.showerror("Error", "No auto-categorized data available")
                 else:
                     messagebox.showwarning("Warning", "No manual categorizations found in the file")
                     
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to process file: {str(e)}")
+    
+    def _prompt_dictionary_update(self, manual_cats):
+        """Prompt user to update the dictionary with new manual categorizations"""
+        response = messagebox.askyesno(
+            "Update Dictionary", 
+            f"Would you like to update the category dictionary with {len(manual_cats)} new manual categorizations?\n\n"
+            "This will add the new description-category mappings to the master dictionary for future auto-categorization."
+        )
+        
+        if response:
+            try:
+                from core.manual_categorizer import update_master_dictionary
+                from core.category_dictionary import CategoryDictionary
+                from pathlib import Path
+                
+                # Load the category dictionary
+                category_dict = CategoryDictionary(Path("config/category_dictionary.json"))
+                
+                # Update the dictionary
+                update_result = update_master_dictionary(category_dict, manual_cats)
+                
+                # Update the categorization result with dictionary update info
+                if self.categorization_result:
+                    self.categorization_result['all_stats']['update_result'] = update_result
+                
+                # Show update results
+                message = f"Dictionary updated successfully!\n\n"
+                message += f"New mappings added: {update_result.get('total_added', 0)}\n"
+                message += f"Conflicts found: {update_result.get('total_conflicts', 0)}\n"
+                message += f"Already existing: {update_result.get('total_skipped', 0)}\n"
+                
+                if update_result.get('backup_path'):
+                    message += f"\nBackup created at: {update_result['backup_path']}"
+                
+                messagebox.showinfo("Dictionary Updated", message)
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to update dictionary: {str(e)}")
+    
+    def _cleanup_temp_files(self):
+        """Clean up temporary files after categorization is complete"""
+        try:
+            if self.categorization_result and 'summary' in self.categorization_result:
+                excel_path = self.categorization_result['summary'].get('manual_excel_generated', '')
+                if excel_path and os.path.exists(excel_path):
+                    os.remove(excel_path)
+                    print(f"[DEBUG] Deleted temporary Excel file: {excel_path}")
+        except Exception as e:
+            print(f"[WARNING] Could not delete temporary file: {e}")
     
     def _export_categorized_data(self):
         """Export the categorized data"""
@@ -450,12 +524,12 @@ class CategorizationDialog:
     
     def _finalize_categorization(self):
         """Finalize the categorization process"""
+        print("[DEBUG] Dialog finalize called. on_complete:", self.on_complete)
         if self.final_dataframe is not None:
-            # Call the completion callback
+            # Call the completion callback to update the main window
             if self.on_complete:
+                print("[DEBUG] Calling on_complete from dialog with final_dataframe:", type(self.final_dataframe), "categorization_result:", type(self.categorization_result))
                 self.on_complete(self.final_dataframe, self.categorization_result)
-            
-            messagebox.showinfo("Success", "Categorization completed successfully!")
             self.dialog.destroy()
         else:
             messagebox.showwarning("Warning", "No categorized data available")
@@ -467,8 +541,71 @@ class CategorizationDialog:
     
     def _show_success(self):
         """Show success and move to next step"""
-        self._show_manual_categorization_step()
+        # Check if manual categorization is needed
+        if self._needs_manual_categorization():
+            self._show_manual_categorization_step()
+        else:
+            # All rows were auto-categorized successfully
+            self._show_completion_step()
         self.next_button.config(state=tk.NORMAL)
+    
+    def _needs_manual_categorization(self):
+        """Check if manual categorization is needed based on unmatched rows"""
+        if not self.categorization_result:
+            return False
+        
+        # Check if there are unmatched rows
+        stats = self.categorization_result.get('all_stats', {})
+        auto_stats = stats.get('auto_stats', {})
+        
+        total_rows = auto_stats.get('total_rows', 0)
+        matched_rows = auto_stats.get('matched_rows', 0)
+        unmatched_rows = total_rows - matched_rows
+        
+        # Also check if a manual Excel file was generated
+        has_manual_excel = self.categorization_result.get('summary', {}).get('manual_excel_generated', '')
+        
+        return unmatched_rows > 0 and has_manual_excel
+    
+    def _show_completion_step(self):
+        """Show completion step when all rows were auto-categorized"""
+        # Clear content frame
+        for widget in self.content_frame.winfo_children():
+            widget.destroy()
+        
+        # Hide navigation buttons in the completion step
+        if hasattr(self, 'back_button') and self.back_button:
+            self.back_button.pack_forget()
+        if hasattr(self, 'next_button') and self.next_button:
+            self.next_button.pack_forget()
+        if hasattr(self, 'cancel_button') and self.cancel_button:
+            self.cancel_button.pack_forget()
+        
+        # Create completion content
+        completion_frame = ttk.LabelFrame(self.content_frame, text="Categorization Complete", padding="10")
+        completion_frame.grid(row=0, column=0, sticky=tk.NSEW, padx=10, pady=10)
+        
+        # Success message
+        message = """
+        🎉 Excellent! All rows were automatically categorized successfully.
+        
+        No manual categorization was needed - the system was able to match all descriptions to categories using the existing dictionary.
+        
+        You can now proceed to review and export the final categorized data in the main window.
+        """
+        
+        message_label = ttk.Label(completion_frame, text=message, wraplength=500, justify=tk.LEFT)
+        message_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 10))
+        
+        # Buttons
+        button_frame = ttk.Frame(completion_frame)
+        button_frame.grid(row=1, column=0, pady=(10, 0))
+        
+        next_button = ttk.Button(button_frame, text="Next", command=self._finalize_categorization)
+        next_button.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Configure grid weights
+        completion_frame.grid_columnconfigure(0, weight=1)
     
     def _on_next(self):
         """Handle next button click"""
@@ -488,6 +625,8 @@ class CategorizationDialog:
     def _on_close(self):
         """Handle window close"""
         self._on_cancel()
+
+
 
 
 def show_categorization_dialog(parent, controller, file_mapping, on_complete=None):
