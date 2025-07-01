@@ -76,7 +76,7 @@ class SheetCategorizationDialog:
             label.pack(side=tk.LEFT)
             var = tk.StringVar(value=self.categories.get(sheet, "BOQ"))
             self.sheet_vars[sheet] = var
-            for cat in ["Ignore", "BOQ", "Info"]:
+            for cat in ["Ignore", "BOQ"]:
                 rb = ttk.Radiobutton(row, text=cat, value=cat, variable=var)
                 rb.pack(side=tk.LEFT, padx=5)
         # --- End scrollable sheet list ---

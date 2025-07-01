@@ -201,10 +201,10 @@ def auto_categorize_dataset(dataframe: pd.DataFrame,
             if not description or description.lower() in ['nan', 'none', '']:
                 unmatched_rows += 1
                 continue
-
+            
             match = category_dictionary.find_category(description, confidence_threshold)
             match_types[match.match_type] += 1
-
+            
             if match.matched_category:
                 df.at[index, category_column] = match.matched_category
                 matched_rows += 1
@@ -464,7 +464,7 @@ Top Categories:
             
         except Exception as e:
             logger.error(f"Error exporting categorization report: {e}")
-            return False
+            return False 
 
 
 def collect_descriptions_for_manual_review(dataframe: pd.DataFrame,
