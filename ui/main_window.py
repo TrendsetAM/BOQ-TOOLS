@@ -141,6 +141,8 @@ class MainWindow:
         self.row_review_treeviews = {}  # Initialize row review treeviews dictionary
         # Add robust tab-to-file-mapping
         self.tab_id_to_file_mapping = {}
+        # Offer name for summary grid
+        self.current_offer_name = None
         # Create widgets
         self._create_main_widgets()
         self._setup_drag_and_drop()
@@ -286,6 +288,12 @@ class MainWindow:
             self._update_status("No data to export.")
 
     def open_file(self):
+        # Prompt for offer name/label before opening file dialog
+        offer_name = self._prompt_offer_name()
+        if offer_name is None:
+            self._update_status("File open cancelled (no offer name provided).")
+            return
+        self.current_offer_name = offer_name
         filetypes = [("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
         filenames = filedialog.askopenfilenames(title="Open Excel File", filetypes=filetypes)
         for file in filenames:
@@ -1461,7 +1469,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             title_label = ttk.Label(main_frame, text="Final Categorized Data", font=("TkDefaultFont", 14, "bold"))
             title_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
             instructions = """
-            Review the categorized data below. You can make corrections by double-clicking the category cell and selecting a value from the dropdown.\nChanges will be saved when you click 'Apply Changes' or 'Export Data'.
+            Review the categorized data below. You can make corrections by double-clicking the category cell and selecting a value from the dropdown.\nChanges will be saved when you click 'Apply Changes', 'Summarize', 'Save Analysis', or 'Export Data'.
             """
             instruction_label = ttk.Label(main_frame, text=instructions, wraplength=800, justify=tk.LEFT)
             instruction_label.grid(row=1, column=0, sticky=tk.W, pady=(0, 10))
@@ -1487,20 +1495,109 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             style.map('Treeview', background=[('selected', '#B3E5FC')], foreground=[('selected', 'black')])
             self._populate_final_data_treeview(tree, display_df, final_display_columns)
             self._enable_final_data_editing(tree, display_df)
+            # --- SUMMARY GRID PLACEHOLDER ---
+            summary_frame = ttk.Frame(main_frame)
+            summary_frame.grid(row=3, column=0, sticky=tk.EW, pady=(0, 10))
+            summary_frame.grid_remove()  # Hide by default
+            tab.summary_frame = summary_frame
+            tab.summary_tree = None
+            def show_summary_grid():
+                import pandas as pd
+                from core.manual_categorizer import get_manual_categorization_categories
+                categories_pretty = get_manual_categorization_categories()
+                categories_internal = [cat.lower() for cat in categories_pretty]
+                pretty_to_internal = {pretty: internal for pretty, internal in zip(categories_pretty, categories_internal)}
+                internal_to_pretty = {internal: pretty for pretty, internal in zip(categories_pretty, categories_internal)}
+                # Get the current DataFrame (with internal values)
+                df = tab.final_dataframe if hasattr(tab, 'final_dataframe') else display_df
+                # Map displayed category to internal for grouping
+                cat_col = 'category'
+                price_col = 'Total_price' if 'Total_price' in df.columns else 'total_price'
+                # Build a mapping from pretty to internal for all rows
+                df_internal = df.copy()
+                df_internal[cat_col] = df_internal[cat_col].apply(lambda x: pretty_to_internal.get(str(x).strip(), str(x).strip().lower()))
+                # --- FIXED: Robustly parse price values ---
+                def parse_price(val):
+                    s = str(val).replace(' ', '').replace('\u202f', '')  # Remove spaces and narrow no-break space
+                    if s == '' or s.lower() == 'nan':
+                        return 0.0
+                    # Handle European and US formats
+                    if s.count(',') > 0 and s.count('.') == 0:
+                        # Assume comma is decimal separator
+                        s = s.replace('.', '')
+                        s = s.replace(',', '.')
+                    elif s.count(',') > 0 and s.count('.') > 0:
+                        # Assume dot is thousands, comma is decimal
+                        s = s.replace('.', '')
+                        s = s.replace(',', '.')
+                    else:
+                        # Only dot or only digits
+                        pass
+                    try:
+                        return float(s)
+                    except Exception:
+                        return 0.0
+                df_internal[price_col] = df_internal[price_col].apply(parse_price)
+                # Group and sum
+                summary = df_internal.groupby(cat_col)[price_col].sum().to_dict()
+                # Prepare columns and values for the summary grid
+                offer_label = self.current_offer_name if hasattr(self, 'current_offer_name') and self.current_offer_name else 'Offer'
+                summary_columns = ['Offer'] + [internal_to_pretty.get(cat, cat.capitalize()) for cat in categories_internal if cat in summary]
+                summary_values = [offer_label] + [f"{summary[cat]:,.2f}" if cat in summary else '0.00' for cat in categories_internal if cat in summary]
+                # Remove old summary tree if present
+                for widget in summary_frame.winfo_children():
+                    widget.destroy()
+                if len(summary_columns) <= 1:
+                    summary_frame.grid_remove()
+                    return
+                summary_tree = ttk.Treeview(summary_frame, columns=summary_columns, show='headings', height=2)
+                for col in summary_columns:
+                    summary_tree.heading(col, text=col)
+                    summary_tree.column(col, width=150, minwidth=100)
+                summary_tree.insert('', 'end', values=summary_values, tags=('offer',))
+                summary_tree.grid(row=0, column=0, sticky=tk.EW)
+                summary_frame.grid()
+                tab.summary_tree = summary_tree
+                # --- CATEGORY FILTERING FEATURE ---
+                tab._active_category_filter = None  # Track the current filter
+                def on_summary_double_click(event):
+                    region = summary_tree.identify('region', event.x, event.y)
+                    if region != 'cell':
+                        return
+                    col_id = summary_tree.identify_column(event.x)
+                    col_num = int(col_id[1:]) - 1  # 0-based
+                    if col_num == 0:
+                        return  # Ignore 'Offer' column
+                    category_pretty = summary_columns[col_num]
+                    category_internal = pretty_to_internal.get(category_pretty, category_pretty.lower())
+                    # Toggle filter: if already filtered to this, remove; else filter
+                    if getattr(tab, '_active_category_filter', None) == category_internal:
+                        tab._active_category_filter = None
+                        filtered_df = tab.final_dataframe if hasattr(tab, 'final_dataframe') else display_df
+                    else:
+                        tab._active_category_filter = category_internal
+                        df_full = tab.final_dataframe if hasattr(tab, 'final_dataframe') else display_df
+                        filtered_df = df_full[df_full['category'].apply(lambda x: pretty_to_internal.get(str(x).strip(), str(x).strip().lower()) == category_internal)]
+                    # Repopulate the main grid with the filtered DataFrame
+                    self._populate_final_data_treeview(tab.final_data_tree, filtered_df, final_display_columns)
+                    # Update the reference so further edits work on the filtered view
+                    tab._filtered_dataframe = filtered_df
+                summary_tree.bind('<Double-1>', on_summary_double_click)
+                # --- END CATEGORY FILTERING FEATURE ---
+            # --- END SUMMARY GRID PLACEHOLDER ---
+            # Button frame at the bottom
             button_frame = ttk.Frame(main_frame)
-            button_frame.grid(row=3, column=0, pady=(10, 0))
+            button_frame.grid(row=4, column=0, pady=(10, 0))
             apply_button = ttk.Button(button_frame, text="Apply Changes", 
                                      command=lambda: self._apply_final_data_changes(tree, display_df, tab))
             apply_button.pack(side=tk.LEFT, padx=(0, 5))
+            summarize_button = ttk.Button(button_frame, text="Summarize", command=show_summary_grid)
+            summarize_button.pack(side=tk.LEFT, padx=(0, 5))
+            save_button = ttk.Button(button_frame, text="Save Analysis", command=lambda: self._update_status('Save Analysis not implemented yet.'))
+            save_button.pack(side=tk.LEFT, padx=(0, 5))
             export_button = ttk.Button(button_frame, text="Export Data", 
                                       command=lambda: self._export_final_data(display_df))
             export_button.pack(side=tk.LEFT, padx=(0, 5))
-            stats_button = ttk.Button(button_frame, text="View Statistics", 
-                                     command=lambda: self._show_categorization_stats_from_final(tab, display_df, categorization_result))
-            stats_button.pack(side=tk.LEFT, padx=(0, 5))
-            back_button = ttk.Button(button_frame, text="Back to Original View", 
-                                    command=lambda: self._restore_original_view(tab))
-            back_button.pack(side=tk.LEFT)
             tab.final_data_tree = tree
             tab.final_dataframe = display_df
             tab.categorization_result = categorization_result
@@ -1648,45 +1745,14 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         except Exception as e:
             messagebox.showerror("Error", f"Failed to export data: {str(e)}")
     
-    def _show_categorization_stats_from_final(self, tab, dataframe, categorization_result):
-        """Show categorization statistics from the final data view"""
-        if not CATEGORIZATION_AVAILABLE:
-            messagebox.showerror("Error", "Statistics dialog not available")
-            return
-        
-        try:
-            dialog = show_categorization_stats_dialog(
-                parent=self.root,
-                dataframe=dataframe,
-                categorization_result=categorization_result
-            )
-            
-        except Exception as e:
-            logger.error(f"Failed to show statistics: {e}")
-            messagebox.showerror("Error", f"Failed to show statistics: {str(e)}")
-    
-    def _restore_original_view(self, tab):
-        """Restore the original tab view with categorization buttons"""
-        try:
-            # Get the file mapping for this tab
-            current_tab = self.notebook.select()
-            for file_key, file_data in self.controller.current_files.items():
-                if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == current_tab:
-                    file_mapping = file_data['file_mapping']
-                    
-                    # Restore the original view
-                    self._populate_file_tab(tab, file_mapping)
-                    
-                    # Add categorization buttons
-                    self._add_categorization_buttons(tab, file_mapping)
-                    
-                    self._update_status("Restored original view")
-                    break
-                
-        except Exception as e:
-            logger.error(f"Error restoring original view: {e}")
-            messagebox.showerror("Error", f"Error restoring original view: {str(e)}")
-
     def run(self):
         """Start the main application loop."""
         self.root.mainloop()
+
+    def _prompt_offer_name(self):
+        # Simple dialog to prompt for offer name/label
+        import tkinter.simpledialog
+        offer_name = tkinter.simpledialog.askstring("Offer Name", "Enter a name or label for this offer:", parent=self.root)
+        if offer_name is not None and offer_name.strip() != "":
+            return offer_name.strip()
+        return None
