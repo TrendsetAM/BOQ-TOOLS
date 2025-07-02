@@ -81,3 +81,7 @@ venv.bak/
 logs/boq_tools.log
 logs/boq_tools.log
 logs/boq_tools.log
+/logs
+examples/export.xlsx
+logs/boq_tools.log
+*.log
