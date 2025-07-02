@@ -1448,9 +1448,6 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             # Clear the current tab content
             for widget in tab.winfo_children():
                 widget.destroy()
-            # DEBUG: Add a big label to confirm this method is running
-            debug_label = ttk.Label(tab, text="FINAL GRID SHOWN", background="lightblue", font=("TkDefaultFont", 18, "bold"))
-            debug_label.grid(row=0, column=0, sticky=tk.EW, pady=10)
             # Create main frame
             main_frame = ttk.Frame(tab)
             main_frame.grid(row=1, column=0, sticky=tk.NSEW, padx=10, pady=10)
@@ -1464,7 +1461,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             title_label = ttk.Label(main_frame, text="Final Categorized Data", font=("TkDefaultFont", 14, "bold"))
             title_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
             instructions = """
-            Review the categorized data below. You can make corrections by double-clicking on any cell and editing the values.\nChanges will be saved when you click 'Apply Changes' or 'Export Data'.
+            Review the categorized data below. You can make corrections by double-clicking the category cell and selecting a value from the dropdown.\nChanges will be saved when you click 'Apply Changes' or 'Export Data'.
             """
             instruction_label = ttk.Label(main_frame, text=instructions, wraplength=800, justify=tk.LEFT)
             instruction_label.grid(row=1, column=0, sticky=tk.W, pady=(0, 10))
@@ -1485,6 +1482,9 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             tree.grid(row=0, column=0, sticky=tk.NSEW)
             vsb.grid(row=0, column=1, sticky=tk.NS)
             hsb.grid(row=1, column=0, sticky=tk.EW)
+            # Set selection color to light blue and text color to black for readability
+            style = ttk.Style(tree)
+            style.map('Treeview', background=[('selected', '#B3E5FC')], foreground=[('selected', 'black')])
             self._populate_final_data_treeview(tree, display_df, final_display_columns)
             self._enable_final_data_editing(tree, display_df)
             button_frame = ttk.Frame(main_frame)
@@ -1510,11 +1510,16 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             traceback.print_exc()
     
     def _populate_final_data_treeview(self, tree, dataframe, columns):
-        """Populate the treeview with data from the final DataFrame"""
+        """Populate the treeview with data from the final DataFrame, formatting category as pretty (dropdown) version."""
+        # Import category mapping
+        from core.manual_categorizer import get_manual_categorization_categories
+        categories_pretty = get_manual_categorization_categories()
+        categories_internal = [cat.lower() for cat in categories_pretty]
+        pretty_to_internal = {pretty: internal for pretty, internal in zip(categories_pretty, categories_internal)}
+        internal_to_pretty = {internal: pretty for pretty, internal in zip(categories_pretty, categories_internal)}
         # Clear existing items
         for item in tree.get_children():
             tree.delete(item)
-        
         # Add data rows
         for index, row in dataframe.iterrows():
             values = []
@@ -1522,57 +1527,68 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 value = row.get(col, '')
                 if pd.isna(value):
                     value = ''
-                values.append(str(value))
+                # For category, always display pretty version
+                if col == 'category':
+                    value_disp = internal_to_pretty.get(str(value).strip().lower(), str(value))
+                    values.append(value_disp)
+                else:
+                    values.append(str(value))
             tree.insert('', 'end', values=values, tags=(f'row_{index}',))
     
     def _enable_final_data_editing(self, tree, dataframe):
-        """Enable editing capabilities for the final data treeview"""
+        """Enable editing capabilities for the final data treeview. Only allow editing of the 'category' column with a dropdown."""
+        from core.manual_categorizer import get_manual_categorization_categories
+        categories_pretty = get_manual_categorization_categories()
+        categories_internal = [cat.lower() for cat in categories_pretty]
+        pretty_to_internal = {pretty: internal for pretty, internal in zip(categories_pretty, categories_internal)}
+        internal_to_pretty = {internal: pretty for pretty, internal in zip(categories_pretty, categories_internal)}
         def on_double_click(event):
             try:
-                # Get the clicked item and column
-                item = tree.selection()[0]
+                row_id = tree.identify_row(event.y)
                 column = tree.identify_column(event.x)
-                col_num = int(column[1]) - 1  # Convert column identifier to index
-                
-                # Get current value
-                current_values = tree.item(item, 'values')
+                if not row_id or not column:
+                    return
+                col_num = int(column[1:]) - 1  # Convert column identifier to index
+                col_name = tree['columns'][col_num]
+                if col_name != 'category':
+                    return  # Only allow editing of the 'category' column
+                current_values = tree.item(row_id, 'values')
                 current_value = current_values[col_num] if col_num < len(current_values) else ''
-                
-                # Create entry widget for editing
-                entry = ttk.Entry(tree)
-                entry.insert(0, str(current_value))
-                entry.select_range(0, tk.END)
-                
-                # Position entry widget
-                bbox = tree.bbox(item, column)
+                # Create combobox for category selection
+                combo = ttk.Combobox(tree, values=categories_pretty, state='readonly')
+                combo.set(current_value)
+                bbox = tree.bbox(row_id, column)
                 if bbox:
-                    entry.place(x=bbox[0], y=bbox[1], width=bbox[2]-bbox[0], height=bbox[3]-bbox[1])
-                    
-                    def save_edit(event=None):
+                    combo.place(x=bbox[0], y=bbox[1], width=bbox[2], height=bbox[3])
+                    def save_combo(event=None):
                         try:
-                            new_value = entry.get()
-                            values = list(tree.item(item, 'values'))
+                            new_pretty = combo.get()
+                            new_internal = pretty_to_internal.get(new_pretty, new_pretty)
+                            values = list(tree.item(row_id, 'values'))
                             if col_num < len(values):
-                                values[col_num] = new_value
-                                tree.item(item, values=values)
-                            entry.destroy()
+                                # Update display to pretty
+                                values[col_num] = new_pretty
+                                tree.item(row_id, values=values)
+                                # Update the underlying DataFrame with the internal value
+                                # Find the corresponding row in the DataFrame by index
+                                if dataframe is not None and row_id.isdigit():
+                                    idx = int(row_id)
+                                    if idx < len(dataframe):
+                                        dataframe.at[idx, 'category'] = new_internal
+                            combo.destroy()
                         except Exception as e:
-                            print(f"[DEBUG] Error saving edit: {e}")
-                            entry.destroy()
-                    
-                    def cancel_edit(event=None):
-                        entry.destroy()
-                    
-                    entry.bind('<Return>', save_edit)
-                    entry.bind('<FocusOut>', save_edit)
-                    entry.bind('<Escape>', cancel_edit)
-                    entry.focus()
-                    print(f"[DEBUG] Double-click editing enabled for column {col_num}, value: {current_value}")
+                            print(f"[DEBUG] Error saving combo: {e}")
+                            combo.destroy()
+                    def cancel_combo(event=None):
+                        combo.destroy()
+                    combo.bind('<Return>', save_combo)
+                    combo.bind('<FocusOut>', save_combo)
+                    combo.bind('<Escape>', cancel_combo)
+                    combo.focus()
             except Exception as e:
                 print(f"[DEBUG] Error in double-click editing: {e}")
-        
         tree.bind('<Double-1>', on_double_click)
-        print("[DEBUG] Double-click binding added to treeview")
+        print("[DEBUG] Double-click binding added to treeview (category only)")
     
     def _apply_final_data_changes(self, tree, dataframe, tab):
         """Apply changes made in the grid to the final DataFrame"""
