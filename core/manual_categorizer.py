@@ -1217,8 +1217,4 @@ def get_manual_categorization_categories() -> List[str]:
         "Cleaning and Cabling of PV Mod.",
         "Tracker Inst.",
         "Other",
-    ]
-
-def get_manual_categorization_categories_lowercase() -> List[str]:
-    """Get the same list but in lowercase for internal processing"""
-    return [cat.lower() for cat in get_manual_categorization_categories()] 
+    ] 

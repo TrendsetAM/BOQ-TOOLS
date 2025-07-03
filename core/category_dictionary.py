@@ -97,64 +97,52 @@ class CategoryDictionary:
     
     def _create_default_dictionary(self) -> None:
         """Create default category dictionary with common BOQ categories"""
+        # Import the actual categories used in the system
+        from core.manual_categorizer import get_manual_categorization_categories
+        
+        # Get the pretty categories
+        pretty_categories = get_manual_categorization_categories()
+        
+        # Create some basic default mappings using pretty categories
         default_mappings = [
-            CategoryMapping("concrete", CategoryType.MATERIALS.value),
-            CategoryMapping("steel", CategoryType.MATERIALS.value),
-            CategoryMapping("cement", CategoryType.MATERIALS.value),
-            CategoryMapping("sand", CategoryType.MATERIALS.value),
-            CategoryMapping("aggregate", CategoryType.MATERIALS.value),
-            CategoryMapping("brick", CategoryType.MATERIALS.value),
-            CategoryMapping("block", CategoryType.MATERIALS.value),
-            CategoryMapping("timber", CategoryType.MATERIALS.value),
-            CategoryMapping("paint", CategoryType.MATERIALS.value),
-            CategoryMapping("tiles", CategoryType.MATERIALS.value),
-            CategoryMapping("glass", CategoryType.MATERIALS.value),
-            CategoryMapping("insulation", CategoryType.MATERIALS.value),
-            CategoryMapping("roofing", CategoryType.MATERIALS.value),
-            CategoryMapping("excavation", CategoryType.LABOR.value),
-            CategoryMapping("foundation", CategoryType.LABOR.value),
-            CategoryMapping("carpentry", CategoryType.LABOR.value),
-            CategoryMapping("electrical", CategoryType.LABOR.value),
-            CategoryMapping("plumbing", CategoryType.LABOR.value),
-            CategoryMapping("masonry", CategoryType.LABOR.value),
-            CategoryMapping("painting", CategoryType.LABOR.value),
-            CategoryMapping("finishing", CategoryType.LABOR.value),
-            CategoryMapping("crane", CategoryType.EQUIPMENT.value),
-            CategoryMapping("excavator", CategoryType.EQUIPMENT.value),
-            CategoryMapping("bulldozer", CategoryType.EQUIPMENT.value),
-            CategoryMapping("loader", CategoryType.EQUIPMENT.value),
-            CategoryMapping("compactor", CategoryType.EQUIPMENT.value),
-            CategoryMapping("generator", CategoryType.EQUIPMENT.value),
-            CategoryMapping("welding", CategoryType.EQUIPMENT.value),
-            CategoryMapping("testing", CategoryType.SERVICES.value),
-            CategoryMapping("inspection", CategoryType.SERVICES.value),
-            CategoryMapping("certification", CategoryType.SERVICES.value),
-            CategoryMapping("permits", CategoryType.SERVICES.value),
-            CategoryMapping("design", CategoryType.SERVICES.value),
-            CategoryMapping("consulting", CategoryType.SERVICES.value),
-            CategoryMapping("overhead", CategoryType.OVERHEAD.value),
-            CategoryMapping("site office", CategoryType.OVERHEAD.value),
-            CategoryMapping("utilities", CategoryType.OVERHEAD.value),
-            CategoryMapping("insurance", CategoryType.OVERHEAD.value),
-            CategoryMapping("profit", CategoryType.PROFIT.value),
-            CategoryMapping("margin", CategoryType.PROFIT.value),
-            CategoryMapping("contingency", CategoryType.CONTINGENCY.value),
-            CategoryMapping("allowance", CategoryType.CONTINGENCY.value),
-            CategoryMapping("variation", CategoryType.CONTINGENCY.value),
-            CategoryMapping("tax", CategoryType.TAXES.value),
-            CategoryMapping("vat", CategoryType.TAXES.value),
-            CategoryMapping("duty", CategoryType.TAXES.value),
+            CategoryMapping("concrete", "Civil Works"),
+            CategoryMapping("steel", "Civil Works"),
+            CategoryMapping("cement", "Civil Works"),
+            CategoryMapping("sand", "Civil Works"),
+            CategoryMapping("aggregate", "Civil Works"),
+            CategoryMapping("excavation", "Earth Movement"),
+            CategoryMapping("foundation", "Civil Works"),
+            CategoryMapping("electrical", "Electrical Works"),
+            CategoryMapping("cable", "Electrical Works"),
+            CategoryMapping("solar", "PV Mod. Installation"),
+            CategoryMapping("panel", "PV Mod. Installation"),
+            CategoryMapping("inverter", "Electrical Works"),
+            CategoryMapping("transformer", "Electrical Works"),
+            CategoryMapping("trenching", "Trenching"),
+            CategoryMapping("road", "Roads"),
+            CategoryMapping("access", "Roads"),
+            CategoryMapping("building", "OEM Building"),
+            CategoryMapping("office", "OEM Building"),
+            CategoryMapping("tracker", "Tracker Inst."),
+            CategoryMapping("mounting", "Tracker Inst."),
+            CategoryMapping("cleaning", "Cleaning and Cabling of PV Mod."),
+            CategoryMapping("cabling", "Cleaning and Cabling of PV Mod."),
+            CategoryMapping("overhead", "General Costs"),
+            CategoryMapping("management", "General Costs"),
+            CategoryMapping("permit", "General Costs"),
+            CategoryMapping("insurance", "General Costs"),
+            CategoryMapping("other", "Other"),
         ]
         
         for mapping in default_mappings:
             self.mappings[mapping.description.lower()] = mapping
             self.categories.add(mapping.category)
         
-        # Add all category types
-        for category_type in CategoryType:
-            self.categories.add(category_type.value)
+        # Add all pretty categories to ensure they're available
+        for category in pretty_categories:
+            self.categories.add(category)
         
-        logger.info("Created default category dictionary")
+        logger.info("Created default category dictionary with pretty categories")
     
     def save_dictionary(self) -> bool:
         """Save dictionary to JSON file"""
@@ -190,7 +178,7 @@ class CategoryDictionary:
         
         Args:
             description: Item description
-            category: Category to assign
+            category: Category to assign (in pretty format)
             confidence: Confidence level (0.0 to 1.0)
             notes: Optional notes about the mapping
             
@@ -198,26 +186,29 @@ class CategoryDictionary:
             True if mapping was added successfully
         """
         try:
-            # Normalize description
+            # Normalize description (keep lowercase for matching)
             normalized_desc = description.lower().strip()
             
             if not normalized_desc:
                 logger.warning("Cannot add mapping with empty description")
                 return False
             
+            # Keep category in pretty format (no lowercasing)
+            pretty_category = category.strip()
+            
             # Create new mapping
             mapping = CategoryMapping(
                 description=normalized_desc,
-                category=category.lower().strip(),
+                category=pretty_category,  # Store in pretty format
                 confidence=confidence,
                 notes=notes
             )
             
             # Add to dictionary
             self.mappings[normalized_desc] = mapping
-            self.categories.add(category.lower().strip())
+            self.categories.add(pretty_category)  # Store pretty category
             
-            logger.info(f"Added mapping: '{description}' -> '{category}'")
+            logger.info(f"Added mapping: '{description}' -> '{pretty_category}'")
             return True
             
         except Exception as e:
@@ -277,9 +268,9 @@ class CategoryDictionary:
     
     def get_mappings_for_category(self, category: str) -> List[CategoryMapping]:
         """Get all mappings for a specific category"""
-        category_lower = category.lower()
+        # Compare with pretty category format
         return [mapping for mapping in self.mappings.values() 
-                if mapping.category == category_lower]
+                if mapping.category == category.strip()]
     
     def remove_mapping(self, description: str) -> bool:
         """Remove a mapping from the dictionary"""
@@ -300,7 +291,7 @@ class CategoryDictionary:
         
         if normalized_desc in self.mappings:
             mapping = self.mappings[normalized_desc]
-            mapping.category = new_category.lower().strip()
+            mapping.category = new_category.strip()  # Store in pretty format
             
             if new_confidence is not None:
                 mapping.confidence = new_confidence
@@ -308,7 +299,7 @@ class CategoryDictionary:
             if new_notes is not None:
                 mapping.notes = new_notes
             
-            self.categories.add(new_category.lower().strip())
+            self.categories.add(new_category.strip())  # Store pretty category
             logger.info(f"Updated mapping: '{description}' -> '{new_category}'")
             return True
         

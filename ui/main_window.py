@@ -1536,10 +1536,9 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             def show_summary_grid():
                 import pandas as pd
                 from core.manual_categorizer import get_manual_categorization_categories
+                
+                # Get pretty categories - this is now our single source of truth
                 categories_pretty = get_manual_categorization_categories()
-                categories_internal = [cat.lower() for cat in categories_pretty]
-                pretty_to_internal = {pretty: internal for pretty, internal in zip(categories_pretty, categories_internal)}
-                internal_to_pretty = {internal: pretty for pretty, internal in zip(categories_pretty, categories_internal)}
                 
                 # Helper to robustly parse numbers
                 def parse_number(val):
@@ -1554,7 +1553,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                         print(f"[DEBUG] Failed to parse number '{val}': {e}")
                         return 0.0
                 
-                # Get the current DataFrame (with internal values)
+                # Get the current DataFrame (now uses pretty categories directly)
                 df = tab.final_dataframe if hasattr(tab, 'final_dataframe') else display_df
                 print("[DEBUG] DataFrame columns:", df.columns.tolist())
                 print("[DEBUG] First few rows of DataFrame:")
@@ -1568,45 +1567,32 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     print(f"[DEBUG] Price column after parsing:")
                     print(df[price_col].head().to_string())
                 
-                # Group by category
+                # Group by category (now using pretty categories directly)
                 cat_col = 'category'
                 if cat_col in df.columns:
-                    # Convert categories to internal format for matching
-                    df['category_internal'] = df[cat_col].str.strip().str.lower()
-                    print(f"[DEBUG] Unique categories (internal) before grouping:", df['category_internal'].unique())
+                    # Categories are already in pretty format, just group directly
+                    print(f"[DEBUG] Unique categories before grouping:", df[cat_col].unique())
                     
-                    # Create the summary dictionary with internal category names
-                    summary_dict = df.groupby('category_internal')[price_col].sum().to_dict()
+                    # Create the summary dictionary with pretty category names
+                    summary_dict = df.groupby(cat_col)[price_col].sum().to_dict()
                     print("[DEBUG] Summary dict after grouping:", summary_dict)
                     
-                    # Map the actual categories to predefined categories
-                    mapped_summary = {}
-                    for actual_cat, total in summary_dict.items():
-                        # Try to find a matching predefined category
-                        matched = False
-                        for internal_cat in categories_internal:
-                            if actual_cat == internal_cat or actual_cat.replace(' ', '') == internal_cat.replace(' ', ''):
-                                mapped_summary[internal_cat] = mapped_summary.get(internal_cat, 0) + total
-                                matched = True
-                                break
-                        if not matched:
-                            # If no match found, add to 'Other' category
-                            other_cat = 'other'
-                            mapped_summary[other_cat] = mapped_summary.get(other_cat, 0) + total
+                    # No need for complex mapping - categories are already pretty
+                    # Just ensure we have all predefined categories with zero values if not present
+                    final_summary = {}
+                    for cat_pretty in categories_pretty:
+                        final_summary[cat_pretty] = summary_dict.get(cat_pretty, 0.0)
                     
-                    print("[DEBUG] Mapped summary:", mapped_summary)
+                    print("[DEBUG] Final summary:", final_summary)
                 else:
                     print("[DEBUG] No category column found!")
-                    mapped_summary = {}
+                    final_summary = {cat: 0.0 for cat in categories_pretty}
                 
                 offer_label = self.current_offer_name if hasattr(self, 'current_offer_name') and self.current_offer_name else 'Offer'
                 summary_columns = ['Offer'] + categories_pretty
-                # Use the mapped summary to get values in the correct order
-                summary_values = [offer_label]
-                for cat_pretty in categories_pretty:
-                    cat_internal = pretty_to_internal[cat_pretty]
-                    value = mapped_summary.get(cat_internal, 0.0)
-                    summary_values.append(value)
+                
+                # Use the final summary to get values in the correct order
+                summary_values = [offer_label] + [final_summary[cat] for cat in categories_pretty]
                 
                 print("[DEBUG] Final summary values:", summary_values)
                 
@@ -1639,6 +1625,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 summary_tree.grid(row=0, column=0, sticky=tk.EW)
                 summary_frame.grid()
                 tab.summary_tree = summary_tree
+                
                 # --- CATEGORY FILTERING FEATURE ---
                 tab._active_category_filter = None  # Track the current filter
                 def on_summary_double_click(event):
@@ -1650,19 +1637,22 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     if col_num == 0:
                         return  # Ignore 'Offer' column
                     category_pretty = summary_columns[col_num]
-                    category_internal = pretty_to_internal.get(category_pretty, category_pretty.lower())
+                    
                     # Toggle filter: if already filtered to this, remove; else filter
-                    if getattr(tab, '_active_category_filter', None) == category_internal:
+                    if getattr(tab, '_active_category_filter', None) == category_pretty:
                         tab._active_category_filter = None
                         filtered_df = tab.final_dataframe if hasattr(tab, 'final_dataframe') else display_df
                     else:
-                        tab._active_category_filter = category_internal
+                        tab._active_category_filter = category_pretty
                         df_full = tab.final_dataframe if hasattr(tab, 'final_dataframe') else display_df
-                        filtered_df = df_full[df_full['category'].apply(lambda x: pretty_to_internal.get(str(x).strip(), str(x).strip().lower()) == category_internal)]
+                        # Filter by pretty category directly - no conversion needed
+                        filtered_df = df_full[df_full['category'] == category_pretty]
+                    
                     # Repopulate the main grid with the filtered DataFrame
                     self._populate_final_data_treeview(tab.final_data_tree, filtered_df, final_display_columns)
                     # Update the reference so further edits work on the filtered view
                     tab._filtered_dataframe = filtered_df
+                
                 summary_tree.bind('<Double-1>', on_summary_double_click)
                 # --- END CATEGORY FILTERING FEATURE ---
             # --- END SUMMARY GRID PLACEHOLDER ---
@@ -1687,17 +1677,10 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             traceback.print_exc()
     
     def _populate_final_data_treeview(self, tree, dataframe, columns):
-        """Populate the treeview with data from the final DataFrame, formatting category as pretty (dropdown) version."""
+        """Populate the treeview with data from the final DataFrame, using pretty categories directly."""
         print(f"[DEBUG] _populate_final_data_treeview called with DataFrame shape: {dataframe.shape}")
         print(f"[DEBUG] DataFrame columns: {dataframe.columns.tolist()}")
         print(f"[DEBUG] Requested columns: {columns}")
-        
-        # Import category mapping
-        from core.manual_categorizer import get_manual_categorization_categories
-        categories_pretty = get_manual_categorization_categories()
-        categories_internal = [cat.lower() for cat in categories_pretty]
-        pretty_to_internal = {pretty: internal for pretty, internal in zip(categories_pretty, categories_internal)}
-        internal_to_pretty = {internal: pretty for pretty, internal in zip(categories_internal, categories_pretty)}
         
         # Helper to format numbers consistently
         def format_number(val, is_currency=False):
@@ -1727,9 +1710,8 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     value = ''
                 # Format based on column type
                 if col == 'category':
-                    # For category, always display pretty version
-                    value_disp = internal_to_pretty.get(str(value).strip().lower(), str(value))
-                    values.append(value_disp)
+                    # Category is already in pretty format - use directly
+                    values.append(str(value))
                 elif col in ['quantity', 'unit_price', 'total_price']:
                     # Format numeric columns
                     values.append(format_number(value))
@@ -1745,9 +1727,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         """Enable editing capabilities for the final data treeview. Only allow editing of the 'category' column with a dropdown."""
         from core.manual_categorizer import get_manual_categorization_categories
         categories_pretty = get_manual_categorization_categories()
-        categories_internal = [cat.lower() for cat in categories_pretty]
-        pretty_to_internal = {pretty: internal for pretty, internal in zip(categories_pretty, categories_internal)}
-        internal_to_pretty = {internal: pretty for pretty, internal in zip(categories_pretty, categories_internal)}
+        
         def on_double_click(event):
             try:
                 row_id = tree.identify_row(event.y)
@@ -1760,6 +1740,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     return  # Only allow editing of the 'category' column
                 current_values = tree.item(row_id, 'values')
                 current_value = current_values[col_num] if col_num < len(current_values) else ''
+                
                 # Create combobox for category selection
                 combo = ttk.Combobox(tree, values=categories_pretty, state='readonly')
                 combo.set(current_value)
@@ -1769,18 +1750,16 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     def save_combo(event=None):
                         try:
                             new_pretty = combo.get()
-                            new_internal = pretty_to_internal.get(new_pretty, new_pretty)
                             values = list(tree.item(row_id, 'values'))
                             if col_num < len(values):
-                                # Update display to pretty
+                                # Update display to pretty category
                                 values[col_num] = new_pretty
                                 tree.item(row_id, values=values)
-                                # Update the underlying DataFrame with the internal value
-                                # Find the corresponding row in the DataFrame by index
+                                # Update the underlying DataFrame with the pretty category (no conversion needed)
                                 if dataframe is not None and row_id.isdigit():
                                     idx = int(row_id)
                                     if idx < len(dataframe):
-                                        dataframe.at[idx, 'category'] = new_internal
+                                        dataframe.at[idx, 'category'] = new_pretty
                             combo.destroy()
                         except Exception as e:
                             print(f"[DEBUG] Error saving combo: {e}")
@@ -1840,11 +1819,8 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             import numpy as np
             from core.manual_categorizer import get_manual_categorization_categories
             
-            # Prepare pretty/internals mapping
+            # Get pretty categories - our single source of truth
             categories_pretty = get_manual_categorization_categories()
-            categories_internal = [cat.lower() for cat in categories_pretty]
-            internal_to_pretty = {internal: pretty for pretty, internal in zip(categories_internal, categories_pretty)}
-            pretty_to_internal = {pretty: internal for pretty, internal in zip(categories_pretty, categories_internal)}
             
             # Helper to robustly parse numbers
             def parse_number(val):
@@ -1870,9 +1846,8 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             # Prepare main data
             df = dataframe.copy()
             
-            # Map category column to pretty names for export
-            if 'category' in df.columns:
-                df['category'] = df['category'].apply(lambda x: internal_to_pretty.get(str(x).strip().lower(), str(x)))
+            # Categories are already in pretty format - no conversion needed
+            print(f"[DEBUG] Exporting with categories: {df['category'].unique() if 'category' in df.columns else 'No category column'}")
             
             # Ensure numeric columns are numbers
             for col in ['quantity', 'unit_price', 'total_price']:
@@ -1917,32 +1892,21 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 if tab and hasattr(tab, 'summary_frame') and hasattr(tab, 'final_dataframe'):
                     df_summary = tab.final_dataframe.copy()
                     
-                    # Convert categories to internal format for matching
-                    if 'category' in df_summary.columns:
-                        df_summary['category_internal'] = df_summary['category'].str.strip().str.lower()
-                    else:
-                        df_summary['category_internal'] = ''
-                    
                     # Ensure price column is numeric
                     price_col = 'total_price' if 'total_price' in df_summary.columns else 'Total_price'
                     if price_col in df_summary.columns:
                         df_summary[price_col] = df_summary[price_col].apply(parse_number)
                     
-                    # Create summary by mapping to predefined categories
-                    summary_dict = df_summary.groupby('category_internal')[price_col].sum().to_dict()
-                    
-                    # Map actual categories to predefined categories
-                    mapped_summary = {}
-                    for actual_cat, total in summary_dict.items():
-                        matched = False
-                        for internal_cat in categories_internal:
-                            if actual_cat == internal_cat or actual_cat.replace(' ', '') == internal_cat.replace(' ', ''):
-                                mapped_summary[internal_cat] = mapped_summary.get(internal_cat, 0) + total
-                                matched = True
-                                break
-                        if not matched:
-                            other_cat = 'other'
-                            mapped_summary[other_cat] = mapped_summary.get(other_cat, 0) + total
+                    # Create summary by grouping pretty categories directly
+                    if 'category' in df_summary.columns:
+                        summary_dict = df_summary.groupby('category')[price_col].sum().to_dict()
+                        
+                        # Ensure all predefined categories are present
+                        final_summary = {}
+                        for cat_pretty in categories_pretty:
+                            final_summary[cat_pretty] = summary_dict.get(cat_pretty, 0.0)
+                    else:
+                        final_summary = {cat: 0.0 for cat in categories_pretty}
                     
                     # Create summary sheet
                     summary_ws = workbook.add_worksheet('Summary')
@@ -1954,11 +1918,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     
                     # Write values
                     offer_label = self.current_offer_name if hasattr(self, 'current_offer_name') and self.current_offer_name else 'Offer'
-                    summary_values = [offer_label]
-                    for cat_pretty in categories_pretty:
-                        cat_internal = pretty_to_internal[cat_pretty]
-                        value = mapped_summary.get(cat_internal, 0.0)
-                        summary_values.append(value)
+                    summary_values = [offer_label] + [final_summary[cat] for cat in categories_pretty]
                     
                     # Write summary row with formatting
                     for col_idx, val in enumerate(summary_values):
@@ -2738,7 +2698,7 @@ Review the rows below and adjust validity as needed."""
                         
                         print(f"[DEBUG] Created category mapping with {len(category_mapping)} entries")
                         
-                        # Apply categories to current DataFrame
+                        # Apply categories to current DataFrame (categories are already in pretty format)
                         current_df['category'] = current_df['Description'].apply(
                             lambda x: category_mapping.get(str(x).strip().lower(), '')
                         )
