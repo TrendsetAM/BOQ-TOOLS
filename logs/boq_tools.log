@@ -16510,3 +16510,239 @@ RuntimeError: main thread is not in main loop
 2025-07-03 20:38:08,860 [INFO] root: Core components initialized successfully
 2025-07-03 20:38:08,861 [INFO] root: Settings loaded successfully
 2025-07-03 20:38:08,861 [INFO] root: BOQ Tools v1.0.0 initialized successfully
+2025-07-03 20:53:22,973 [INFO] root: Logging system initialized
+2025-07-03 20:53:22,973 [INFO] root: Configuration loaded successfully
+2025-07-03 20:53:22,974 [INFO] core.sheet_classifier: Sheet Classifier initialized
+2025-07-03 20:53:22,974 [INFO] core.column_mapper: Loaded canonical mappings from C:\Users\Admin\AppData\Roaming\BOQ-TOOLS\canonical_mappings.json
+2025-07-03 20:53:22,974 [INFO] core.column_mapper: Column Mapper initialized
+2025-07-03 20:53:22,974 [INFO] core.row_classifier: Row Classifier initialized
+2025-07-03 20:53:22,975 [INFO] core.validator: Data Validator initialized
+2025-07-03 20:53:22,975 [INFO] core.mapping_generator: Mapping Generator initialized
+2025-07-03 20:53:22,975 [INFO] utils.export: ExcelExporter initialized.
+2025-07-03 20:53:22,975 [INFO] root: Core components initialized successfully
+2025-07-03 20:53:22,975 [INFO] root: Settings loaded successfully
+2025-07-03 20:53:22,976 [INFO] root: BOQ Tools v1.0.0 initialized successfully
+2025-07-03 20:53:45,089 [INFO] core.file_processor: Detected file format: xlsx
+2025-07-03 20:53:45,475 [INFO] core.file_processor: Successfully loaded Excel file: GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-07-03 20:53:45,475 [INFO] core.file_processor: Total sheets: 35
+2025-07-03 20:53:45,476 [INFO] core.file_processor: Found 12 visible sheets out of 35 total
+2025-07-03 20:53:45,477 [INFO] root: Processing file: C:\Users\Admin\Documents\GitHub\BOQ-TOOLS\examples\GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-07-03 20:53:45,477 [INFO] core.file_processor: Detected file format: xlsx
+2025-07-03 20:53:45,888 [INFO] core.file_processor: Successfully loaded Excel file: GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-07-03 20:53:45,888 [INFO] core.file_processor: Total sheets: 35
+2025-07-03 20:53:45,890 [INFO] core.file_processor: Found 12 visible sheets out of 35 total
+2025-07-03 20:53:45,890 [INFO] core.file_processor: Found 12 visible sheets out of 35 total
+2025-07-03 20:53:46,124 [INFO] core.column_mapper: Processing sheet mapping for 107 rows
+2025-07-03 20:53:46,129 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-07-03 20:53:46,131 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 20:53:46,132 [INFO] core.column_mapper: Processing sheet mapping for 205 rows
+2025-07-03 20:53:46,134 [INFO] core.column_mapper: Header row found at index 7 with confidence 0.94
+2025-07-03 20:53:46,152 [INFO] core.column_mapper: Mapping completed: 26 columns mapped, confidence: 0.23
+2025-07-03 20:53:46,153 [INFO] core.column_mapper: Processing sheet mapping for 112 rows
+2025-07-03 20:53:46,155 [INFO] core.column_mapper: Header row found at index 6 with confidence 0.93
+2025-07-03 20:53:46,158 [INFO] core.column_mapper: Mapping completed: 14 columns mapped, confidence: 0.42
+2025-07-03 20:53:46,158 [INFO] core.column_mapper: Processing sheet mapping for 263 rows
+2025-07-03 20:53:46,160 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.92
+2025-07-03 20:53:46,162 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 20:53:46,162 [INFO] core.column_mapper: Processing sheet mapping for 20 rows
+2025-07-03 20:53:46,167 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-07-03 20:53:46,169 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 20:53:46,169 [INFO] core.column_mapper: Processing sheet mapping for 12 rows
+2025-07-03 20:53:46,172 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-07-03 20:53:46,174 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 20:53:46,174 [INFO] core.column_mapper: Processing sheet mapping for 25 rows
+2025-07-03 20:53:46,177 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-07-03 20:53:46,179 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 20:53:46,179 [INFO] core.column_mapper: Processing sheet mapping for 13 rows
+2025-07-03 20:53:46,181 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-07-03 20:53:46,182 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 20:53:46,183 [INFO] core.column_mapper: Processing sheet mapping for 20 rows
+2025-07-03 20:53:46,184 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.98
+2025-07-03 20:53:46,185 [INFO] core.column_mapper: Mapping completed: 10 columns mapped, confidence: 0.60
+2025-07-03 20:53:46,186 [INFO] core.row_classifier: Classifying 107 rows
+2025-07-03 20:53:46,255 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 42, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 65}
+2025-07-03 20:53:46,255 [INFO] core.row_classifier: Classifying 205 rows
+2025-07-03 20:53:46,413 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 142, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 63}
+2025-07-03 20:53:46,414 [INFO] core.row_classifier: Classifying 112 rows
+2025-07-03 20:53:46,498 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 67, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 45}
+2025-07-03 20:53:46,498 [INFO] core.row_classifier: Classifying 263 rows
+2025-07-03 20:53:46,684 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 160, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 103}
+2025-07-03 20:53:46,684 [INFO] core.row_classifier: Classifying 20 rows
+2025-07-03 20:53:46,701 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 12, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 8}
+2025-07-03 20:53:46,701 [INFO] core.row_classifier: Classifying 12 rows
+2025-07-03 20:53:46,708 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 1, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 11}
+2025-07-03 20:53:46,708 [INFO] core.row_classifier: Classifying 25 rows
+2025-07-03 20:53:46,722 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 3, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 22}
+2025-07-03 20:53:46,722 [INFO] core.row_classifier: Classifying 13 rows
+2025-07-03 20:53:46,728 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 1, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 12}
+2025-07-03 20:53:46,728 [INFO] core.row_classifier: Classifying 20 rows
+2025-07-03 20:53:46,737 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 1, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 19}
+2025-07-03 20:53:46,751 [INFO] core.mapping_generator: Generating unified file mapping structure
+2025-07-03 20:53:46,753 [INFO] core.mapping_generator: File mapping generated successfully: 9 sheets, global confidence: 0.54
+2025-07-03 20:53:46,754 [INFO] root: File processing completed: C:\Users\Admin\Documents\GitHub\BOQ-TOOLS\examples\GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-07-03 21:03:52,352 [INFO] root: Logging system initialized
+2025-07-03 21:03:52,352 [INFO] root: Configuration loaded successfully
+2025-07-03 21:03:52,352 [INFO] core.sheet_classifier: Sheet Classifier initialized
+2025-07-03 21:03:52,353 [INFO] core.column_mapper: Loaded canonical mappings from C:\Users\Admin\AppData\Roaming\BOQ-TOOLS\canonical_mappings.json
+2025-07-03 21:03:52,353 [INFO] core.column_mapper: Column Mapper initialized
+2025-07-03 21:03:52,353 [INFO] core.row_classifier: Row Classifier initialized
+2025-07-03 21:03:52,353 [INFO] core.validator: Data Validator initialized
+2025-07-03 21:03:52,353 [INFO] core.mapping_generator: Mapping Generator initialized
+2025-07-03 21:03:52,353 [INFO] utils.export: ExcelExporter initialized.
+2025-07-03 21:03:52,353 [INFO] root: Core components initialized successfully
+2025-07-03 21:03:52,354 [INFO] root: Settings loaded successfully
+2025-07-03 21:03:52,354 [INFO] root: BOQ Tools v1.0.0 initialized successfully
+2025-07-03 21:04:06,220 [INFO] core.file_processor: Detected file format: xlsx
+2025-07-03 21:04:06,572 [INFO] core.file_processor: Successfully loaded Excel file: GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-07-03 21:04:06,572 [INFO] core.file_processor: Total sheets: 35
+2025-07-03 21:04:06,573 [INFO] core.file_processor: Found 12 visible sheets out of 35 total
+2025-07-03 21:04:06,573 [INFO] root: Processing file: C:\Users\Admin\Documents\GitHub\BOQ-TOOLS\examples\GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-07-03 21:04:06,573 [INFO] core.file_processor: Detected file format: xlsx
+2025-07-03 21:04:06,993 [INFO] core.file_processor: Successfully loaded Excel file: GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-07-03 21:04:06,993 [INFO] core.file_processor: Total sheets: 35
+2025-07-03 21:04:06,994 [INFO] core.file_processor: Found 12 visible sheets out of 35 total
+2025-07-03 21:04:06,995 [INFO] core.file_processor: Found 12 visible sheets out of 35 total
+2025-07-03 21:04:07,219 [INFO] core.column_mapper: Processing sheet mapping for 107 rows
+2025-07-03 21:04:07,223 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-07-03 21:04:07,225 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 21:04:07,225 [INFO] core.column_mapper: Processing sheet mapping for 205 rows
+2025-07-03 21:04:07,228 [INFO] core.column_mapper: Header row found at index 7 with confidence 0.94
+2025-07-03 21:04:07,233 [INFO] core.column_mapper: Mapping completed: 26 columns mapped, confidence: 0.23
+2025-07-03 21:04:07,233 [INFO] core.column_mapper: Processing sheet mapping for 112 rows
+2025-07-03 21:04:07,235 [INFO] core.column_mapper: Header row found at index 6 with confidence 0.93
+2025-07-03 21:04:07,237 [INFO] core.column_mapper: Mapping completed: 14 columns mapped, confidence: 0.42
+2025-07-03 21:04:07,237 [INFO] core.column_mapper: Processing sheet mapping for 263 rows
+2025-07-03 21:04:07,239 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.92
+2025-07-03 21:04:07,240 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 21:04:07,241 [INFO] core.column_mapper: Processing sheet mapping for 20 rows
+2025-07-03 21:04:07,246 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-07-03 21:04:07,248 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 21:04:07,248 [INFO] core.column_mapper: Processing sheet mapping for 12 rows
+2025-07-03 21:04:07,250 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-07-03 21:04:07,252 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 21:04:07,252 [INFO] core.column_mapper: Processing sheet mapping for 25 rows
+2025-07-03 21:04:07,255 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-07-03 21:04:07,257 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 21:04:07,257 [INFO] core.column_mapper: Processing sheet mapping for 13 rows
+2025-07-03 21:04:07,259 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-07-03 21:04:07,261 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 21:04:07,261 [INFO] core.column_mapper: Processing sheet mapping for 20 rows
+2025-07-03 21:04:07,263 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.98
+2025-07-03 21:04:07,264 [INFO] core.column_mapper: Mapping completed: 10 columns mapped, confidence: 0.60
+2025-07-03 21:04:07,265 [INFO] core.row_classifier: Classifying 107 rows
+2025-07-03 21:04:07,334 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 42, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 65}
+2025-07-03 21:04:07,334 [INFO] core.row_classifier: Classifying 205 rows
+2025-07-03 21:04:07,486 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 142, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 63}
+2025-07-03 21:04:07,486 [INFO] core.row_classifier: Classifying 112 rows
+2025-07-03 21:04:07,568 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 67, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 45}
+2025-07-03 21:04:07,568 [INFO] core.row_classifier: Classifying 263 rows
+2025-07-03 21:04:07,765 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 160, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 103}
+2025-07-03 21:04:07,765 [INFO] core.row_classifier: Classifying 20 rows
+2025-07-03 21:04:07,781 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 12, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 8}
+2025-07-03 21:04:07,781 [INFO] core.row_classifier: Classifying 12 rows
+2025-07-03 21:04:07,788 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 1, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 11}
+2025-07-03 21:04:07,788 [INFO] core.row_classifier: Classifying 25 rows
+2025-07-03 21:04:07,801 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 3, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 22}
+2025-07-03 21:04:07,801 [INFO] core.row_classifier: Classifying 13 rows
+2025-07-03 21:04:07,806 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 1, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 12}
+2025-07-03 21:04:07,807 [INFO] core.row_classifier: Classifying 20 rows
+2025-07-03 21:04:07,815 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 1, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 19}
+2025-07-03 21:04:07,828 [INFO] core.mapping_generator: Generating unified file mapping structure
+2025-07-03 21:04:07,830 [INFO] core.mapping_generator: File mapping generated successfully: 9 sheets, global confidence: 0.54
+2025-07-03 21:04:07,831 [INFO] root: File processing completed: C:\Users\Admin\Documents\GitHub\BOQ-TOOLS\examples\GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-07-03 21:04:19,148 [INFO] core.category_dictionary: Loaded 927 mappings from config\category_dictionary.json
+2025-07-03 21:04:19,148 [INFO] core.category_dictionary: Category Dictionary initialized with 927 mappings
+2025-07-03 21:04:19,158 [INFO] core.auto_categorizer: Starting automatic categorization of 429 rows
+2025-07-03 21:04:19,236 [INFO] core.auto_categorizer: Categorization completed:
+2025-07-03 21:04:19,237 [INFO] core.auto_categorizer:   Total rows: 429
+2025-07-03 21:04:19,237 [INFO] core.auto_categorizer:   Matched rows: 429 (100.0%)
+2025-07-03 21:04:19,237 [INFO] core.auto_categorizer:   Unmatched rows: 0
+2025-07-03 21:04:19,238 [INFO] core.auto_categorizer:   Match types: {'exact': 429, 'none': 0}
+2025-07-03 21:04:19,238 [INFO] core.auto_categorizer:   Unique categories assigned: 14
+2025-07-03 21:04:19,240 [INFO] core.auto_categorizer: Collecting descriptions for manual review from 429 rows
+2025-07-03 21:04:19,261 [INFO] core.auto_categorizer: Collected 0 unique descriptions for manual review
+2025-07-03 21:04:19,261 [INFO] core.auto_categorizer: Total frequency: 0
+2025-07-03 21:04:19,261 [INFO] core.auto_categorizer: Match type breakdown for manual review:
+2025-07-03 21:12:41,418 [INFO] root: Logging system initialized
+2025-07-03 21:12:41,419 [INFO] root: Configuration loaded successfully
+2025-07-03 21:12:41,419 [INFO] core.sheet_classifier: Sheet Classifier initialized
+2025-07-03 21:12:41,419 [INFO] core.column_mapper: Loaded canonical mappings from C:\Users\Admin\AppData\Roaming\BOQ-TOOLS\canonical_mappings.json
+2025-07-03 21:12:41,419 [INFO] core.column_mapper: Column Mapper initialized
+2025-07-03 21:12:41,420 [INFO] core.row_classifier: Row Classifier initialized
+2025-07-03 21:12:41,420 [INFO] core.validator: Data Validator initialized
+2025-07-03 21:12:41,420 [INFO] core.mapping_generator: Mapping Generator initialized
+2025-07-03 21:12:41,420 [INFO] utils.export: ExcelExporter initialized.
+2025-07-03 21:12:41,420 [INFO] root: Core components initialized successfully
+2025-07-03 21:12:41,421 [INFO] root: Settings loaded successfully
+2025-07-03 21:12:41,421 [INFO] root: BOQ Tools v1.0.0 initialized successfully
+2025-07-03 21:12:52,841 [INFO] core.file_processor: Detected file format: xlsx
+2025-07-03 21:12:53,219 [INFO] core.file_processor: Successfully loaded Excel file: GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-07-03 21:12:53,220 [INFO] core.file_processor: Total sheets: 35
+2025-07-03 21:12:53,220 [INFO] core.file_processor: Found 12 visible sheets out of 35 total
+2025-07-03 21:12:53,221 [INFO] root: Processing file: C:\Users\Admin\Documents\GitHub\BOQ-TOOLS\examples\GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-07-03 21:12:53,221 [INFO] core.file_processor: Detected file format: xlsx
+2025-07-03 21:12:53,641 [INFO] core.file_processor: Successfully loaded Excel file: GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-07-03 21:12:53,641 [INFO] core.file_processor: Total sheets: 35
+2025-07-03 21:12:53,642 [INFO] core.file_processor: Found 12 visible sheets out of 35 total
+2025-07-03 21:12:53,643 [INFO] core.file_processor: Found 12 visible sheets out of 35 total
+2025-07-03 21:12:53,881 [INFO] core.column_mapper: Processing sheet mapping for 107 rows
+2025-07-03 21:12:53,885 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-07-03 21:12:53,887 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 21:12:53,887 [INFO] core.column_mapper: Processing sheet mapping for 205 rows
+2025-07-03 21:12:53,890 [INFO] core.column_mapper: Header row found at index 7 with confidence 0.94
+2025-07-03 21:12:53,895 [INFO] core.column_mapper: Mapping completed: 26 columns mapped, confidence: 0.23
+2025-07-03 21:12:53,896 [INFO] core.column_mapper: Processing sheet mapping for 112 rows
+2025-07-03 21:12:53,897 [INFO] core.column_mapper: Header row found at index 6 with confidence 0.93
+2025-07-03 21:12:53,900 [INFO] core.column_mapper: Mapping completed: 14 columns mapped, confidence: 0.42
+2025-07-03 21:12:53,900 [INFO] core.column_mapper: Processing sheet mapping for 263 rows
+2025-07-03 21:12:53,902 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.92
+2025-07-03 21:12:53,904 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 21:12:53,904 [INFO] core.column_mapper: Processing sheet mapping for 20 rows
+2025-07-03 21:12:53,909 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-07-03 21:12:53,911 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 21:12:53,912 [INFO] core.column_mapper: Processing sheet mapping for 12 rows
+2025-07-03 21:12:53,915 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-07-03 21:12:53,917 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 21:12:53,917 [INFO] core.column_mapper: Processing sheet mapping for 25 rows
+2025-07-03 21:12:53,920 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-07-03 21:12:53,922 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 21:12:53,922 [INFO] core.column_mapper: Processing sheet mapping for 13 rows
+2025-07-03 21:12:53,924 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.93
+2025-07-03 21:12:53,926 [INFO] core.column_mapper: Mapping completed: 13 columns mapped, confidence: 0.46
+2025-07-03 21:12:53,926 [INFO] core.column_mapper: Processing sheet mapping for 20 rows
+2025-07-03 21:12:53,928 [INFO] core.column_mapper: Header row found at index 3 with confidence 0.98
+2025-07-03 21:12:53,930 [INFO] core.column_mapper: Mapping completed: 10 columns mapped, confidence: 0.60
+2025-07-03 21:12:53,930 [INFO] core.row_classifier: Classifying 107 rows
+2025-07-03 21:12:54,005 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 42, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 65}
+2025-07-03 21:12:54,006 [INFO] core.row_classifier: Classifying 205 rows
+2025-07-03 21:12:54,180 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 142, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 63}
+2025-07-03 21:12:54,180 [INFO] core.row_classifier: Classifying 112 rows
+2025-07-03 21:12:54,270 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 67, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 45}
+2025-07-03 21:12:54,271 [INFO] core.row_classifier: Classifying 263 rows
+2025-07-03 21:12:54,474 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 160, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 103}
+2025-07-03 21:12:54,474 [INFO] core.row_classifier: Classifying 20 rows
+2025-07-03 21:12:54,492 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 12, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 8}
+2025-07-03 21:12:54,492 [INFO] core.row_classifier: Classifying 12 rows
+2025-07-03 21:12:54,499 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 1, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 11}
+2025-07-03 21:12:54,500 [INFO] core.row_classifier: Classifying 25 rows
+2025-07-03 21:12:54,514 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 3, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 22}
+2025-07-03 21:12:54,514 [INFO] core.row_classifier: Classifying 13 rows
+2025-07-03 21:12:54,521 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 1, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 12}
+2025-07-03 21:12:54,521 [INFO] core.row_classifier: Classifying 20 rows
+2025-07-03 21:12:54,530 [INFO] core.row_classifier: Classification completed: {<RowType.PRIMARY_LINE_ITEM: 'primary_line_item'>: 1, <RowType.HEADER_SECTION_BREAK: 'header_section_break'>: 0, <RowType.SUBTOTAL_ROW: 'subtotal_row'>: 0, <RowType.NOTES_COMMENTS: 'notes_comments'>: 0, <RowType.BLANK_SEPARATOR: 'blank_separator'>: 0, <RowType.INVALID_LINE_ITEM: 'invalid_line_item'>: 19}
+2025-07-03 21:12:54,544 [INFO] core.mapping_generator: Generating unified file mapping structure
+2025-07-03 21:12:54,547 [INFO] core.mapping_generator: File mapping generated successfully: 9 sheets, global confidence: 0.54
+2025-07-03 21:12:54,547 [INFO] root: File processing completed: C:\Users\Admin\Documents\GitHub\BOQ-TOOLS\examples\GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx
+2025-07-03 21:13:20,819 [INFO] core.category_dictionary: Loaded 927 mappings from config\category_dictionary.json
+2025-07-03 21:13:20,819 [INFO] core.category_dictionary: Category Dictionary initialized with 927 mappings
+2025-07-03 21:13:20,842 [INFO] core.auto_categorizer: Starting automatic categorization of 429 rows
+2025-07-03 21:13:20,912 [INFO] core.auto_categorizer: Categorization completed:
+2025-07-03 21:13:20,913 [INFO] core.auto_categorizer:   Total rows: 429
+2025-07-03 21:13:20,913 [INFO] core.auto_categorizer:   Matched rows: 429 (100.0%)
+2025-07-03 21:13:20,913 [INFO] core.auto_categorizer:   Unmatched rows: 0
+2025-07-03 21:13:20,913 [INFO] core.auto_categorizer:   Match types: {'exact': 429, 'none': 0}
+2025-07-03 21:13:20,913 [INFO] core.auto_categorizer:   Unique categories assigned: 14
+2025-07-03 21:13:20,914 [INFO] core.auto_categorizer: Collecting descriptions for manual review from 429 rows
+2025-07-03 21:13:20,933 [INFO] core.auto_categorizer: Collected 0 unique descriptions for manual review
+2025-07-03 21:13:20,934 [INFO] core.auto_categorizer: Total frequency: 0
+2025-07-03 21:13:20,934 [INFO] core.auto_categorizer: Match type breakdown for manual review:

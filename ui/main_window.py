@@ -2049,11 +2049,13 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         if file_mapping is None:
             messagebox.showerror("Error", "No mappings to save.")
             return
+        
         # Prepare mappings data
         mappings_data = {
             'sheets': [],
             'row_validity': self.row_validity.copy(),
         }
+        
         # Save relevant info from each sheet
         for sheet in getattr(file_mapping, 'sheets', []):
             sheet_info = {
@@ -2071,12 +2073,23 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 rc_dict = rc.__dict__.copy() if hasattr(rc, '__dict__') else dict(rc)
                 sheet_info['row_classifications'].append(rc_dict)
             mappings_data['sheets'].append(sheet_info)
+        
+        # IMPORTANT: Save the final categorized DataFrame if it exists
+        if hasattr(tab, 'final_dataframe') and tab.final_dataframe is not None:
+            mappings_data['final_dataframe'] = tab.final_dataframe.copy()
+            print(f"[DEBUG] Saving final DataFrame with shape: {tab.final_dataframe.shape}")
+        
+        # Save offer name if available
+        if hasattr(self, 'current_offer_name') and self.current_offer_name:
+            mappings_data['offer_name'] = self.current_offer_name
+        
         # Optionally save column_mapper config if needed for re-use
         if hasattr(file_mapping, 'column_mapper'):
             try:
                 mappings_data['column_mapper'] = file_mapping.column_mapper
             except Exception:
                 pass
+        
         file_path = filedialog.asksaveasfilename(
             title="Save Mappings as Pickle",
             defaultextension=".pkl",
@@ -2143,17 +2156,673 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
 
     def _use_mapping(self):
         """Handle loading and applying a previously saved mapping"""
+        # Step 1: Load the mapping file
         mapping_path = filedialog.askopenfilename(
             title="Select Mapping File",
             filetypes=[("Pickle files", "*.pkl"), ("All files", "*.*")]
         )
-        if mapping_path:
+        if not mapping_path:
+            return
+            
+        try:
+            with open(mapping_path, 'rb') as f:
+                mapping_data = pickle.load(f)
+            
+            # Validate mapping data structure
+            if not isinstance(mapping_data, dict) or 'sheets' not in mapping_data:
+                messagebox.showerror("Error", "Invalid mapping file format")
+                return
+                
+            self.saved_mapping = mapping_data
+            print(f"[DEBUG] Loaded mapping with {len(mapping_data['sheets'])} sheets")
+            
+            # Debug: Check if mapping contains final categorized data
+            if 'final_dataframe' in mapping_data:
+                df = mapping_data['final_dataframe']
+                print(f"[DEBUG] Mapping contains final DataFrame with shape: {df.shape if df is not None else None}")
+                if df is not None and 'category' in df.columns:
+                    print(f"[DEBUG] Final DataFrame has category column with {len(df)} rows")
+                else:
+                    print("[DEBUG] Final DataFrame missing category column")
+            else:
+                print("[DEBUG] Mapping does NOT contain final DataFrame - will require categorization")
+            
+            # Step 2: Prompt for BOQ file to analyze
+            self._update_status("Mapping loaded. Please select a BOQ file to analyze.")
+            
+            # Prompt for offer name
+            offer_name = self._prompt_offer_name()
+            if offer_name is None:
+                self._update_status("Analysis cancelled (no offer name provided).")
+                return
+            self.current_offer_name = offer_name
+            
+            # Select BOQ file
+            filetypes = [("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
+            filename = filedialog.askopenfilename(title="Select BOQ File to Analyze", filetypes=filetypes)
+            if not filename:
+                self._update_status("Analysis cancelled (no file selected).")
+                return
+                
+            # Step 3: Process the file with mapping validation
+            self._process_file_with_mapping(filename, mapping_data)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load mapping: {str(e)}")
+            print(f"[DEBUG] Error loading mapping: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _process_file_with_mapping(self, filepath, mapping_data):
+        """Process a BOQ file using a saved mapping"""
+        self._update_status(f"Processing {os.path.basename(filepath)} with saved mapping...")
+        
+        # Create a new tab for the file
+        filename = os.path.basename(filepath)
+        tab = ttk.Frame(self.notebook)
+        self.notebook.add(tab, text=f"Mapped: {filename}")
+        self.notebook.select(tab)
+        
+        # Configure grid for the tab frame
+        tab.grid_rowconfigure(0, weight=1)
+        tab.grid_columnconfigure(0, weight=1)
+        
+        loading_label = ttk.Label(tab, text="Applying saved mapping...")
+        loading_label.grid(row=0, column=0, pady=40, padx=100)
+        self.root.update_idletasks()
+        
+        def process_with_mapping():
             try:
-                with open(mapping_path, 'rb') as f:
-                    mapping_data = pickle.load(f)
-                # Store the mapping data for use when processing files
-                self.saved_mapping = mapping_data
-                # Now prompt for the files to apply the mapping to
-                self.open_file()
+                # Step 1: Load the file and get sheets
+                from core.file_processor import ExcelProcessor
+                processor = ExcelProcessor()
+                processor.load_file(Path(filepath))
+                visible_sheets = processor.get_visible_sheets()
+                
+                print(f"[DEBUG] File has sheets: {visible_sheets}")
+                print(f"[DEBUG] Mapping expects sheets: {[s['sheet_name'] for s in mapping_data['sheets']]}")
+                
+                # Step 2: Validate sheets
+                mapping_sheets = {s['sheet_name'] for s in mapping_data['sheets']}
+                file_sheets = set(visible_sheets)
+                
+                missing_sheets = mapping_sheets - file_sheets
+                if missing_sheets:
+                    error_msg = f"Missing sheets in file: {', '.join(missing_sheets)}"
+                    self.root.after(0, lambda: messagebox.showerror("Sheet Validation Error", error_msg))
+                    self.root.after(0, lambda: loading_label.destroy())
+                    return
+                
+                # Step 3: Process the file (basic processing first)
+                file_mapping = self.controller.process_file(
+                    Path(filepath),
+                    progress_callback=lambda p, m: self.root.after(0, self.update_progress, p, m),
+                    sheet_filter=list(mapping_sheets),
+                    sheet_types={sheet: "BOQ" for sheet in mapping_sheets}
+                )
+                
+                # Step 4: Apply the saved mappings
+                self.root.after(0, lambda: self._apply_saved_mappings(tab, file_mapping, mapping_data, loading_label))
+                
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to load mapping: {str(e)}")
+                print(f"[DEBUG] Error in process_with_mapping: {e}")
+                import traceback
+                traceback.print_exc()
+                self.root.after(0, lambda: self._on_processing_error(tab, filename, loading_label))
+        
+        threading.Thread(target=process_with_mapping, daemon=True).start()
+
+    def _apply_saved_mappings(self, tab, file_mapping, mapping_data, loading_widget):
+        """Apply saved column and row mappings to the processed file with strict validation"""
+        try:
+            print("[DEBUG] Applying saved mappings with strict validation...")
+            
+            # Apply column mappings and validate structure
+            for sheet in file_mapping.sheets:
+                sheet_name = sheet.sheet_name
+                
+                # Find corresponding mapping
+                saved_sheet = next((s for s in mapping_data['sheets'] if s['sheet_name'] == sheet_name), None)
+                if not saved_sheet:
+                    continue
+                
+                print(f"[DEBUG] Validating structure for sheet: {sheet_name}")
+                
+                # Strict validation: columns must match exactly
+                if not self._validate_exact_column_structure(sheet, saved_sheet):
+                    error_msg = (
+                        f"Column structure mismatch in sheet '{sheet_name}'.\n\n"
+                        "The new file does not have the exact same column structure as the saved mapping.\n"
+                        "Mapping can only be applied to files with identical structure."
+                    )
+                    loading_widget.destroy()
+                    messagebox.showerror("Structure Validation Failed", error_msg)
+                    return
+                
+                # Strict validation: rows must match exactly
+                if not self._validate_exact_row_structure(sheet, saved_sheet):
+                    error_msg = (
+                        f"Row structure mismatch in sheet '{sheet_name}'.\n\n"
+                        "The new file does not have the exact same row content as the saved mapping.\n"
+                        "Mapping can only be applied to files with identical structure and content."
+                    )
+                    loading_widget.destroy()
+                    messagebox.showerror("Structure Validation Failed", error_msg)
+                    return
+                
+                # Apply the mappings (since validation passed)
+                self._apply_exact_column_mappings(sheet, saved_sheet)
+                self._apply_exact_row_classifications(sheet, saved_sheet)
+                
+                print(f"[DEBUG] Sheet '{sheet_name}': Structure validated and mappings applied")
+            
+            # Store the file mapping and remove loading widget
+            self.file_mapping = file_mapping
+            self.column_mapper = file_mapping.column_mapper if hasattr(file_mapping, 'column_mapper') else None
+            loading_widget.destroy()
+            
+            # Show Row Review directly (skip column mapping step)
+            self._show_mapped_file_review(tab, file_mapping, mapping_data)
+            
+            success_msg = (
+                f"Mapping applied successfully!\n\n"
+                f"File structure matches perfectly with saved mapping.\n"
+                f"All column mappings and row classifications have been applied."
+            )
+            self._update_status("Mapping applied successfully - identical structure confirmed")
+            messagebox.showinfo("Mapping Applied", success_msg)
+            
+        except Exception as e:
+            print(f"[DEBUG] Error applying mappings: {e}")
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Error", f"Failed to apply mappings: {str(e)}")
+            loading_widget.destroy()
+
+    def _validate_exact_column_structure(self, sheet, saved_sheet):
+        """Validate that the column structure matches exactly"""
+        try:
+            # Get current column headers
+            current_headers = []
+            if hasattr(sheet, 'column_mappings'):
+                current_headers = [getattr(cm, 'original_header', '') for cm in sheet.column_mappings]
+            
+            # Get saved column headers
+            saved_mappings = saved_sheet.get('column_mappings', [])
+            saved_headers = []
+            for saved_mapping in saved_mappings:
+                if isinstance(saved_mapping, dict):
+                    header = saved_mapping.get('original_header', '')
+                    saved_headers.append(header)
+            
+            print(f"[DEBUG] Current headers ({len(current_headers)}): {current_headers}")
+            print(f"[DEBUG] Saved headers ({len(saved_headers)}): {saved_headers}")
+            
+            # Must have same number of columns
+            if len(current_headers) != len(saved_headers):
+                print(f"[DEBUG] Column count mismatch: {len(current_headers)} vs {len(saved_headers)}")
+                return False
+            
+            # Headers must match exactly (case-sensitive)
+            for i, (current, saved) in enumerate(zip(current_headers, saved_headers)):
+                if current.strip() != saved.strip():
+                    print(f"[DEBUG] Header mismatch at position {i}: '{current}' vs '{saved}'")
+                    return False
+            
+            print("[DEBUG] Column structure validation passed")
+            return True
+            
+        except Exception as e:
+            print(f"[DEBUG] Error validating column structure: {e}")
+            return False
+
+    def _validate_exact_row_structure(self, sheet, saved_sheet):
+        """Validate that the row content matches exactly for valid rows only"""
+        try:
+            # Get saved row classifications - only the valid ones
+            saved_classifications = saved_sheet.get('row_classifications', [])
+            saved_valid_rows = []
+            saved_valid_indices = []
+            
+            for saved_rc in saved_classifications:
+                if isinstance(saved_rc, dict):
+                    row_type = saved_rc.get('row_type', '')
+                    # Only include rows that were marked as valid (primary line items)
+                    if row_type in ['primary_line_item', 'PRIMARY_LINE_ITEM']:
+                        row_data = saved_rc.get('row_data', [])
+                        row_index = saved_rc.get('row_index', -1)
+                        if row_data and row_index >= 0:
+                            saved_valid_rows.append(row_data)
+                            saved_valid_indices.append(row_index)
+            
+            print(f"[DEBUG] Saved mapping has {len(saved_valid_rows)} valid rows at indices: {saved_valid_indices[:10]}...")
+            
+            # Get current row data for the same indices
+            current_valid_rows = []
+            if hasattr(sheet, 'row_classifications'):
+                for rc in sheet.row_classifications:
+                    row_index = getattr(rc, 'row_index', -1)
+                    
+                    # Only check rows that were valid in the saved mapping
+                    if row_index in saved_valid_indices:
+                        row_data = getattr(rc, 'row_data', None)
+                        if row_data is None and hasattr(sheet, 'sheet_data'):
+                            try:
+                                row_data = sheet.sheet_data[row_index]
+                            except Exception:
+                                row_data = []
+                        if row_data is None:
+                            row_data = []
+                        current_valid_rows.append((row_index, row_data))
+            
+            # Sort current rows by index to match saved order
+            current_valid_rows.sort(key=lambda x: x[0])
+            current_row_data = [row_data for _, row_data in current_valid_rows]
+            
+            print(f"[DEBUG] Current file has {len(current_row_data)} rows at the expected valid indices")
+            
+            # Must have same number of valid rows
+            if len(current_row_data) != len(saved_valid_rows):
+                print(f"[DEBUG] Valid row count mismatch: {len(current_row_data)} vs {len(saved_valid_rows)}")
+                print(f"[DEBUG] Missing indices: {set(saved_valid_indices) - {idx for idx, _ in current_valid_rows}}")
+                return False
+            
+            # Each valid row must match exactly
+            mismatched_rows = 0
+            for i, (current_row, saved_row) in enumerate(zip(current_row_data, saved_valid_rows)):
+                # Normalize for comparison (strip whitespace, handle empty cells)
+                current_normalized = [str(cell).strip() if cell is not None else '' for cell in current_row]
+                saved_normalized = [str(cell).strip() if cell is not None else '' for cell in saved_row]
+                
+                # Pad shorter row with empty strings
+                max_len = max(len(current_normalized), len(saved_normalized))
+                current_normalized.extend([''] * (max_len - len(current_normalized)))
+                saved_normalized.extend([''] * (max_len - len(saved_normalized)))
+                
+                if current_normalized != saved_normalized:
+                    mismatched_rows += 1
+                    if mismatched_rows <= 3:  # Show first 3 mismatches for debugging
+                        row_idx = saved_valid_indices[i] if i < len(saved_valid_indices) else i
+                        print(f"[DEBUG] Valid row {row_idx} mismatch:")
+                        print(f"  Current: {current_normalized[:3]}...")
+                        print(f"  Saved:   {saved_normalized[:3]}...")
+            
+            if mismatched_rows > 0:
+                print(f"[DEBUG] {mismatched_rows} valid rows don't match exactly")
+                return False
+            
+            print("[DEBUG] Row structure validation passed - all valid rows match")
+            return True
+            
+        except Exception as e:
+            print(f"[DEBUG] Error validating row structure: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def _apply_exact_column_mappings(self, sheet, saved_sheet):
+        """Apply the saved column mappings exactly"""
+        try:
+            saved_mappings = saved_sheet.get('column_mappings', [])
+            
+            # Create mapping from header to saved mapping info
+            header_to_mapping = {}
+            for saved_mapping in saved_mappings:
+                if isinstance(saved_mapping, dict):
+                    header = saved_mapping.get('original_header', '')
+                    header_to_mapping[header] = saved_mapping
+            
+            # Apply to current sheet
+            for cm in sheet.column_mappings:
+                original_header = getattr(cm, 'original_header', '')
+                if original_header in header_to_mapping:
+                    saved_mapping = header_to_mapping[original_header]
+                    cm.mapped_type = saved_mapping.get('mapped_type', 'unknown')
+                    cm.confidence = saved_mapping.get('confidence', 1.0)
+                    cm.user_edited = saved_mapping.get('user_edited', True)
+                    print(f"[DEBUG] Applied exact mapping: {original_header} -> {cm.mapped_type}")
+            
+        except Exception as e:
+            print(f"[DEBUG] Error applying column mappings: {e}")
+
+    def _apply_exact_row_classifications(self, sheet, saved_sheet):
+        """Apply the saved row classifications exactly"""
+        try:
+            saved_classifications = saved_sheet.get('row_classifications', [])
+            
+            # Initialize row validity for this sheet
+            sheet_name = sheet.sheet_name
+            if not hasattr(self, 'row_validity'):
+                self.row_validity = {}
+            self.row_validity[sheet_name] = {}
+            
+            # Apply saved validity to corresponding rows
+            if hasattr(sheet, 'row_classifications') and len(sheet.row_classifications) == len(saved_classifications):
+                for i, (current_rc, saved_rc) in enumerate(zip(sheet.row_classifications, saved_classifications)):
+                    if isinstance(saved_rc, dict):
+                        saved_row_type = saved_rc.get('row_type', '')
+                        is_valid = saved_row_type in ['primary_line_item', 'PRIMARY_LINE_ITEM']
+                        
+                        row_index = getattr(current_rc, 'row_index', i)
+                        self.row_validity[sheet_name][row_index] = is_valid
+                        
+                        print(f"[DEBUG] Row {row_index}: {'Valid' if is_valid else 'Invalid'} (from saved mapping)")
+            
+            print(f"[DEBUG] Applied exact row classifications for {len(self.row_validity[sheet_name])} rows")
+            
+        except Exception as e:
+            print(f"[DEBUG] Error applying row classifications: {e}")
+
+    def _show_mapped_file_review(self, tab, file_mapping, mapping_data):
+        """Show the file with applied mappings in Row Review mode"""
+        try:
+            # Clear tab content
+            for widget in tab.winfo_children():
+                widget.destroy()
+            
+            # Create main container frame
+            tab_frame = ttk.Frame(tab)
+            tab_frame.grid(row=0, column=0, sticky=tk.NSEW)
+            
+            # Configure grid layout
+            tab_frame.grid_rowconfigure(0, weight=0)  # Info frame
+            tab_frame.grid_rowconfigure(1, weight=1)  # Row review
+            tab_frame.grid_rowconfigure(2, weight=0)  # Confirm button
+            tab_frame.grid_columnconfigure(0, weight=1)
+            
+            # Add info frame
+            info_frame = ttk.LabelFrame(tab_frame, text="Mapping Applied")
+            info_frame.grid(row=0, column=0, sticky=tk.EW, padx=5, pady=5)
+            
+            info_text = f"""Mapping successfully applied to {len(file_mapping.sheets)} sheets.
+Column mappings and row validity have been pre-populated from the saved mapping.
+Review the rows below and adjust validity as needed."""
+            
+            info_label = ttk.Label(info_frame, text=info_text, wraplength=800, justify=tk.LEFT)
+            info_label.grid(row=0, column=0, padx=10, pady=10, sticky=tk.W)
+            
+            # Show Row Review directly
+            self._show_row_review_for_mapped_file(tab_frame, file_mapping)
+            
+            # Add confirm button
+            confirm_frame = ttk.Frame(tab_frame)
+            confirm_frame.grid(row=2, column=0, sticky=tk.EW, padx=5, pady=5)
+            confirm_frame.grid_columnconfigure(0, weight=1)
+            
+            confirm_btn = ttk.Button(confirm_frame, text="Confirm Row Review & Continue", 
+                                   command=lambda: self._on_confirm_mapped_file_review(file_mapping))
+            confirm_btn.grid(row=0, column=0, sticky=tk.EW, padx=5, pady=5)
+            
+            # Store file mapping reference
+            file_mapping.tab = tab
+            tab_id = str(tab)
+            self.tab_id_to_file_mapping[tab_id] = file_mapping
+            
+        except Exception as e:
+            print(f"[DEBUG] Error showing mapped file review: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _show_row_review_for_mapped_file(self, parent_frame, file_mapping):
+        """Show row review for a file with applied mappings"""
+        # Create Row Review container
+        row_review_frame = ttk.LabelFrame(parent_frame, text="Row Review (Pre-populated from Mapping)")
+        row_review_frame.grid(row=1, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        row_review_frame.grid_rowconfigure(0, weight=1)
+        row_review_frame.grid_columnconfigure(0, weight=1)
+        
+        # Add notebook for sheets
+        row_review_notebook = ttk.Notebook(row_review_frame)
+        row_review_notebook.grid(row=0, column=0, sticky=tk.NSEW)
+        
+        # Initialize treeview storage
+        if not hasattr(self, 'row_review_treeviews'):
+            self.row_review_treeviews = {}
+        
+        # Create tabs for each sheet
+        for sheet in file_mapping.sheets:
+            self._create_row_review_tab_for_sheet(row_review_notebook, sheet)
+
+    def _create_row_review_tab_for_sheet(self, notebook, sheet):
+        """Create a row review tab for a specific sheet"""
+        frame = ttk.Frame(notebook)
+        notebook.add(frame, text=sheet.sheet_name)
+        
+        # Determine required columns
+        if self.column_mapper and hasattr(self.column_mapper, 'config'):
+            required_types = [col_type.value for col_type in self.column_mapper.config.get_required_columns()]
+        else:
+            required_types = ["description", "quantity", "unit_price", "total_price", "unit", "code"]
+        
+        # Display column order
+        display_column_order = ["code", "description", "unit", "quantity", "unit_price", "total_price"]
+        available_columns = [col for col in display_column_order if col in required_types]
+        
+        # Create column mapping
+        mapped_type_to_index = {}
+        if hasattr(sheet, 'column_mappings'):
+            for cm in sheet.column_mappings:
+                mapped_type_to_index[getattr(cm, 'mapped_type', None)] = cm.column_index
+        
+        # Create treeview
+        columns = ["#"] + available_columns + ["status"]
+        tree = ttk.Treeview(frame, columns=columns, show="headings", height=12, selectmode="none")
+        
+        for col in columns:
+            tree.heading(col, text=col.capitalize() if col != '#' else '#')
+            if col == "status":
+                tree.column(col, width=80, anchor=tk.CENTER)
+            else:
+                tree.column(col, width=120 if col != "#" else 40, anchor=tk.W)
+        
+        # Add scrollbars
+        v_scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=tree.yview)
+        h_scrollbar = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=tree.xview)
+        tree.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
+        
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # Store treeview reference
+        self.row_review_treeviews[sheet.sheet_name] = tree
+        
+        # Populate with data
+        if hasattr(sheet, 'row_classifications'):
+            for rc in sheet.row_classifications:
+                row_data = getattr(rc, 'row_data', None)
+                if row_data is None and hasattr(sheet, 'sheet_data'):
+                    try:
+                        row_data = sheet.sheet_data[rc.row_index]
+                    except Exception:
+                        row_data = []
+                
+                if row_data is None:
+                    row_data = []
+                
+                # Build row values
+                row_values = [rc.row_index + 1]
+                for col in available_columns:
+                    idx = mapped_type_to_index.get(col)
+                    val = row_data[idx] if idx is not None and idx < len(row_data) else ""
+                    
+                    # Format numbers
+                    if col in ['unit_price', 'total_price']:
+                        val = format_number(val, is_currency=True)
+                    elif col == 'quantity':
+                        val = format_number(val, is_currency=False)
+                    
+                    row_values.append(val)
+                
+                # Get validity from pre-populated data
+                is_valid = self.row_validity.get(sheet.sheet_name, {}).get(rc.row_index, False)
+                status = "Valid" if is_valid else "Invalid"
+                tag = 'validrow' if is_valid else 'invalidrow'
+                
+                tree.insert('', 'end', iid=str(rc.row_index), 
+                          values=row_values + [status], tags=(tag,))
+        
+        # Configure tags
+        tree.tag_configure('validrow', background='#E8F5E9')  # light green
+        tree.tag_configure('invalidrow', background='#FFEBEE')  # light red
+        
+        # Bind click events
+        tree.bind('<Button-1>', lambda e, s=sheet.sheet_name, t=tree: self._on_row_review_click(e, s, t, required_types))
+
+    def _on_confirm_mapped_file_review(self, file_mapping):
+        """Handle confirmation of row review for mapped file"""
+        try:
+            print(f"[DEBUG] _on_confirm_mapped_file_review called")
+            print(f"[DEBUG] Has saved_mapping: {hasattr(self, 'saved_mapping')}")
+            if hasattr(self, 'saved_mapping'):
+                print(f"[DEBUG] Saved mapping keys: {list(self.saved_mapping.keys())}")
+            
+            # Check if we have saved categories from the mapping
+            if hasattr(self, 'saved_mapping') and 'final_dataframe' in self.saved_mapping:
+                print("[DEBUG] Found saved categories in mapping - applying directly without categorization")
+                
+                # Get the saved categorized DataFrame
+                saved_df = self.saved_mapping['final_dataframe'].copy()
+                
+                # Build the current DataFrame structure (without categories)
+                import pandas as pd
+                rows = []
+                sheet_count = 0
+                
+                for sheet in getattr(file_mapping, 'sheets', []):
+                    if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
+                        continue
+                        
+                    sheet_count += 1
+                    col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
+                    sheet_name = sheet.sheet_name
+                    validity_dict = self.row_validity.get(sheet_name, {})
+                    
+                    for rc in getattr(sheet, 'row_classifications', []):
+                        # Only include valid rows
+                        if not validity_dict.get(rc.row_index, False):
+                            continue
+                            
+                        row_data = getattr(rc, 'row_data', None)
+                        if row_data is None and hasattr(sheet, 'sheet_data'):
+                            try:
+                                row_data = sheet.sheet_data[rc.row_index]
+                            except Exception:
+                                row_data = None
+                        
+                        if row_data is None:
+                            row_data = []
+                        
+                        # Build dict for DataFrame
+                        row_dict = {col_headers[i]: row_data[i] if i < len(row_data) else '' 
+                                  for i in range(len(col_headers))}
+                        row_dict['Source_Sheet'] = sheet.sheet_name
+                        rows.append(row_dict)
+                
+                if rows:
+                    current_df = pd.DataFrame(rows)
+                    if 'description' in current_df.columns and 'Description' not in current_df.columns:
+                        current_df.rename(columns={'description': 'Description'}, inplace=True)
+                    
+                    # Apply saved categories to current data by matching descriptions
+                    print(f"[DEBUG] Applying saved categories to {len(current_df)} rows")
+                    
+                    # Create category mapping from saved DataFrame
+                    if 'Description' in saved_df.columns and 'category' in saved_df.columns:
+                        category_mapping = {}
+                        for _, row in saved_df.iterrows():
+                            desc = str(row['Description']).strip().lower()
+                            category = str(row['category']).strip()
+                            if desc and category:
+                                category_mapping[desc] = category
+                        
+                        print(f"[DEBUG] Created category mapping with {len(category_mapping)} entries")
+                        
+                        # Apply categories to current DataFrame
+                        current_df['category'] = current_df['Description'].apply(
+                            lambda x: category_mapping.get(str(x).strip().lower(), '')
+                        )
+                        
+                        # Count successful matches
+                        matched_count = (current_df['category'] != '').sum()
+                        print(f"[DEBUG] Successfully matched {matched_count} out of {len(current_df)} rows")
+                        
+                        # Store the categorized DataFrame
+                        file_mapping.dataframe = current_df
+                        file_mapping.categorized_dataframe = current_df
+                        
+                        # Show final categorized data directly (skip categorization dialog)
+                        current_tab = file_mapping.tab
+                        self._show_final_categorized_data(current_tab, current_df, None)
+                        
+                        self._update_status(f"Applied saved categories to {matched_count} rows - categorization complete")
+                        
+                        success_msg = (
+                            f"Categories applied successfully from saved mapping!\n\n"
+                            f"Matched {matched_count} out of {len(current_df)} rows.\n"
+                            f"Categorization completed without manual review."
+                        )
+                        messagebox.showinfo("Categories Applied", success_msg)
+                        return
+                    else:
+                        print("[DEBUG] Saved DataFrame missing required columns for category mapping")
+                else:
+                    print("[DEBUG] No valid rows found for category application")
+            
+            # Fallback to normal categorization if no saved categories found
+            print("[DEBUG] No saved categories found - proceeding with normal categorization")
+            self._update_status("Row review confirmed. Starting categorization process...")
+            
+            # Build DataFrame for categorization (same as normal workflow)
+            import pandas as pd
+            rows = []
+            sheet_count = 0
+            
+            for sheet in getattr(file_mapping, 'sheets', []):
+                if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
+                    continue
+                    
+                sheet_count += 1
+                col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
+                sheet_name = sheet.sheet_name
+                validity_dict = self.row_validity.get(sheet_name, {})
+                
+                for rc in getattr(sheet, 'row_classifications', []):
+                    # Only include valid rows
+                    if not validity_dict.get(rc.row_index, False):
+                        continue
+                        
+                    row_data = getattr(rc, 'row_data', None)
+                    if row_data is None and hasattr(sheet, 'sheet_data'):
+                        try:
+                            row_data = sheet.sheet_data[rc.row_index]
+                        except Exception:
+                            row_data = None
+                    
+                    if row_data is None:
+                        row_data = []
+                    
+                    # Build dict for DataFrame
+                    row_dict = {col_headers[i]: row_data[i] if i < len(row_data) else '' 
+                              for i in range(len(col_headers))}
+                    row_dict['Source_Sheet'] = sheet.sheet_name
+                    rows.append(row_dict)
+            
+            if rows:
+                df = pd.DataFrame(rows)
+                if 'description' in df.columns and 'Description' not in df.columns:
+                    df.rename(columns={'description': 'Description'}, inplace=True)
+                
+                file_mapping.dataframe = df
+                print(f"[DEBUG] Built DataFrame for categorization: {df.shape}")
+                
+                # Start categorization
+                self._start_categorization(file_mapping)
+            else:
+                messagebox.showerror("Error", "No valid rows found for categorization")
+                
+        except Exception as e:
+            print(f"[DEBUG] Error in mapped file review confirmation: {e}")
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Error", f"Failed to continue with categorization: {str(e)}")
