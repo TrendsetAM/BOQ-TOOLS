@@ -204,16 +204,32 @@ class MainWindow:
         main_frame.grid(row=0, column=0, sticky=tk.NSEW)
         
         # Configure main_frame grid layout
-        main_frame.grid_rowconfigure(0, weight=0)  # Drop zone
+        main_frame.grid_rowconfigure(0, weight=0)  # Buttons zone
         main_frame.grid_rowconfigure(1, weight=1)  # Notebook (expandable)
         main_frame.grid_rowconfigure(2, weight=0)  # Status bar
         main_frame.grid_columnconfigure(0, weight=1)
         
-        # Top: Drag-and-drop zone
-        self.drop_zone = ttk.Label(main_frame, text="Drop Excel files here or use File > Open", 
-                                 anchor="center", relief="ridge", padding=20)
-        self.drop_zone.grid(row=0, column=0, sticky=tk.EW, padx=10, pady=8)
-        tooltip(self.drop_zone, "Drag and drop .xlsx or .xls files here to open.")
+        # Top: Button frame with three buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=0, column=0, sticky=tk.EW, padx=10, pady=8)
+        
+        # Configure button frame columns to be equal width
+        button_frame.grid_columnconfigure(0, weight=1)  # New Analysis
+        button_frame.grid_columnconfigure(1, weight=1)  # Load Analysis
+        button_frame.grid_columnconfigure(2, weight=1)  # Use Mapping
+        
+        # Create the three buttons
+        new_analysis_btn = ttk.Button(button_frame, text="New Analysis", command=self.open_file)
+        new_analysis_btn.grid(row=0, column=0, sticky=tk.EW, padx=5)
+        tooltip(new_analysis_btn, "Start a new BOQ analysis by selecting Excel files")
+        
+        load_analysis_btn = ttk.Button(button_frame, text="Load Analysis", command=self._load_analysis)
+        load_analysis_btn.grid(row=0, column=1, sticky=tk.EW, padx=5)
+        tooltip(load_analysis_btn, "Load a previously saved analysis")
+        
+        use_mapping_btn = ttk.Button(button_frame, text="Use Mapping", command=self._use_mapping)
+        use_mapping_btn.grid(row=0, column=2, sticky=tk.EW, padx=5)
+        tooltip(use_mapping_btn, "Apply a previously saved mapping to new files")
         
         # Center: Tabbed interface for files
         self.notebook = ttk.Notebook(main_frame)
@@ -247,10 +263,7 @@ class MainWindow:
                 pass
             except Exception:
                 pass
-        else:
-            # Fallback: Make drop zone clickable
-            self.drop_zone.bind('<Button-1>', lambda e: self.open_file())
-            self.drop_zone.config(text="Click here to open Excel files or use File > Open")
+        # No else clause needed - buttons are already set up in _create_main_widgets
 
     def _bind_shortcuts(self):
         self.root.bind('<Control-o>', lambda e: self.open_file())
@@ -1453,14 +1466,25 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
     def _show_final_categorized_data(self, tab, final_dataframe, categorization_result):
         print("[DEBUG] _show_final_categorized_data called for tab:", tab)
         try:
-            # Get file_mapping for this tab
+            # Get file_mapping for this tab (if it exists - won't exist for loaded analyses)
             file_mapping = None
             for file_data in self.controller.current_files.values():
                 if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == tab:
                     file_mapping = file_data['file_mapping']
                     break
-            # Build the DataFrame for the final grid using row review logic
-            display_df = self._build_final_grid_dataframe(file_mapping)
+            
+            # For loaded analyses, use the DataFrame directly; for new analyses, build from file mapping
+            if file_mapping is not None:
+                # Build the DataFrame for the final grid using row review logic
+                display_df = self._build_final_grid_dataframe(file_mapping)
+            else:
+                # For loaded analyses, use the provided DataFrame directly
+                display_df = final_dataframe.copy()
+                # Remove the 'category_internal' column if it exists (it's not needed for display)
+                if 'category_internal' in display_df.columns:
+                    display_df = display_df.drop('category_internal', axis=1)
+                print(f"[DEBUG] Using loaded DataFrame directly with shape: {display_df.shape}")
+            
             # Clear the current tab content
             for widget in tab.winfo_children():
                 widget.destroy()
@@ -1664,12 +1688,16 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
     
     def _populate_final_data_treeview(self, tree, dataframe, columns):
         """Populate the treeview with data from the final DataFrame, formatting category as pretty (dropdown) version."""
+        print(f"[DEBUG] _populate_final_data_treeview called with DataFrame shape: {dataframe.shape}")
+        print(f"[DEBUG] DataFrame columns: {dataframe.columns.tolist()}")
+        print(f"[DEBUG] Requested columns: {columns}")
+        
         # Import category mapping
         from core.manual_categorizer import get_manual_categorization_categories
         categories_pretty = get_manual_categorization_categories()
         categories_internal = [cat.lower() for cat in categories_pretty]
         pretty_to_internal = {pretty: internal for pretty, internal in zip(categories_pretty, categories_internal)}
-        internal_to_pretty = {internal: pretty for pretty, internal in zip(categories_pretty, categories_internal)}
+        internal_to_pretty = {internal: pretty for pretty, internal in zip(categories_internal, categories_pretty)}
         
         # Helper to format numbers consistently
         def format_number(val, is_currency=False):
@@ -1688,6 +1716,8 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         for item in tree.get_children():
             tree.delete(item)
         
+        print(f"[DEBUG] Cleared existing items, now adding {len(dataframe)} rows")
+        
         # Add data rows
         for index, row in dataframe.iterrows():
             values = []
@@ -1705,7 +1735,11 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     values.append(format_number(value))
                 else:
                     values.append(str(value))
+            
+            print(f"[DEBUG] Adding row {index}: {values[:3]}...")  # Show first 3 values
             tree.insert('', 'end', values=values, tags=(f'row_{index}',))
+        
+        print(f"[DEBUG] Finished populating treeview with {len(dataframe)} rows")
     
     def _enable_final_data_editing(self, tree, dataframe):
         """Enable editing capabilities for the final data treeview. Only allow editing of the 'category' column with a dropdown."""
@@ -1966,6 +2000,26 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         if df is None:
             messagebox.showerror("Error", "No dataset to save.")
             return
+        
+        print(f"[DEBUG] Saving DataFrame with shape: {df.shape}")
+        print(f"[DEBUG] DataFrame columns: {df.columns.tolist()}")
+        print(f"[DEBUG] DataFrame first few rows:")
+        print(df.head().to_string())
+        
+        if df.empty:
+            messagebox.showerror("Error", "Dataset is empty - nothing to save.")
+            return
+            
+        # Get the current offer name
+        offer_name = self.current_offer_name if hasattr(self, 'current_offer_name') else None
+        
+        # Create a dictionary with all necessary data
+        save_data = {
+            'dataframe': df,
+            'offer_name': offer_name,
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
         file_path = filedialog.asksaveasfilename(
             title="Save Dataset as Pickle",
             defaultextension=".pkl",
@@ -1974,11 +2028,15 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         if file_path:
             try:
                 with open(file_path, 'wb') as f:
-                    pickle.dump(df, f)
+                    pickle.dump(save_data, f)
+                print(f"[DEBUG] Successfully saved to {file_path}")
                 messagebox.showinfo("Success", f"Dataset saved to: {file_path}")
                 self._update_status(f"Dataset saved to: {file_path}")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to save dataset: {str(e)}")
+                print(f"[DEBUG] Failed to save: {e}")
+                import traceback
+                traceback.print_exc()
 
     def _save_mappings(self, tab):
         """Save the current mappings (sheet, column, row) as a pickle file."""
@@ -2032,3 +2090,70 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 self._update_status(f"Mappings saved to: {file_path}")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to save mappings: {str(e)}")
+
+    def _load_analysis(self):
+        """Handle loading a previously saved analysis"""
+        file_path = filedialog.askopenfilename(
+            title="Load Analysis",
+            filetypes=[("Pickle files", "*.pkl"), ("All files", "*.*")]
+        )
+        if file_path:
+            try:
+                with open(file_path, 'rb') as f:
+                    loaded_data = pickle.load(f)
+                
+                print(f"[DEBUG] Loaded data type: {type(loaded_data)}")
+                
+                # Handle both old format (just DataFrame) and new format (dictionary)
+                if isinstance(loaded_data, dict):
+                    df = loaded_data.get('dataframe')
+                    self.current_offer_name = loaded_data.get('offer_name')
+                    print(f"[DEBUG] Dictionary format - DataFrame shape: {df.shape if df is not None else 'None'}")
+                    print(f"[DEBUG] Offer name: {self.current_offer_name}")
+                else:
+                    df = loaded_data
+                    self.current_offer_name = None
+                    print(f"[DEBUG] Direct DataFrame format - shape: {df.shape if df is not None else 'None'}")
+                
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    print(f"[DEBUG] DataFrame columns: {df.columns.tolist()}")
+                    print(f"[DEBUG] DataFrame first few rows:")
+                    print(df.head().to_string())
+                    
+                    # Create a new tab for the loaded analysis
+                    tab = ttk.Frame(self.notebook)
+                    self.notebook.add(tab, text=f"Loaded Analysis {os.path.basename(file_path)}")
+                    self.notebook.select(tab)
+                    
+                    # Show the data in the grid
+                    self._show_final_categorized_data(tab, df, None)
+                    self._update_status(f"Analysis loaded from: {file_path}")
+                elif isinstance(df, pd.DataFrame) and df.empty:
+                    messagebox.showerror("Error", "The loaded DataFrame is empty")
+                    print("[DEBUG] DataFrame is empty")
+                else:
+                    messagebox.showerror("Error", "Invalid analysis file format - no DataFrame found")
+                    print(f"[DEBUG] Invalid format - df type: {type(df)}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load analysis: {str(e)}")
+                logger.error(f"Failed to load analysis from {file_path}: {e}", exc_info=True)
+                print(f"[DEBUG] Exception loading analysis: {e}")
+                import traceback
+                traceback.print_exc()
+
+    def _use_mapping(self):
+        """Handle loading and applying a previously saved mapping"""
+        mapping_path = filedialog.askopenfilename(
+            title="Select Mapping File",
+            filetypes=[("Pickle files", "*.pkl"), ("All files", "*.*")]
+        )
+        if mapping_path:
+            try:
+                with open(mapping_path, 'rb') as f:
+                    mapping_data = pickle.load(f)
+                # Store the mapping data for use when processing files
+                self.saved_mapping = mapping_data
+                # Now prompt for the files to apply the mapping to
+                self.open_file()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load mapping: {str(e)}")
