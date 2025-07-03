@@ -1455,12 +1455,13 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             # Ensure numeric columns are properly typed
             for col in ['quantity', 'unit_price', 'total_price']:
                 if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+                    df[col] = df[col].fillna(0)
             # Only keep columns in display order that are present
             columns = [col for col in display_column_order if col in df.columns]
             df = df[columns]
         else:
-            df = pd.DataFrame(columns=display_column_order)
+            df = pd.DataFrame(data=[], columns=display_column_order)
         return df
 
     def _show_final_categorized_data(self, tab, final_dataframe, categorization_result):
@@ -1559,69 +1560,156 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 print("[DEBUG] First few rows of DataFrame:")
                 print(df.head().to_string())
                 
-                # Ensure numeric columns are properly parsed
-                price_col = 'Total_price' if 'Total_price' in df.columns else 'total_price'
-                print(f"[DEBUG] Using price column: {price_col}")
-                if price_col in df.columns:
-                    df[price_col] = df[price_col].apply(parse_number)
-                    print(f"[DEBUG] Price column after parsing:")
-                    print(df[price_col].head().to_string())
-                
-                # Group by category (now using pretty categories directly)
-                cat_col = 'category'
-                if cat_col in df.columns:
-                    # Categories are already in pretty format, just group directly
-                    print(f"[DEBUG] Unique categories before grouping:", df[cat_col].unique())
-                    
-                    # Create the summary dictionary with pretty category names
-                    summary_dict = df.groupby(cat_col)[price_col].sum().to_dict()
-                    print("[DEBUG] Summary dict after grouping:", summary_dict)
-                    
-                    # No need for complex mapping - categories are already pretty
-                    # Just ensure we have all predefined categories with zero values if not present
-                    final_summary = {}
-                    for cat_pretty in categories_pretty:
-                        final_summary[cat_pretty] = summary_dict.get(cat_pretty, 0.0)
-                    
-                    print("[DEBUG] Final summary:", final_summary)
-                else:
-                    print("[DEBUG] No category column found!")
-                    final_summary = {cat: 0.0 for cat in categories_pretty}
-                
-                offer_label = self.current_offer_name if hasattr(self, 'current_offer_name') and self.current_offer_name else 'Offer'
-                summary_columns = ['Offer'] + categories_pretty
-                
-                # Use the final summary to get values in the correct order
-                summary_values = [offer_label] + [final_summary[cat] for cat in categories_pretty]
-                
-                print("[DEBUG] Final summary values:", summary_values)
+                # Check if this is a comparison dataset
+                is_comparison = self._is_comparison_dataset(df)
+                print(f"[DEBUG] Is comparison dataset: {is_comparison}")
                 
                 # Remove old summary tree if present
                 for widget in summary_frame.winfo_children():
                     widget.destroy()
                 
-                if len(summary_columns) <= 1:
-                    summary_frame.grid_remove()
-                    return
-                
-                summary_tree = ttk.Treeview(summary_frame, columns=summary_columns, show='headings', height=2)
-                for col in summary_columns:
-                    summary_tree.heading(col, text=col)
-                    summary_tree.column(col, width=150, minwidth=100)
-                
-                # Format values for display
-                display_values = []
-                for i, val in enumerate(summary_values):
-                    if i == 0:  # Offer label
-                        display_values.append(str(val))
-                    else:  # Numeric values
-                        try:
-                            num_val = float(val)
-                            display_values.append(f"{num_val:,.2f}".replace(',', ' ').replace('.', ','))
-                        except (ValueError, TypeError):
+                if is_comparison:
+                    # Handle comparison dataset - create separate rows for each offer
+                    print("[DEBUG] Creating comparison summary")
+                    
+                    # Find all offer columns
+                    offer_columns = {}
+                    for col in df.columns:
+                        if col.startswith(('total_price[', 'total_price_')):
+                            if '[' in col and ']' in col:
+                                offer_name = col.split('[')[1].split(']')[0]
+                            elif '_' in col:
+                                offer_name = col.split('_', 1)[1]
+                            else:
+                                continue
+                            offer_columns[offer_name] = col
+                    
+                    print(f"[DEBUG] Found offer columns: {offer_columns}")
+                    
+                    if not offer_columns:
+                        summary_frame.grid_remove()
+                        return
+                    
+                    # Create summary columns: Offer + categories
+                    summary_columns = ['Offer'] + categories_pretty
+                    
+                    # Calculate height based on number of offers
+                    tree_height = max(2, len(offer_columns))
+                    summary_tree = ttk.Treeview(summary_frame, columns=summary_columns, show='headings', height=tree_height)
+                    
+                    for col in summary_columns:
+                        summary_tree.heading(col, text=col)
+                        summary_tree.column(col, width=150, minwidth=100)
+                    
+                    # Create a row for each offer
+                    for offer_name, price_col in offer_columns.items():
+                        # Parse the price column
+                        df[price_col] = df[price_col].apply(parse_number)
+                        
+                        # Group by category for this offer
+                        if 'category' in df.columns:
+                            summary_dict = df.groupby('category')[price_col].sum().to_dict()
+                            
+                            # Ensure all categories are present
+                            final_summary = {}
+                            for cat_pretty in categories_pretty:
+                                final_summary[cat_pretty] = summary_dict.get(cat_pretty, 0.0)
+                        else:
+                            final_summary = {cat: 0.0 for cat in categories_pretty}
+                        
+                        # Create display values for this offer
+                        summary_values = [offer_name] + [final_summary[cat] for cat in categories_pretty]
+                        
+                        # Format values for display
+                        display_values = []
+                        for i, val in enumerate(summary_values):
+                            if i == 0:  # Offer label
+                                display_values.append(str(val))
+                            else:  # Numeric values
+                                try:
+                                    num_val = float(val)
+                                    display_values.append(f"{num_val:,.2f}".replace(',', ' ').replace('.', ','))
+                                except (ValueError, TypeError):
+                                    display_values.append(str(val))
+                        
+                        summary_tree.insert('', 'end', values=display_values, tags=('offer',))
+                        print(f"[DEBUG] Added summary row for {offer_name}: {display_values[:3]}...")
+                    
+                else:
+                    # Handle single offer dataset (original logic)
+                    print("[DEBUG] Creating single offer summary")
+                    
+                    # Find the correct total price column
+                    price_col = None
+                    possible_price_cols = ['total_price', 'Total_price']
+                    
+                    for col in possible_price_cols:
+                        if col in df.columns:
+                            price_col = col
+                            break
+                    
+                    print(f"[DEBUG] Using price column: {price_col}")
+                    if price_col and price_col in df.columns:
+                        df[price_col] = df[price_col].apply(parse_number)
+                        print(f"[DEBUG] Price column after parsing:")
+                        print(df[price_col].head().to_string())
+                    else:
+                        print("[DEBUG] No valid price column found for summary")
+                        summary_frame.grid_remove()
+                        return
+                    
+                    # Group by category
+                    cat_col = 'category'
+                    if cat_col in df.columns and price_col and price_col in df.columns:
+                        # Categories are already in pretty format, just group directly
+                        print(f"[DEBUG] Unique categories before grouping:", df[cat_col].unique())
+                        
+                        # Create the summary dictionary with pretty category names
+                        summary_dict = df.groupby(cat_col)[price_col].sum().to_dict()
+                        print("[DEBUG] Summary dict after grouping:", summary_dict)
+                        
+                        # No need for complex mapping - categories are already pretty
+                        # Just ensure we have all predefined categories with zero values if not present
+                        final_summary = {}
+                        for cat_pretty in categories_pretty:
+                            final_summary[cat_pretty] = summary_dict.get(cat_pretty, 0.0)
+                        
+                        print("[DEBUG] Final summary:", final_summary)
+                    else:
+                        print("[DEBUG] No category column or price column found!")
+                        final_summary = {cat: 0.0 for cat in categories_pretty}
+                    
+                    offer_label = self.current_offer_name if hasattr(self, 'current_offer_name') and self.current_offer_name else 'Offer'
+                    summary_columns = ['Offer'] + categories_pretty
+                    
+                    # Use the final summary to get values in the correct order
+                    summary_values = [offer_label] + [final_summary[cat] for cat in categories_pretty]
+                    
+                    print("[DEBUG] Final summary values:", summary_values)
+                    
+                    if len(summary_columns) <= 1:
+                        summary_frame.grid_remove()
+                        return
+                    
+                    summary_tree = ttk.Treeview(summary_frame, columns=summary_columns, show='headings', height=2)
+                    for col in summary_columns:
+                        summary_tree.heading(col, text=col)
+                        summary_tree.column(col, width=150, minwidth=100)
+                    
+                    # Format values for display
+                    display_values = []
+                    for i, val in enumerate(summary_values):
+                        if i == 0:  # Offer label
                             display_values.append(str(val))
+                        else:  # Numeric values
+                            try:
+                                num_val = float(val)
+                                display_values.append(f"{num_val:,.2f}".replace(',', ' ').replace('.', ','))
+                            except (ValueError, TypeError):
+                                display_values.append(str(val))
+                    
+                    summary_tree.insert('', 'end', values=display_values, tags=('offer',))
                 
-                summary_tree.insert('', 'end', values=display_values, tags=('offer',))
                 summary_tree.grid(row=0, column=0, sticky=tk.EW)
                 summary_frame.grid()
                 tab.summary_tree = summary_tree
@@ -1665,9 +1753,14 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             save_dataset_button.pack(side=tk.LEFT, padx=(0, 5))
             save_mappings_button = ttk.Button(button_frame, text="Save Mappings", command=lambda: self._save_mappings(tab))
             save_mappings_button.pack(side=tk.LEFT, padx=(0, 5))
+            compare_full_button = ttk.Button(button_frame, text="Compare Full", command=lambda: self._compare_full(tab))
+            compare_full_button.pack(side=tk.LEFT, padx=(0, 5))
             export_button = ttk.Button(button_frame, text="Export Data", 
                                       command=lambda: self._export_final_data(tab.final_dataframe, tab))
             export_button.pack(side=tk.LEFT, padx=(0, 5))
+            
+            # Store button references for state management
+            tab.compare_full_button = compare_full_button
             tab.final_data_tree = tree
             tab.final_dataframe = display_df
             tab.categorization_result = categorization_result
@@ -1712,8 +1805,8 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 if col == 'category':
                     # Category is already in pretty format - use directly
                     values.append(str(value))
-                elif col in ['quantity', 'unit_price', 'total_price']:
-                    # Format numeric columns
+                elif col in ['quantity', 'unit_price', 'total_price'] or col.startswith(('quantity[', 'unit_price[', 'total_price[', 'quantity_', 'unit_price_', 'total_price_')):
+                    # Format numeric columns (including comparison columns)
                     values.append(format_number(value))
                 else:
                     values.append(str(value))
@@ -1849,9 +1942,9 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             # Categories are already in pretty format - no conversion needed
             print(f"[DEBUG] Exporting with categories: {df['category'].unique() if 'category' in df.columns else 'No category column'}")
             
-            # Ensure numeric columns are numbers
-            for col in ['quantity', 'unit_price', 'total_price']:
-                if col in df.columns:
+            # Ensure numeric columns are numbers (including comparison columns)
+            for col in df.columns:
+                if col in ['quantity', 'unit_price', 'total_price'] or col.startswith(('quantity[', 'unit_price[', 'total_price[', 'quantity_', 'unit_price_', 'total_price_')):
                     df[col] = df[col].apply(parse_number)
             
             # Write to Excel with formatting
@@ -1865,10 +1958,10 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 for col_num, value in enumerate(df.columns):
                     worksheet.write(0, col_num, value, header_format)
                 
-                # Format numeric columns
+                # Format numeric columns (including comparison columns)
                 num_format = workbook.add_format({'num_format': '#,##0.00', 'align': 'right'})
-                for col in ['quantity', 'unit_price', 'total_price']:
-                    if col in df.columns:
+                for col in df.columns:
+                    if col in ['quantity', 'unit_price', 'total_price'] or col.startswith(('quantity[', 'unit_price[', 'total_price[', 'quantity_', 'unit_price_', 'total_price_')):
                         col_idx = df.columns.get_loc(col)
                         worksheet.set_column(col_idx, col_idx, 15, num_format)
                 
@@ -1892,47 +1985,123 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 if tab and hasattr(tab, 'summary_frame') and hasattr(tab, 'final_dataframe'):
                     df_summary = tab.final_dataframe.copy()
                     
-                    # Ensure price column is numeric
-                    price_col = 'total_price' if 'total_price' in df_summary.columns else 'Total_price'
-                    if price_col in df_summary.columns:
-                        df_summary[price_col] = df_summary[price_col].apply(parse_number)
-                    
-                    # Create summary by grouping pretty categories directly
-                    if 'category' in df_summary.columns:
-                        summary_dict = df_summary.groupby('category')[price_col].sum().to_dict()
-                        
-                        # Ensure all predefined categories are present
-                        final_summary = {}
-                        for cat_pretty in categories_pretty:
-                            final_summary[cat_pretty] = summary_dict.get(cat_pretty, 0.0)
-                    else:
-                        final_summary = {cat: 0.0 for cat in categories_pretty}
+                    # Check if this is a comparison dataset
+                    is_comparison = self._is_comparison_dataset(df_summary)
                     
                     # Create summary sheet
                     summary_ws = workbook.add_worksheet('Summary')
                     
-                    # Write headers with formatting
-                    summary_columns = ['Offer'] + categories_pretty
-                    for col_idx, col in enumerate(summary_columns):
-                        summary_ws.write(0, col_idx, col, header_format)
+                    if is_comparison:
+                        # Handle comparison dataset - create separate rows for each offer
+                        print("[DEBUG] Exporting comparison summary")
+                        
+                        # Find all offer columns
+                        offer_columns = {}
+                        for col in df_summary.columns:
+                            if col.startswith(('total_price[', 'total_price_')):
+                                if '[' in col and ']' in col:
+                                    offer_name = col.split('[')[1].split(']')[0]
+                                elif '_' in col:
+                                    offer_name = col.split('_', 1)[1]
+                                else:
+                                    continue
+                                offer_columns[offer_name] = col
+                        
+                        print(f"[DEBUG] Export found offer columns: {offer_columns}")
+                        
+                        if offer_columns:
+                            # Write headers with formatting
+                            summary_columns = ['Offer'] + categories_pretty
+                            for col_idx, col in enumerate(summary_columns):
+                                summary_ws.write(0, col_idx, col, header_format)
+                            
+                            # Create a row for each offer
+                            row_idx = 1
+                            for offer_name, price_col in offer_columns.items():
+                                # Parse the price column
+                                df_summary[price_col] = df_summary[price_col].apply(parse_number)
+                                
+                                # Group by category for this offer
+                                if 'category' in df_summary.columns:
+                                    summary_dict = df_summary.groupby('category')[price_col].sum().to_dict()
+                                    
+                                    # Ensure all categories are present
+                                    final_summary = {}
+                                    for cat_pretty in categories_pretty:
+                                        final_summary[cat_pretty] = summary_dict.get(cat_pretty, 0.0)
+                                else:
+                                    final_summary = {cat: 0.0 for cat in categories_pretty}
+                                
+                                # Write offer row
+                                summary_values = [offer_name] + [final_summary[cat] for cat in categories_pretty]
+                                for col_idx, val in enumerate(summary_values):
+                                    if col_idx == 0:
+                                        summary_ws.write(row_idx, col_idx, val)
+                                    else:
+                                        summary_ws.write_number(row_idx, col_idx, val, num_format)
+                                
+                                row_idx += 1
+                                print(f"[DEBUG] Exported summary row for {offer_name}")
+                            
+                            # Format columns
+                            for i in range(len(summary_columns)):
+                                if i == 0:
+                                    summary_ws.set_column(i, i, 25)  # Offer column: text
+                                else:
+                                    summary_ws.set_column(i, i, 18, num_format)  # Category columns: number format
                     
-                    # Write values
-                    offer_label = self.current_offer_name if hasattr(self, 'current_offer_name') and self.current_offer_name else 'Offer'
-                    summary_values = [offer_label] + [final_summary[cat] for cat in categories_pretty]
-                    
-                    # Write summary row with formatting
-                    for col_idx, val in enumerate(summary_values):
-                        if col_idx == 0:
-                            summary_ws.write(1, col_idx, val)
+                    else:
+                        # Handle single offer dataset (original logic)
+                        print("[DEBUG] Exporting single offer summary")
+                        
+                        # Find the correct total price column
+                        price_col = None
+                        possible_price_cols = ['total_price', 'Total_price']
+                        
+                        for col in possible_price_cols:
+                            if col in df_summary.columns:
+                                price_col = col
+                                break
+                        
+                        if price_col and price_col in df_summary.columns:
+                            df_summary[price_col] = df_summary[price_col].apply(parse_number)
+                            
+                            # Create summary by grouping pretty categories directly
+                            if 'category' in df_summary.columns:
+                                summary_dict = df_summary.groupby('category')[price_col].sum().to_dict()
+                                
+                                # Ensure all predefined categories are present
+                                final_summary = {}
+                                for cat_pretty in categories_pretty:
+                                    final_summary[cat_pretty] = summary_dict.get(cat_pretty, 0.0)
+                            else:
+                                final_summary = {cat: 0.0 for cat in categories_pretty}
                         else:
-                            summary_ws.write_number(1, col_idx, val, num_format)
-                    
-                    # Format columns
-                    for i in range(len(summary_columns)):
-                        if i == 0:
-                            summary_ws.set_column(i, i, 25)  # Offer column: text
-                        else:
-                            summary_ws.set_column(i, i, 18, num_format)  # Category columns: number format
+                            # No price column found, create empty summary
+                            final_summary = {cat: 0.0 for cat in categories_pretty}
+                        
+                        # Write headers with formatting
+                        summary_columns = ['Offer'] + categories_pretty
+                        for col_idx, col in enumerate(summary_columns):
+                            summary_ws.write(0, col_idx, col, header_format)
+                        
+                        # Write values
+                        offer_label = self.current_offer_name if hasattr(self, 'current_offer_name') and self.current_offer_name else 'Offer'
+                        summary_values = [offer_label] + [final_summary[cat] for cat in categories_pretty]
+                        
+                        # Write summary row with formatting
+                        for col_idx, val in enumerate(summary_values):
+                            if col_idx == 0:
+                                summary_ws.write(1, col_idx, val)
+                            else:
+                                summary_ws.write_number(1, col_idx, val, num_format)
+                        
+                        # Format columns
+                        for i in range(len(summary_columns)):
+                            if i == 0:
+                                summary_ws.set_column(i, i, 25)  # Offer column: text
+                            else:
+                                summary_ws.set_column(i, i, 18, num_format)  # Category columns: number format
                 
                 messagebox.showinfo("Success", f"Data exported to: {file_path}")
                 self._update_status(f"Exported data to: {file_path}")
@@ -2113,6 +2282,65 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 print(f"[DEBUG] Exception loading analysis: {e}")
                 import traceback
                 traceback.print_exc()
+
+    def _compare_full(self, tab):
+        """Handle loading and comparing another BOQ with identical structure"""
+        try:
+            # Get the current master dataset
+            master_df = getattr(tab, 'final_dataframe', None)
+            if master_df is None or master_df.empty:
+                messagebox.showerror("Error", "No master dataset found. Please load and categorize a BOQ first.")
+                return
+            
+            # Get the current offer name (for the master dataset)
+            master_offer_name = self.current_offer_name if hasattr(self, 'current_offer_name') and self.current_offer_name else "Offer1"
+            
+            # Check if this is the first comparison (need to restructure master dataset)
+            if not self._is_comparison_dataset(master_df):
+                print("[DEBUG] Converting master dataset to comparison format")
+                master_df = self._convert_to_comparison_format(master_df, master_offer_name)
+                tab.final_dataframe = master_df
+                tab.master_offer_name = master_offer_name
+                tab.comparison_offers = [master_offer_name]
+                
+                # Update the display
+                self._update_comparison_display(tab, master_df)
+            
+            # Prompt for new offer name
+            new_offer_name = self._prompt_offer_name()
+            if new_offer_name is None:
+                self._update_status("Comparison cancelled (no offer name provided).")
+                return
+            
+            # Check for duplicate offer names
+            existing_offers = getattr(tab, 'comparison_offers', [])
+            if new_offer_name in existing_offers:
+                messagebox.showerror("Error", f"Offer name '{new_offer_name}' already exists. Please choose a different name.")
+                return
+            
+            # Get the saved mapping from the master dataset
+            master_mapping = self._extract_mapping_from_tab(tab)
+            if master_mapping is None:
+                messagebox.showerror("Error", "Could not extract mapping from master dataset. Please ensure the dataset was created with saved mappings.")
+                return
+            
+            self._update_status(f"Master mapping extracted. Please select BOQ file for '{new_offer_name}'.")
+            
+            # Select BOQ file to compare
+            filetypes = [("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
+            filename = filedialog.askopenfilename(title=f"Select BOQ File for {new_offer_name}", filetypes=filetypes)
+            if not filename:
+                self._update_status("Comparison cancelled (no file selected).")
+                return
+            
+            # Process the new file with the master mapping
+            self._process_comparison_file(tab, filename, new_offer_name, master_mapping)
+            
+        except Exception as e:
+            print(f"[DEBUG] Error in _compare_full: {e}")
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Error", f"Failed to start comparison: {str(e)}")
 
     def _use_mapping(self):
         """Handle loading and applying a previously saved mapping"""
@@ -2628,6 +2856,396 @@ Review the rows below and adjust validity as needed."""
         
         # Bind click events
         tree.bind('<Button-1>', lambda e, s=sheet.sheet_name, t=tree: self._on_row_review_click(e, s, t, required_types))
+
+    # ===== COMPARISON FUNCTIONALITY =====
+    
+    def _is_comparison_dataset(self, df):
+        """Check if the DataFrame is already in comparison format (has offer-specific columns)"""
+        if df is None or df.empty:
+            return False
+        
+        # Check if any column names contain offer-specific suffixes (both old and new formats)
+        for col in df.columns:
+            if any(col.startswith(prefix) for prefix in ['quantity_', 'unit_price_', 'total_price_', 'quantity[', 'unit_price[', 'total_price[']):
+                return True
+        return False
+    
+    def _convert_to_comparison_format(self, df, offer_name):
+        """Convert a single-offer DataFrame to comparison format"""
+        import pandas as pd
+        
+        # Create a copy to avoid modifying the original
+        comparison_df = df.copy()
+        
+        # Rename the price/quantity columns to include offer name in square brackets
+        column_mapping = {
+            'quantity': f'quantity[{offer_name}]',
+            'unit_price': f'unit_price[{offer_name}]',
+            'total_price': f'total_price[{offer_name}]'
+        }
+        
+        comparison_df = comparison_df.rename(columns=column_mapping)
+        
+        # Reorder columns according to the specified order: sheet, category, code, description, unit, quantity[Offer1], unit_price[Offer1], total_price[Offer1]
+        base_columns = ['sheet', 'category', 'code', 'description', 'unit']
+        offer_columns = [f'quantity[{offer_name}]', f'unit_price[{offer_name}]', f'total_price[{offer_name}]']
+        
+        # Only include columns that exist in the DataFrame
+        ordered_columns = []
+        for col in base_columns + offer_columns:
+            if col in comparison_df.columns:
+                ordered_columns.append(col)
+        
+        # Add any remaining columns that weren't in the predefined order
+        for col in comparison_df.columns:
+            if col not in ordered_columns:
+                ordered_columns.append(col)
+        
+        comparison_df = comparison_df[ordered_columns]
+        
+        print(f"[DEBUG] Converted to comparison format with columns: {comparison_df.columns.tolist()}")
+        return comparison_df
+    
+    def _update_comparison_display(self, tab, comparison_df):
+        """Update the display to show the comparison DataFrame"""
+        # Update the treeview with new columns
+        if hasattr(tab, 'final_data_tree'):
+            tree = tab.final_data_tree
+            
+            # Update treeview columns
+            new_columns = list(comparison_df.columns)
+            tree['columns'] = new_columns
+            
+            # Update column headings and widths
+            for col in new_columns:
+                # Format column names for display (handle both old and new formats)
+                if '[' in col and ']' in col:
+                    # New format: prefix[offer] -> Prefix [Offer]
+                    prefix, suffix = col.split('[', 1)
+                    offer_name = suffix.rstrip(']')
+                    display_name = f"{prefix.replace('_', ' ').title()} [{offer_name}]"
+                else:
+                    # Old format: prefix_offer -> Prefix Offer
+                    display_name = col.replace('_', ' ').title()
+                
+                tree.heading(col, text=display_name)
+                if col.startswith(('quantity_', 'unit_price_', 'total_price_', 'quantity[', 'unit_price[', 'total_price[')):
+                    tree.column(col, width=120, anchor=tk.E)  # Right-align numeric columns
+                else:
+                    tree.column(col, width=120, anchor=tk.W)
+            
+            # Repopulate the treeview
+            self._populate_final_data_treeview(tree, comparison_df, new_columns)
+        
+        print(f"[DEBUG] Updated comparison display with {len(comparison_df)} rows and {len(comparison_df.columns)} columns")
+    
+    def _extract_mapping_from_tab(self, tab):
+        """Extract mapping information from the current tab for reuse"""
+        # For now, we'll need to get the mapping from the file_mapping if available
+        # This is a placeholder - we'll need to store mapping info when creating the dataset
+        
+        # Try to find the file mapping for this tab
+        for file_data in self.controller.current_files.values():
+            if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == tab:
+                # Extract the mapping information we need
+                file_mapping = file_data['file_mapping']
+                
+                mapping_data = {
+                    'sheets': [],
+                    'row_validity': getattr(self, 'row_validity', {}),
+                }
+                
+                # Save relevant info from each sheet
+                for sheet in getattr(file_mapping, 'sheets', []):
+                    sheet_info = {
+                        'sheet_name': getattr(sheet, 'sheet_name', None),
+                        'sheet_type': getattr(sheet, 'sheet_type', None),
+                        'column_mappings': [],
+                        'row_classifications': [],
+                    }
+                    # Column mappings
+                    for cm in getattr(sheet, 'column_mappings', []):
+                        cm_dict = cm.__dict__.copy() if hasattr(cm, '__dict__') else dict(cm)
+                        sheet_info['column_mappings'].append(cm_dict)
+                    # Row classifications
+                    for rc in getattr(sheet, 'row_classifications', []):
+                        rc_dict = rc.__dict__.copy() if hasattr(rc, '__dict__') else dict(rc)
+                        sheet_info['row_classifications'].append(rc_dict)
+                    mapping_data['sheets'].append(sheet_info)
+                
+                # Add the final dataframe for category mapping
+                if hasattr(tab, 'final_dataframe') and tab.final_dataframe is not None:
+                    mapping_data['final_dataframe'] = tab.final_dataframe.copy()
+                
+                return mapping_data
+        
+        # If no file mapping found, return None
+        print("[DEBUG] Could not extract mapping from tab - no file mapping found")
+        return None
+    
+    def _process_comparison_file(self, master_tab, filepath, new_offer_name, master_mapping):
+        """Process a new BOQ file for comparison using the master mapping"""
+        import os
+        from pathlib import Path
+        self._update_status(f"Processing {os.path.basename(filepath)} for comparison...")
+        
+        def process_in_thread():
+            try:
+                # Step 1: Load the file and get sheets
+                from core.file_processor import ExcelProcessor
+                processor = ExcelProcessor()
+                processor.load_file(Path(filepath))
+                visible_sheets = processor.get_visible_sheets()
+                
+                print(f"[DEBUG] Comparison file has sheets: {visible_sheets}")
+                print(f"[DEBUG] Master mapping expects sheets: {[s['sheet_name'] for s in master_mapping['sheets']]}")
+                
+                # Step 2: Validate sheets match exactly
+                mapping_sheets = {s['sheet_name'] for s in master_mapping['sheets']}
+                file_sheets = set(visible_sheets)
+                
+                missing_sheets = mapping_sheets - file_sheets
+                if missing_sheets:
+                    error_msg = f"Missing sheets in comparison file: {', '.join(missing_sheets)}"
+                    self.root.after(0, lambda: messagebox.showerror("Sheet Validation Error", error_msg))
+                    return
+                
+                # Step 3: Process the file (basic processing first)
+                file_mapping = self.controller.process_file(
+                    Path(filepath),
+                    progress_callback=lambda p, m: self.root.after(0, self.update_progress, p, m),
+                    sheet_filter=list(mapping_sheets),
+                    sheet_types={sheet: "BOQ" for sheet in mapping_sheets}
+                )
+                
+                # Step 4: Apply the master mapping and merge with comparison dataset
+                self.root.after(0, lambda: self._apply_mapping_and_merge(master_tab, file_mapping, master_mapping, new_offer_name))
+                
+            except Exception as e:
+                print(f"[DEBUG] Error in process_comparison_file: {e}")
+                import traceback
+                traceback.print_exc()
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to process comparison file: {str(e)}"))
+        
+        threading.Thread(target=process_in_thread, daemon=True).start()
+    
+    def _apply_mapping_and_merge(self, master_tab, file_mapping, master_mapping, new_offer_name):
+        """Apply master mapping to new file and merge with comparison dataset"""
+        try:
+            print(f"[DEBUG] Applying master mapping and merging for offer: {new_offer_name}")
+            
+            # Apply the master mapping to the new file (reuse existing logic)
+            # This is similar to _apply_saved_mappings but without the UI parts
+            for sheet in file_mapping.sheets:
+                sheet_name = sheet.sheet_name
+                
+                # Find corresponding mapping
+                saved_sheet = next((s for s in master_mapping['sheets'] if s['sheet_name'] == sheet_name), None)
+                if not saved_sheet:
+                    continue
+                
+                # Apply the mappings
+                self._apply_exact_column_mappings(sheet, saved_sheet)
+                self._apply_exact_row_classifications(sheet, saved_sheet)
+            
+            # Build DataFrame from the new file
+            new_df = self._build_dataframe_from_mapping(file_mapping, master_mapping)
+            
+            # Apply categories from master mapping
+            new_df = self._apply_categories_from_mapping(new_df, master_mapping)
+            
+            # Merge with the master comparison dataset
+            master_df = master_tab.final_dataframe
+            merged_df = self._merge_comparison_datasets(master_df, new_df, new_offer_name)
+            
+            # Update the master tab
+            master_tab.final_dataframe = merged_df
+            if not hasattr(master_tab, 'comparison_offers'):
+                master_tab.comparison_offers = []
+            master_tab.comparison_offers.append(new_offer_name)
+            
+            # Update the display
+            self._update_comparison_display(master_tab, merged_df)
+            
+            self._update_status(f"Successfully added {new_offer_name} to comparison dataset")
+            messagebox.showinfo("Success", f"BOQ '{new_offer_name}' has been added to the comparison dataset!")
+            
+        except Exception as e:
+            print(f"[DEBUG] Error in _apply_mapping_and_merge: {e}")
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Error", f"Failed to merge comparison data: {str(e)}")
+    
+    def _build_dataframe_from_mapping(self, file_mapping, master_mapping):
+        """Build a DataFrame from file mapping using the same logic as the master"""
+        import pandas as pd
+        
+        rows = []
+        for sheet in getattr(file_mapping, 'sheets', []):
+            if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
+                continue
+                
+            col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
+            sheet_name = sheet.sheet_name
+            validity_dict = master_mapping.get('row_validity', {}).get(sheet_name, {})
+            
+            for rc in getattr(sheet, 'row_classifications', []):
+                # Only include valid rows (same logic as master)
+                if not validity_dict.get(rc.row_index, False):
+                    continue
+                    
+                row_data = getattr(rc, 'row_data', None)
+                if row_data is None and hasattr(sheet, 'sheet_data'):
+                    try:
+                        row_data = sheet.sheet_data[rc.row_index]
+                    except Exception:
+                        row_data = None
+                
+                if row_data is None:
+                    row_data = []
+                
+                # Build dict for DataFrame
+                row_dict = {col_headers[i]: row_data[i] if i < len(row_data) else '' 
+                          for i in range(len(col_headers))}
+                row_dict['Source_Sheet'] = sheet.sheet_name
+                rows.append(row_dict)
+        
+        if rows:
+            df = pd.DataFrame(rows)
+            if 'description' in df.columns and 'Description' not in df.columns:
+                df.rename(columns={'description': 'Description'}, inplace=True)
+            # Rename Source_Sheet to sheet for consistency
+            if 'Source_Sheet' in df.columns and 'sheet' not in df.columns:
+                df.rename(columns={'Source_Sheet': 'sheet'}, inplace=True)
+            return df
+        else:
+            return pd.DataFrame()
+    
+    def _apply_categories_from_mapping(self, df, master_mapping):
+        """Apply categories from master mapping to the new DataFrame"""
+        if 'final_dataframe' in master_mapping and 'Description' in df.columns:
+            saved_df = master_mapping['final_dataframe']
+            
+            if 'Description' in saved_df.columns and 'category' in saved_df.columns:
+                category_mapping = {}
+                for _, row in saved_df.iterrows():
+                    desc = str(row['Description']).strip().lower()
+                    category = str(row['category']).strip()
+                    if desc and category:
+                        category_mapping[desc] = category
+                
+                # Apply categories
+                df['category'] = df['Description'].apply(
+                    lambda x: category_mapping.get(str(x).strip().lower(), '')
+                )
+                
+                print(f"[DEBUG] Applied categories to {len(df)} rows, {(df['category'] != '').sum()} matched")
+        
+        return df
+    
+    def _merge_comparison_datasets(self, master_df, new_df, new_offer_name):
+        """Merge the new dataset with the master comparison dataset"""
+        import pandas as pd
+        
+        # Create composite keys for exact matching
+        def create_key(df):
+            # Handle case where columns might be named differently
+            code_col = 'code' if 'code' in df.columns else 'Code'
+            desc_col = 'description' if 'description' in df.columns else 'Description'
+            unit_col = 'unit' if 'unit' in df.columns else 'Unit'
+            
+            return (df.get(code_col, '').astype(str) + '|' + 
+                   df.get(desc_col, '').astype(str) + '|' + 
+                   df.get(unit_col, '').astype(str))
+        
+        master_df['_key'] = create_key(master_df)
+        new_df['_key'] = create_key(new_df)
+        
+        # Prepare new offer columns
+        new_columns = {
+            'quantity': f'quantity[{new_offer_name}]',
+            'unit_price': f'unit_price[{new_offer_name}]',
+            'total_price': f'total_price[{new_offer_name}]'
+        }
+        
+        # Rename columns in new_df
+        new_df_renamed = new_df.rename(columns=new_columns)
+        
+        # Get the columns to merge (only the new offer columns plus the key)
+        merge_columns = ['_key'] + list(new_columns.values())
+        new_df_for_merge = new_df_renamed[merge_columns]
+        
+        # Merge datasets
+        merged_df = master_df.merge(new_df_for_merge, on='_key', how='outer')
+        
+        # Fill NaN values with 0 for numeric columns
+        for col in new_columns.values():
+            if col in merged_df.columns:
+                merged_df[col] = merged_df[col].fillna(0)
+        
+        # For rows that only exist in the new dataset, fill base columns from new_df
+        mask = merged_df['sheet'].isna()
+        if mask.any():
+            # Get the base columns from new_df for unmatched rows
+            unmatched_keys = merged_df.loc[mask, '_key'].values
+            unmatched_new_data = new_df[new_df['_key'].isin(unmatched_keys)]
+            
+            base_columns = ['sheet', 'category', 'code', 'description', 'unit']
+            for col in base_columns:
+                if col in unmatched_new_data.columns:
+                    for key in unmatched_keys:
+                        row_data = unmatched_new_data[unmatched_new_data['_key'] == key]
+                        if not row_data.empty:
+                            merged_df.loc[merged_df['_key'] == key, col] = row_data[col].iloc[0]
+        
+        # Remove the temporary key column
+        merged_df = merged_df.drop('_key', axis=1)
+        
+        # Reorder columns to maintain the specified order
+        base_columns = ['sheet', 'category', 'code', 'description', 'unit']
+        
+        # Get all offer columns in the order they were added
+        offer_columns = []
+        for col in merged_df.columns:
+            if col.startswith(('quantity_', 'unit_price_', 'total_price_', 'quantity[', 'unit_price[', 'total_price[')):
+                offer_columns.append(col)
+        
+        # Sort offer columns by offer name to maintain consistent order
+        # Handle both old format (prefix_offer) and new format (prefix[offer])
+        offer_names = set()
+        for col in offer_columns:
+            if '[' in col and ']' in col:
+                # New format: prefix[offer]
+                offer_name = col.split('[')[1].split(']')[0]
+                offer_names.add(offer_name)
+            elif '_' in col:
+                # Old format: prefix_offer
+                offer_name = col.split('_', 1)[1]
+                offer_names.add(offer_name)
+        
+        offer_names = sorted(offer_names)
+        ordered_offer_columns = []
+        for offer in offer_names:
+            for prefix in ['quantity', 'unit_price', 'total_price']:
+                # Try new format first
+                col_name = f'{prefix}[{offer}]'
+                if col_name in merged_df.columns:
+                    ordered_offer_columns.append(col_name)
+                else:
+                    # Fallback to old format
+                    col_name = f'{prefix}_{offer}'
+                    if col_name in merged_df.columns:
+                        ordered_offer_columns.append(col_name)
+        
+        # Final column order
+        final_columns = base_columns + ordered_offer_columns
+        
+        # Only include columns that exist
+        final_columns = [col for col in final_columns if col in merged_df.columns]
+        merged_df = merged_df[final_columns]
+        
+        print(f"[DEBUG] Merged dataset has {len(merged_df)} rows and columns: {merged_df.columns.tolist()}")
+        return merged_df
 
     def _on_confirm_mapped_file_review(self, file_mapping):
         """Handle confirmation of row review for mapped file"""
