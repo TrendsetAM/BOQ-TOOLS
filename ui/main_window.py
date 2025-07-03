@@ -15,6 +15,8 @@ import dataclasses
 import pandas as pd
 from core.row_classifier import RowType
 from datetime import datetime
+import pickle
+import re
 
 # Get a logger for this module
 logger = logging.getLogger(__name__)
@@ -1359,6 +1361,19 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             required_types = ["description", "quantity", "unit_price", "total_price", "unit", "code"]
         # Row review display order
         display_column_order = ["code", "sheet", "category", "description", "unit", "quantity", "unit_price", "total_price"]
+        
+        # Helper function to parse numbers
+        def parse_number(val):
+            if isinstance(val, (int, float)):
+                return float(val)
+            if pd.isna(val):
+                return 0.0
+            s = str(val).replace('\u202f', '').replace(' ', '').replace(',', '.')
+            try:
+                return float(s)
+            except Exception:
+                return 0.0
+        
         # Build mapping from mapped_type to column index for each sheet
         for sheet in getattr(file_mapping, 'sheets', []):
             if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
@@ -1416,25 +1431,18 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                         else:
                             idx = mapped_type_to_index.get(col)
                             val = row_data[idx] if idx is not None and idx < len(row_data) else ""
-                            # Apply number formatting for specific columns
-                            if col in ['unit_price', 'total_price']:
-                                val = format_number(val, is_currency=True)
-                            elif col == 'quantity':
-                                val = format_number(val, is_currency=False)
+                            # Parse numeric values
+                            if col in ['quantity', 'unit_price', 'total_price']:
+                                val = parse_number(val)
                             row_dict[col] = val
                     rows.append(row_dict)
         # Build DataFrame
         if rows:
             df = pd.DataFrame(rows)
-            # PATCH: If 'category' column is empty but 'Category' exists in categorized_dataframe, fill it
-            if 'category' in df.columns and hasattr(file_mapping, 'categorized_dataframe') and file_mapping.categorized_dataframe is not None:
-                cat_df = file_mapping.categorized_dataframe
-                if 'Description' in df.columns and 'Description' in cat_df.columns and 'Category' in cat_df.columns:
-                    df = df.merge(cat_df[['Description', 'Category']], on='Description', how='left', suffixes=('', '_cat'))
-                    # Fix: ensure both are Series for combine_first
-                    if 'category' in df.columns and 'Category' in df.columns:
-                        df['category'] = pd.Series(df['Category']).combine_first(pd.Series(df['category']))
-                        df.drop(columns=['Category'], inplace=True)
+            # Ensure numeric columns are properly typed
+            for col in ['quantity', 'unit_price', 'total_price']:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             # Only keep columns in display order that are present
             columns = [col for col in display_column_order if col in df.columns]
             df = df[columns]
@@ -1508,53 +1516,102 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 categories_internal = [cat.lower() for cat in categories_pretty]
                 pretty_to_internal = {pretty: internal for pretty, internal in zip(categories_pretty, categories_internal)}
                 internal_to_pretty = {internal: pretty for pretty, internal in zip(categories_pretty, categories_internal)}
-                # Get the current DataFrame (with internal values)
-                df = tab.final_dataframe if hasattr(tab, 'final_dataframe') else display_df
-                # Map displayed category to internal for grouping
-                cat_col = 'category'
-                price_col = 'Total_price' if 'Total_price' in df.columns else 'total_price'
-                # Build a mapping from pretty to internal for all rows
-                df_internal = df.copy()
-                df_internal[cat_col] = df_internal[cat_col].apply(lambda x: pretty_to_internal.get(str(x).strip(), str(x).strip().lower()))
-                # --- FIXED: Robustly parse price values ---
-                def parse_price(val):
-                    s = str(val).replace(' ', '').replace('\u202f', '')  # Remove spaces and narrow no-break space
-                    if s == '' or s.lower() == 'nan':
+                
+                # Helper to robustly parse numbers
+                def parse_number(val):
+                    if isinstance(val, (int, float)):
+                        return float(val)
+                    if pd.isna(val):
                         return 0.0
-                    # Handle European and US formats
-                    if s.count(',') > 0 and s.count('.') == 0:
-                        # Assume comma is decimal separator
-                        s = s.replace('.', '')
-                        s = s.replace(',', '.')
-                    elif s.count(',') > 0 and s.count('.') > 0:
-                        # Assume dot is thousands, comma is decimal
-                        s = s.replace('.', '')
-                        s = s.replace(',', '.')
-                    else:
-                        # Only dot or only digits
-                        pass
+                    s = str(val).replace('\u202f', '').replace(' ', '').replace(',', '.')
                     try:
                         return float(s)
-                    except Exception:
+                    except Exception as e:
+                        print(f"[DEBUG] Failed to parse number '{val}': {e}")
                         return 0.0
-                df_internal[price_col] = df_internal[price_col].apply(parse_price)
-                # Group and sum
-                summary = df_internal.groupby(cat_col)[price_col].sum().to_dict()
-                # Prepare columns and values for the summary grid
+                
+                # Get the current DataFrame (with internal values)
+                df = tab.final_dataframe if hasattr(tab, 'final_dataframe') else display_df
+                print("[DEBUG] DataFrame columns:", df.columns.tolist())
+                print("[DEBUG] First few rows of DataFrame:")
+                print(df.head().to_string())
+                
+                # Ensure numeric columns are properly parsed
+                price_col = 'Total_price' if 'Total_price' in df.columns else 'total_price'
+                print(f"[DEBUG] Using price column: {price_col}")
+                if price_col in df.columns:
+                    df[price_col] = df[price_col].apply(parse_number)
+                    print(f"[DEBUG] Price column after parsing:")
+                    print(df[price_col].head().to_string())
+                
+                # Group by category
+                cat_col = 'category'
+                if cat_col in df.columns:
+                    # Convert categories to internal format for matching
+                    df['category_internal'] = df[cat_col].str.strip().str.lower()
+                    print(f"[DEBUG] Unique categories (internal) before grouping:", df['category_internal'].unique())
+                    
+                    # Create the summary dictionary with internal category names
+                    summary_dict = df.groupby('category_internal')[price_col].sum().to_dict()
+                    print("[DEBUG] Summary dict after grouping:", summary_dict)
+                    
+                    # Map the actual categories to predefined categories
+                    mapped_summary = {}
+                    for actual_cat, total in summary_dict.items():
+                        # Try to find a matching predefined category
+                        matched = False
+                        for internal_cat in categories_internal:
+                            if actual_cat == internal_cat or actual_cat.replace(' ', '') == internal_cat.replace(' ', ''):
+                                mapped_summary[internal_cat] = mapped_summary.get(internal_cat, 0) + total
+                                matched = True
+                                break
+                        if not matched:
+                            # If no match found, add to 'Other' category
+                            other_cat = 'other'
+                            mapped_summary[other_cat] = mapped_summary.get(other_cat, 0) + total
+                    
+                    print("[DEBUG] Mapped summary:", mapped_summary)
+                else:
+                    print("[DEBUG] No category column found!")
+                    mapped_summary = {}
+                
                 offer_label = self.current_offer_name if hasattr(self, 'current_offer_name') and self.current_offer_name else 'Offer'
-                summary_columns = ['Offer'] + [internal_to_pretty.get(cat, cat.capitalize()) for cat in categories_internal if cat in summary]
-                summary_values = [offer_label] + [f"{summary[cat]:,.2f}" if cat in summary else '0.00' for cat in categories_internal if cat in summary]
+                summary_columns = ['Offer'] + categories_pretty
+                # Use the mapped summary to get values in the correct order
+                summary_values = [offer_label]
+                for cat_pretty in categories_pretty:
+                    cat_internal = pretty_to_internal[cat_pretty]
+                    value = mapped_summary.get(cat_internal, 0.0)
+                    summary_values.append(value)
+                
+                print("[DEBUG] Final summary values:", summary_values)
+                
                 # Remove old summary tree if present
                 for widget in summary_frame.winfo_children():
                     widget.destroy()
+                
                 if len(summary_columns) <= 1:
                     summary_frame.grid_remove()
                     return
+                
                 summary_tree = ttk.Treeview(summary_frame, columns=summary_columns, show='headings', height=2)
                 for col in summary_columns:
                     summary_tree.heading(col, text=col)
                     summary_tree.column(col, width=150, minwidth=100)
-                summary_tree.insert('', 'end', values=summary_values, tags=('offer',))
+                
+                # Format values for display
+                display_values = []
+                for i, val in enumerate(summary_values):
+                    if i == 0:  # Offer label
+                        display_values.append(str(val))
+                    else:  # Numeric values
+                        try:
+                            num_val = float(val)
+                            display_values.append(f"{num_val:,.2f}".replace(',', ' ').replace('.', ','))
+                        except (ValueError, TypeError):
+                            display_values.append(str(val))
+                
+                summary_tree.insert('', 'end', values=display_values, tags=('offer',))
                 summary_tree.grid(row=0, column=0, sticky=tk.EW)
                 summary_frame.grid()
                 tab.summary_tree = summary_tree
@@ -1588,15 +1645,14 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             # Button frame at the bottom
             button_frame = ttk.Frame(main_frame)
             button_frame.grid(row=4, column=0, pady=(10, 0))
-            apply_button = ttk.Button(button_frame, text="Apply Changes", 
-                                     command=lambda: self._apply_final_data_changes(tree, display_df, tab))
-            apply_button.pack(side=tk.LEFT, padx=(0, 5))
             summarize_button = ttk.Button(button_frame, text="Summarize", command=show_summary_grid)
             summarize_button.pack(side=tk.LEFT, padx=(0, 5))
-            save_button = ttk.Button(button_frame, text="Save Analysis", command=lambda: self._update_status('Save Analysis not implemented yet.'))
-            save_button.pack(side=tk.LEFT, padx=(0, 5))
+            save_dataset_button = ttk.Button(button_frame, text="Save Dataset", command=lambda: self._save_dataset(tab))
+            save_dataset_button.pack(side=tk.LEFT, padx=(0, 5))
+            save_mappings_button = ttk.Button(button_frame, text="Save Mappings", command=lambda: self._save_mappings(tab))
+            save_mappings_button.pack(side=tk.LEFT, padx=(0, 5))
             export_button = ttk.Button(button_frame, text="Export Data", 
-                                      command=lambda: self._export_final_data(display_df))
+                                      command=lambda: self._export_final_data(tab.final_dataframe, tab))
             export_button.pack(side=tk.LEFT, padx=(0, 5))
             tab.final_data_tree = tree
             tab.final_dataframe = display_df
@@ -1614,9 +1670,24 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         categories_internal = [cat.lower() for cat in categories_pretty]
         pretty_to_internal = {pretty: internal for pretty, internal in zip(categories_pretty, categories_internal)}
         internal_to_pretty = {internal: pretty for pretty, internal in zip(categories_pretty, categories_internal)}
+        
+        # Helper to format numbers consistently
+        def format_number(val, is_currency=False):
+            try:
+                if pd.isna(val):
+                    return ""
+                if isinstance(val, str):
+                    # Remove any existing formatting
+                    val = val.replace(' ', '').replace('\u202f', '').replace(',', '.')
+                num = float(val)
+                return f"{num:,.2f}".replace(',', ' ').replace('.', ',')
+            except (ValueError, TypeError):
+                return str(val)
+        
         # Clear existing items
         for item in tree.get_children():
             tree.delete(item)
+        
         # Add data rows
         for index, row in dataframe.iterrows():
             values = []
@@ -1624,10 +1695,14 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 value = row.get(col, '')
                 if pd.isna(value):
                     value = ''
-                # For category, always display pretty version
+                # Format based on column type
                 if col == 'category':
+                    # For category, always display pretty version
                     value_disp = internal_to_pretty.get(str(value).strip().lower(), str(value))
                     values.append(value_disp)
+                elif col in ['quantity', 'unit_price', 'total_price']:
+                    # Format numeric columns
+                    values.append(format_number(value))
                 else:
                     values.append(str(value))
             tree.insert('', 'end', values=values, tags=(f'row_{index}',))
@@ -1722,27 +1797,155 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         except Exception as e:
             messagebox.showerror("Error", f"Failed to apply changes: {str(e)}")
     
-    def _export_final_data(self, dataframe):
-        """Export the final categorized data"""
+    def _export_final_data(self, dataframe, tab=None):
+        """Export the final categorized data to a nicely formatted Excel file with summary and validation."""
         try:
+            import pandas as pd
+            from tkinter import filedialog, messagebox
+            import xlsxwriter
+            import numpy as np
+            from core.manual_categorizer import get_manual_categorization_categories
+            
+            # Prepare pretty/internals mapping
+            categories_pretty = get_manual_categorization_categories()
+            categories_internal = [cat.lower() for cat in categories_pretty]
+            internal_to_pretty = {internal: pretty for pretty, internal in zip(categories_internal, categories_pretty)}
+            pretty_to_internal = {pretty: internal for pretty, internal in zip(categories_pretty, categories_internal)}
+            
+            # Helper to robustly parse numbers
+            def parse_number(val):
+                if isinstance(val, (int, float)):
+                    return float(val)
+                if pd.isna(val):
+                    return 0.0
+                s = str(val).replace('\u202f', '').replace(' ', '').replace(',', '.')
+                try:
+                    return float(s)
+                except Exception:
+                    return 0.0
+            
+            # Prompt for file path
             file_path = filedialog.asksaveasfilename(
                 title="Export Categorized Data",
                 defaultextension=".xlsx",
-                filetypes=[("Excel files", "*.xlsx"), ("CSV files", "*.csv"), ("All files", "*.*")]
+                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")]
             )
+            if not file_path:
+                return
             
-            if file_path:
-                if file_path.endswith('.csv'):
-                    dataframe.to_csv(file_path, index=False)
-                elif file_path.endswith('.xlsx'):
-                    dataframe.to_excel(file_path, index=False)
-                else:
-                    dataframe.to_csv(file_path, index=False)
+            # Prepare main data
+            df = dataframe.copy()
+            
+            # Map category column to pretty names for export
+            if 'category' in df.columns:
+                df['category'] = df['category'].apply(lambda x: internal_to_pretty.get(str(x).strip().lower(), str(x)))
+            
+            # Ensure numeric columns are numbers
+            for col in ['quantity', 'unit_price', 'total_price']:
+                if col in df.columns:
+                    df[col] = df[col].apply(parse_number)
+            
+            # Write to Excel with formatting
+            with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
+                df.to_excel(writer, sheet_name='Data', index=False)
+                workbook = writer.book
+                worksheet = writer.sheets['Data']
+                
+                # Format headers
+                header_format = workbook.add_format({'bold': True, 'bg_color': '#D9E1F2', 'border': 1})
+                for col_num, value in enumerate(df.columns):
+                    worksheet.write(0, col_num, value, header_format)
+                
+                # Format numeric columns
+                num_format = workbook.add_format({'num_format': '#,##0.00', 'align': 'right'})
+                for col in ['quantity', 'unit_price', 'total_price']:
+                    if col in df.columns:
+                        col_idx = df.columns.get_loc(col)
+                        worksheet.set_column(col_idx, col_idx, 15, num_format)
+                
+                # Data validation for category column
+                if 'category' in df.columns:
+                    cat_col_idx = df.columns.get_loc('category')
+                    worksheet.data_validation(1, cat_col_idx, len(df), cat_col_idx, {
+                        'validate': 'list',
+                        'source': categories_pretty,
+                        'input_message': 'Select a category from the list.'
+                    })
+                
+                # Autofit columns
+                for i, col in enumerate(df.columns):
+                    maxlen = max(
+                        [len(str(x)) for x in df[col].astype(str).values] + [len(str(col))]
+                    )
+                    worksheet.set_column(i, i, min(maxlen + 2, 30))
+                
+                # Add summary sheet
+                if tab and hasattr(tab, 'summary_frame') and hasattr(tab, 'final_dataframe'):
+                    df_summary = tab.final_dataframe.copy()
+                    
+                    # Convert categories to internal format for matching
+                    if 'category' in df_summary.columns:
+                        df_summary['category_internal'] = df_summary['category'].str.strip().str.lower()
+                    else:
+                        df_summary['category_internal'] = ''
+                    
+                    # Ensure price column is numeric
+                    price_col = 'total_price' if 'total_price' in df_summary.columns else 'Total_price'
+                    if price_col in df_summary.columns:
+                        df_summary[price_col] = df_summary[price_col].apply(parse_number)
+                    
+                    # Create summary by mapping to predefined categories
+                    summary_dict = df_summary.groupby('category_internal')[price_col].sum().to_dict()
+                    
+                    # Map actual categories to predefined categories
+                    mapped_summary = {}
+                    for actual_cat, total in summary_dict.items():
+                        matched = False
+                        for internal_cat in categories_internal:
+                            if actual_cat == internal_cat or actual_cat.replace(' ', '') == internal_cat.replace(' ', ''):
+                                mapped_summary[internal_cat] = mapped_summary.get(internal_cat, 0) + total
+                                matched = True
+                                break
+                        if not matched:
+                            other_cat = 'other'
+                            mapped_summary[other_cat] = mapped_summary.get(other_cat, 0) + total
+                    
+                    # Create summary sheet
+                    summary_ws = workbook.add_worksheet('Summary')
+                    
+                    # Write headers with formatting
+                    summary_columns = ['Offer'] + categories_pretty
+                    for col_idx, col in enumerate(summary_columns):
+                        summary_ws.write(0, col_idx, col, header_format)
+                    
+                    # Write values
+                    offer_label = self.current_offer_name if hasattr(self, 'current_offer_name') and self.current_offer_name else 'Offer'
+                    summary_values = [offer_label]
+                    for cat_pretty in categories_pretty:
+                        cat_internal = pretty_to_internal[cat_pretty]
+                        value = mapped_summary.get(cat_internal, 0.0)
+                        summary_values.append(value)
+                    
+                    # Write summary row with formatting
+                    for col_idx, val in enumerate(summary_values):
+                        if col_idx == 0:
+                            summary_ws.write(1, col_idx, val)
+                        else:
+                            summary_ws.write_number(1, col_idx, val, num_format)
+                    
+                    # Format columns
+                    for i in range(len(summary_columns)):
+                        if i == 0:
+                            summary_ws.set_column(i, i, 25)  # Offer column: text
+                        else:
+                            summary_ws.set_column(i, i, 18, num_format)  # Category columns: number format
                 
                 messagebox.showinfo("Success", f"Data exported to: {file_path}")
                 self._update_status(f"Exported data to: {file_path}")
                 
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             messagebox.showerror("Error", f"Failed to export data: {str(e)}")
     
     def run(self):
@@ -1756,3 +1959,76 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         if offer_name is not None and offer_name.strip() != "":
             return offer_name.strip()
         return None
+
+    def _save_dataset(self, tab):
+        """Save the current DataFrame as a pickle file."""
+        df = getattr(tab, 'final_dataframe', None)
+        if df is None:
+            messagebox.showerror("Error", "No dataset to save.")
+            return
+        file_path = filedialog.asksaveasfilename(
+            title="Save Dataset as Pickle",
+            defaultextension=".pkl",
+            filetypes=[("Pickle files", "*.pkl"), ("All files", "*.*")]
+        )
+        if file_path:
+            try:
+                with open(file_path, 'wb') as f:
+                    pickle.dump(df, f)
+                messagebox.showinfo("Success", f"Dataset saved to: {file_path}")
+                self._update_status(f"Dataset saved to: {file_path}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save dataset: {str(e)}")
+
+    def _save_mappings(self, tab):
+        """Save the current mappings (sheet, column, row) as a pickle file."""
+        # Find the file_mapping for this tab
+        file_mapping = None
+        for file_data in self.controller.current_files.values():
+            if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == tab:
+                file_mapping = file_data['file_mapping']
+                break
+        if file_mapping is None:
+            messagebox.showerror("Error", "No mappings to save.")
+            return
+        # Prepare mappings data
+        mappings_data = {
+            'sheets': [],
+            'row_validity': self.row_validity.copy(),
+        }
+        # Save relevant info from each sheet
+        for sheet in getattr(file_mapping, 'sheets', []):
+            sheet_info = {
+                'sheet_name': getattr(sheet, 'sheet_name', None),
+                'sheet_type': getattr(sheet, 'sheet_type', None),
+                'column_mappings': [],
+                'row_classifications': [],
+            }
+            # Column mappings
+            for cm in getattr(sheet, 'column_mappings', []):
+                cm_dict = cm.__dict__.copy() if hasattr(cm, '__dict__') else dict(cm)
+                sheet_info['column_mappings'].append(cm_dict)
+            # Row classifications
+            for rc in getattr(sheet, 'row_classifications', []):
+                rc_dict = rc.__dict__.copy() if hasattr(rc, '__dict__') else dict(rc)
+                sheet_info['row_classifications'].append(rc_dict)
+            mappings_data['sheets'].append(sheet_info)
+        # Optionally save column_mapper config if needed for re-use
+        if hasattr(file_mapping, 'column_mapper'):
+            try:
+                mappings_data['column_mapper'] = file_mapping.column_mapper
+            except Exception:
+                pass
+        file_path = filedialog.asksaveasfilename(
+            title="Save Mappings as Pickle",
+            defaultextension=".pkl",
+            filetypes=[("Pickle files", "*.pkl"), ("All files", "*.*")]
+        )
+        if file_path:
+            try:
+                with open(file_path, 'wb') as f:
+                    pickle.dump(mappings_data, f)
+                messagebox.showinfo("Success", f"Mappings saved to: {file_path}")
+                self._update_status(f"Mappings saved to: {file_path}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save mappings: {str(e)}")
