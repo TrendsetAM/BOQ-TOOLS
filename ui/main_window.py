@@ -1749,8 +1749,8 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             button_frame.grid(row=4, column=0, pady=(10, 0))
             summarize_button = ttk.Button(button_frame, text="Summarize", command=show_summary_grid)
             summarize_button.pack(side=tk.LEFT, padx=(0, 5))
-            save_dataset_button = ttk.Button(button_frame, text="Save Dataset", command=lambda: self._save_dataset(tab))
-            save_dataset_button.pack(side=tk.LEFT, padx=(0, 5))
+            save_analysis_button = ttk.Button(button_frame, text="Save Analysis", command=lambda: self._save_analysis(tab))
+            save_analysis_button.pack(side=tk.LEFT, padx=(0, 5))
             save_mappings_button = ttk.Button(button_frame, text="Save Mappings", command=lambda: self._save_mappings(tab))
             save_mappings_button.pack(side=tk.LEFT, padx=(0, 5))
             compare_full_button = ttk.Button(button_frame, text="Compare Full", command=lambda: self._compare_full(tab))
@@ -2123,34 +2123,53 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             return offer_name.strip()
         return None
 
-    def _save_dataset(self, tab):
-        """Save the current DataFrame as a pickle file."""
+    def _save_analysis(self, tab):
+        """Save the current analysis including DataFrame and mapping information as a pickle file."""
         df = getattr(tab, 'final_dataframe', None)
         if df is None:
-            messagebox.showerror("Error", "No dataset to save.")
+            messagebox.showerror("Error", "No analysis to save.")
             return
         
-        print(f"[DEBUG] Saving DataFrame with shape: {df.shape}")
+        print(f"[DEBUG] Saving analysis with DataFrame shape: {df.shape}")
         print(f"[DEBUG] DataFrame columns: {df.columns.tolist()}")
         print(f"[DEBUG] DataFrame first few rows:")
         print(df.head().to_string())
         
         if df.empty:
-            messagebox.showerror("Error", "Dataset is empty - nothing to save.")
+            messagebox.showerror("Error", "Analysis is empty - nothing to save.")
             return
             
         # Get the current offer name
         offer_name = self.current_offer_name if hasattr(self, 'current_offer_name') else None
         
-        # Create a dictionary with all necessary data
+        # Get mapping information if available
+        mapping_data = None
+        if hasattr(tab, 'stored_mapping_data') and tab.stored_mapping_data is not None:
+            mapping_data = tab.stored_mapping_data
+            print(f"[DEBUG] Including stored mapping data with {len(mapping_data.get('sheets', []))} sheets")
+        else:
+            # Try to extract mapping data
+            mapping_data = self._extract_mapping_from_tab(tab)
+            if mapping_data:
+                print(f"[DEBUG] Extracted mapping data with {len(mapping_data.get('sheets', []))} sheets")
+        
+        # Get comparison information if available
+        comparison_offers = getattr(tab, 'comparison_offers', None)
+        is_comparison = self._is_comparison_dataset(df) if df is not None else False
+        
+        # Create a comprehensive save data dictionary
         save_data = {
             'dataframe': df,
             'offer_name': offer_name,
-            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'mapping_data': mapping_data,
+            'comparison_offers': comparison_offers,
+            'is_comparison': is_comparison,
+            'analysis_type': 'comparison' if is_comparison else 'single_offer'
         }
         
         file_path = filedialog.asksaveasfilename(
-            title="Save Dataset as Pickle",
+            title="Save Analysis as Pickle",
             defaultextension=".pkl",
             filetypes=[("Pickle files", "*.pkl"), ("All files", "*.*")]
         )
@@ -2158,66 +2177,41 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             try:
                 with open(file_path, 'wb') as f:
                     pickle.dump(save_data, f)
-                print(f"[DEBUG] Successfully saved to {file_path}")
-                messagebox.showinfo("Success", f"Dataset saved to: {file_path}")
-                self._update_status(f"Dataset saved to: {file_path}")
+                print(f"[DEBUG] Successfully saved analysis to {file_path}")
+                
+                # Show detailed success message
+                details = [f"DataFrame: {df.shape[0]} rows, {df.shape[1]} columns"]
+                if mapping_data:
+                    details.append(f"Mapping: {len(mapping_data.get('sheets', []))} sheets")
+                if comparison_offers:
+                    details.append(f"Comparison: {len(comparison_offers)} offers")
+                
+                success_msg = f"Analysis saved successfully!\n\n" + "\n".join(details)
+                messagebox.showinfo("Success", success_msg)
+                self._update_status(f"Analysis saved to: {file_path}")
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to save dataset: {str(e)}")
+                messagebox.showerror("Error", f"Failed to save analysis: {str(e)}")
                 print(f"[DEBUG] Failed to save: {e}")
                 import traceback
                 traceback.print_exc()
 
     def _save_mappings(self, tab):
         """Save the current mappings (sheet, column, row) as a pickle file."""
-        # Find the file_mapping for this tab
-        file_mapping = None
-        for file_data in self.controller.current_files.values():
-            if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == tab:
-                file_mapping = file_data['file_mapping']
-                break
-        if file_mapping is None:
-            messagebox.showerror("Error", "No mappings to save.")
+        # Use the robust extraction method to get mappings from any state (new, loaded, compared)
+        mappings_data = self._extract_mapping_from_tab(tab)
+
+        if mappings_data is None:
+            messagebox.showerror("Error", "No mappings found to save.")
             return
-        
-        # Prepare mappings data
-        mappings_data = {
-            'sheets': [],
-            'row_validity': self.row_validity.copy(),
-        }
-        
-        # Save relevant info from each sheet
-        for sheet in getattr(file_mapping, 'sheets', []):
-            sheet_info = {
-                'sheet_name': getattr(sheet, 'sheet_name', None),
-                'sheet_type': getattr(sheet, 'sheet_type', None),
-                'column_mappings': [],
-                'row_classifications': [],
-            }
-            # Column mappings
-            for cm in getattr(sheet, 'column_mappings', []):
-                cm_dict = cm.__dict__.copy() if hasattr(cm, '__dict__') else dict(cm)
-                sheet_info['column_mappings'].append(cm_dict)
-            # Row classifications
-            for rc in getattr(sheet, 'row_classifications', []):
-                rc_dict = rc.__dict__.copy() if hasattr(rc, '__dict__') else dict(rc)
-                sheet_info['row_classifications'].append(rc_dict)
-            mappings_data['sheets'].append(sheet_info)
-        
-        # IMPORTANT: Save the final categorized DataFrame if it exists
+
+        # Ensure the final DataFrame in the mapping data is the most current version from the UI
         if hasattr(tab, 'final_dataframe') and tab.final_dataframe is not None:
             mappings_data['final_dataframe'] = tab.final_dataframe.copy()
-            print(f"[DEBUG] Saving final DataFrame with shape: {tab.final_dataframe.shape}")
+            print(f"[DEBUG] Saving updated final DataFrame with shape: {tab.final_dataframe.shape}")
         
-        # Save offer name if available
+        # Add the current offer name, which might have been updated
         if hasattr(self, 'current_offer_name') and self.current_offer_name:
             mappings_data['offer_name'] = self.current_offer_name
-        
-        # Optionally save column_mapper config if needed for re-use
-        if hasattr(file_mapping, 'column_mapper'):
-            try:
-                mappings_data['column_mapper'] = file_mapping.column_mapper
-            except Exception:
-                pass
         
         file_path = filedialog.asksaveasfilename(
             title="Save Mappings as Pickle",
@@ -2250,12 +2244,25 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 if isinstance(loaded_data, dict):
                     df = loaded_data.get('dataframe')
                     self.current_offer_name = loaded_data.get('offer_name')
-                    print(f"[DEBUG] Dictionary format - DataFrame shape: {df.shape if df is not None else 'None'}")
+                    mapping_data = loaded_data.get('mapping_data')
+                    comparison_offers = loaded_data.get('comparison_offers')
+                    is_comparison = loaded_data.get('is_comparison', False)
+                    analysis_type = loaded_data.get('analysis_type', 'unknown')
+                    
+                    print(f"[DEBUG] Enhanced format - DataFrame shape: {df.shape if df is not None else 'None'}")
                     print(f"[DEBUG] Offer name: {self.current_offer_name}")
+                    print(f"[DEBUG] Has mapping data: {mapping_data is not None}")
+                    print(f"[DEBUG] Comparison offers: {comparison_offers}")
+                    print(f"[DEBUG] Is comparison: {is_comparison}")
                 else:
+                    # Legacy format - just DataFrame
                     df = loaded_data
                     self.current_offer_name = None
-                    print(f"[DEBUG] Direct DataFrame format - shape: {df.shape if df is not None else 'None'}")
+                    mapping_data = None
+                    comparison_offers = None
+                    is_comparison = False
+                    analysis_type = 'legacy'
+                    print(f"[DEBUG] Legacy format - DataFrame shape: {df.shape if df is not None else 'None'}")
                 
                 if isinstance(df, pd.DataFrame) and not df.empty:
                     print(f"[DEBUG] DataFrame columns: {df.columns.tolist()}")
@@ -2263,15 +2270,39 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     print(df.head().to_string())
                     
                     # Create a new tab for the loaded analysis
+                    filename = os.path.basename(file_path)
+                    tab_name = f"Loaded: {filename}"
+                    if analysis_type == 'comparison':
+                        tab_name = f"Comparison: {filename}"
+                    
                     tab = ttk.Frame(self.notebook)
-                    self.notebook.add(tab, text=f"Loaded Analysis {os.path.basename(file_path)}")
+                    self.notebook.add(tab, text=tab_name)
                     self.notebook.select(tab)
+                    
+                    # Store the loaded data in the tab
+                    if mapping_data:
+                        tab.stored_mapping_data = mapping_data
+                        print(f"[DEBUG] Stored mapping data with {len(mapping_data.get('sheets', []))} sheets")
+                    
+                    if comparison_offers:
+                        tab.comparison_offers = comparison_offers
+                        print(f"[DEBUG] Stored comparison offers: {comparison_offers}")
                     
                     # Show the data in the grid
                     self._show_final_categorized_data(tab, df, None)
-                    self._update_status(f"Analysis loaded from: {file_path}")
+                    
+                    # Update status with detailed information
+                    details = [f"DataFrame: {df.shape[0]} rows, {df.shape[1]} columns"]
+                    if mapping_data:
+                        details.append(f"Mapping: {len(mapping_data.get('sheets', []))} sheets")
+                    if comparison_offers:
+                        details.append(f"Comparison: {len(comparison_offers)} offers")
+                    
+                    status_msg = f"Analysis loaded - " + ", ".join(details)
+                    self._update_status(status_msg)
+                    
                 elif isinstance(df, pd.DataFrame) and df.empty:
-                    messagebox.showerror("Error", "The loaded DataFrame is empty")
+                    messagebox.showerror("Error", "The loaded analysis contains an empty DataFrame")
                     print("[DEBUG] DataFrame is empty")
                 else:
                     messagebox.showerror("Error", "Invalid analysis file format - no DataFrame found")
@@ -2298,10 +2329,21 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             # Check if this is the first comparison (need to restructure master dataset)
             if not self._is_comparison_dataset(master_df):
                 print("[DEBUG] Converting master dataset to comparison format")
+                
+                # Extract and store mapping data before converting to comparison format
+                master_mapping = self._extract_mapping_from_tab(tab)
+                if master_mapping is None:
+                    messagebox.showerror("Error", "Could not extract mapping from master dataset. Please ensure the dataset was created with saved mappings.")
+                    return
+                
                 master_df = self._convert_to_comparison_format(master_df, master_offer_name)
                 tab.final_dataframe = master_df
                 tab.master_offer_name = master_offer_name
                 tab.comparison_offers = [master_offer_name]
+                
+                # Ensure the mapping data is stored in the tab for future comparisons
+                if not hasattr(tab, 'stored_mapping_data'):
+                    tab.stored_mapping_data = master_mapping
                 
                 # Update the display
                 self._update_comparison_display(tab, master_df)
@@ -2941,10 +2983,12 @@ Review the rows below and adjust validity as needed."""
     
     def _extract_mapping_from_tab(self, tab):
         """Extract mapping information from the current tab for reuse"""
-        # For now, we'll need to get the mapping from the file_mapping if available
-        # This is a placeholder - we'll need to store mapping info when creating the dataset
+        # First, check if we already have stored mapping data in the tab (for comparison datasets)
+        if hasattr(tab, 'stored_mapping_data') and tab.stored_mapping_data is not None:
+            print("[DEBUG] Using stored mapping data from tab")
+            return tab.stored_mapping_data
         
-        # Try to find the file mapping for this tab
+        # Try to find the file mapping for this tab (for original datasets)
         for file_data in self.controller.current_files.values():
             if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == tab:
                 # Extract the mapping information we need
@@ -2977,6 +3021,9 @@ Review the rows below and adjust validity as needed."""
                 if hasattr(tab, 'final_dataframe') and tab.final_dataframe is not None:
                     mapping_data['final_dataframe'] = tab.final_dataframe.copy()
                 
+                # Store the mapping data in the tab for future use
+                tab.stored_mapping_data = mapping_data
+                print("[DEBUG] Extracted and stored mapping data from file_mapping")
                 return mapping_data
         
         # If no file mapping found, return None
@@ -3056,13 +3103,32 @@ Review the rows below and adjust validity as needed."""
             
             # Merge with the master comparison dataset
             master_df = master_tab.final_dataframe
+            
+            # Debug: Check master DF state before merge
+            print(f"[DEBUG] Before merge - Master DF shape: {master_df.shape}")
+            print(f"[DEBUG] Before merge - Master DF columns: {master_df.columns.tolist()}")
+            if 'total_price' in master_df.columns:
+                print(f"[DEBUG] Before merge - Master DF total_price sum: {master_df['total_price'].sum()}")
+            
             merged_df = self._merge_comparison_datasets(master_df, new_df, new_offer_name)
+            
+            # Debug: Check master DF state after merge (should be unchanged)
+            print(f"[DEBUG] After merge - Master DF shape: {master_df.shape}")
+            print(f"[DEBUG] After merge - Master DF columns: {master_df.columns.tolist()}")
+            if 'total_price' in master_df.columns:
+                print(f"[DEBUG] After merge - Master DF total_price sum: {master_df['total_price'].sum()}")
+            print(f"[DEBUG] After merge - Merged DF shape: {merged_df.shape}")
+            print(f"[DEBUG] After merge - Merged DF columns: {merged_df.columns.tolist()}")
             
             # Update the master tab
             master_tab.final_dataframe = merged_df
             if not hasattr(master_tab, 'comparison_offers'):
                 master_tab.comparison_offers = []
             master_tab.comparison_offers.append(new_offer_name)
+            
+            # Ensure the stored mapping data is preserved for future comparisons
+            if not hasattr(master_tab, 'stored_mapping_data') and 'final_dataframe' in master_mapping:
+                master_tab.stored_mapping_data = master_mapping
             
             # Update the display
             self._update_comparison_display(master_tab, merged_df)
@@ -3081,15 +3147,30 @@ Review the rows below and adjust validity as needed."""
         import pandas as pd
         
         rows = []
-        for sheet in getattr(file_mapping, 'sheets', []):
+        
+        # Process sheets in consistent order (sorted by name)
+        sheets = sorted(getattr(file_mapping, 'sheets', []), key=lambda s: s.sheet_name)
+        
+        for sheet in sheets:
             if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
                 continue
                 
             col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
             sheet_name = sheet.sheet_name
-            validity_dict = master_mapping.get('row_validity', {}).get(sheet_name, {})
             
-            for rc in getattr(sheet, 'row_classifications', []):
+            # Get row classifications and sort them by row_index to maintain consistent order
+            row_classifications = sorted(getattr(sheet, 'row_classifications', []), key=lambda rc: rc.row_index)
+            
+            # Use the same validity logic as the original processing
+            # Check if we have saved validity data, otherwise use the sheet's current validity
+            validity_dict = {}
+            if 'row_validity' in master_mapping and sheet_name in master_mapping['row_validity']:
+                validity_dict = master_mapping['row_validity'][sheet_name]
+            else:
+                # Fall back to current validity from row classifications
+                validity_dict = {rc.row_index: rc.row_type.name == 'BOQ_ITEM' for rc in row_classifications}
+            
+            for rc in row_classifications:
                 # Only include valid rows (same logic as master)
                 if not validity_dict.get(rc.row_index, False):
                     continue
@@ -3104,38 +3185,71 @@ Review the rows below and adjust validity as needed."""
                 if row_data is None:
                     row_data = []
                 
-                # Build dict for DataFrame
-                row_dict = {col_headers[i]: row_data[i] if i < len(row_data) else '' 
-                          for i in range(len(col_headers))}
-                row_dict['Source_Sheet'] = sheet.sheet_name
+                # Build dict for DataFrame with consistent column names
+                row_dict = {}
+                for i, col_header in enumerate(col_headers):
+                    value = row_data[i] if i < len(row_data) else ''
+                    row_dict[col_header] = value
+                
+                # Add sheet name with consistent column name
+                row_dict['sheet'] = sheet.sheet_name
                 rows.append(row_dict)
         
         if rows:
             df = pd.DataFrame(rows)
-            if 'description' in df.columns and 'Description' not in df.columns:
-                df.rename(columns={'description': 'Description'}, inplace=True)
-            # Rename Source_Sheet to sheet for consistency
-            if 'Source_Sheet' in df.columns and 'sheet' not in df.columns:
-                df.rename(columns={'Source_Sheet': 'sheet'}, inplace=True)
+            
+            # Ensure consistent column naming - always use lowercase for internal consistency
+            column_mappings = {
+                'Description': 'description',
+                'Code': 'code',
+                'Unit': 'unit',
+                'Quantity': 'quantity',
+                'Unit_Price': 'unit_price',
+                'Total_Price': 'total_price',
+                'Source_Sheet': 'sheet'
+            }
+            
+            # Apply column name standardization
+            for old_name, new_name in column_mappings.items():
+                if old_name in df.columns and new_name not in df.columns:
+                    df.rename(columns={old_name: new_name}, inplace=True)
+            
+            # Ensure we have all required columns
+            required_columns = ['sheet', 'code', 'description', 'unit', 'quantity', 'unit_price', 'total_price']
+            for col in required_columns:
+                if col not in df.columns:
+                    df[col] = ''
+            
+            # Preserve the original row order from the file processing
+            # Do NOT sort to maintain the exact order from the Excel file
+            df = df.reset_index(drop=True)
+            
+            print(f"[DEBUG] Built DataFrame with {len(df)} rows and columns: {df.columns.tolist()}")
             return df
         else:
-            return pd.DataFrame()
+            # Return empty DataFrame with consistent structure
+            return pd.DataFrame(columns=['sheet', 'code', 'description', 'unit', 'quantity', 'unit_price', 'total_price'])
     
     def _apply_categories_from_mapping(self, df, master_mapping):
         """Apply categories from master mapping to the new DataFrame"""
-        if 'final_dataframe' in master_mapping and 'Description' in df.columns:
+        if 'final_dataframe' in master_mapping and 'description' in df.columns:
             saved_df = master_mapping['final_dataframe']
             
-            if 'Description' in saved_df.columns and 'category' in saved_df.columns:
+            # Handle both possible column names for description
+            desc_col = 'description'
+            if desc_col not in saved_df.columns and 'Description' in saved_df.columns:
+                desc_col = 'Description'
+            
+            if desc_col in saved_df.columns and 'category' in saved_df.columns:
                 category_mapping = {}
                 for _, row in saved_df.iterrows():
-                    desc = str(row['Description']).strip().lower()
+                    desc = str(row[desc_col]).strip().lower()
                     category = str(row['category']).strip()
                     if desc and category:
                         category_mapping[desc] = category
                 
-                # Apply categories
-                df['category'] = df['Description'].apply(
+                # Apply categories using the consistent column name
+                df['category'] = df['description'].apply(
                     lambda x: category_mapping.get(str(x).strip().lower(), '')
                 )
                 
@@ -3147,19 +3261,107 @@ Review the rows below and adjust validity as needed."""
         """Merge the new dataset with the master comparison dataset"""
         import pandas as pd
         
-        # Create composite keys for exact matching
-        def create_key(df):
-            # Handle case where columns might be named differently
-            code_col = 'code' if 'code' in df.columns else 'Code'
-            desc_col = 'description' if 'description' in df.columns else 'Description'
-            unit_col = 'unit' if 'unit' in df.columns else 'Unit'
-            
-            return (df.get(code_col, '').astype(str) + '|' + 
-                   df.get(desc_col, '').astype(str) + '|' + 
-                   df.get(unit_col, '').astype(str))
+        print(f"[DEBUG] Starting merge - Master DF shape: {master_df.shape}, New DF shape: {new_df.shape}")
         
-        master_df['_key'] = create_key(master_df)
-        new_df['_key'] = create_key(new_df)
+        # CRITICAL FIX: Create copies to avoid modifying the original DataFrames
+        master_df_copy = master_df.copy()
+        new_df_copy = new_df.copy()
+        
+        # Reset indices to ensure clean merging
+        master_df_copy = master_df_copy.reset_index(drop=True)
+        new_df_copy = new_df_copy.reset_index(drop=True)
+        
+        print(f"[DEBUG] After reset - Master DF shape: {master_df_copy.shape}, New DF shape: {new_df_copy.shape}")
+        
+        # Create composite keys for exact matching - use ALL identifying columns
+        def create_key(df):
+            # Use ALL the identifying columns to create a unique key
+            key_parts = []
+            for col in ['sheet', 'category', 'code', 'description', 'unit']:
+                if col in df.columns:
+                    # Clean and normalize the values
+                    values = df[col].fillna('').astype(str).str.strip()
+                    key_parts.append(values)
+                else:
+                    key_parts.append(pd.Series([''] * len(df)))
+            
+            # Combine all parts with a separator
+            return key_parts[0] + '|' + key_parts[1] + '|' + key_parts[2] + '|' + key_parts[3] + '|' + key_parts[4]
+        
+        # Debug: Show unique sheet names in both datasets
+        print(f"[DEBUG] Master dataset sheets: {sorted(master_df_copy['sheet'].unique())}")
+        print(f"[DEBUG] New dataset sheets: {sorted(new_df_copy['sheet'].unique())}")
+        
+        # Check if sheet names match
+        master_sheets = set(master_df_copy['sheet'].unique())
+        new_sheets = set(new_df_copy['sheet'].unique())
+        if master_sheets != new_sheets:
+            print(f"[DEBUG] WARNING: Sheet names don't match!")
+            print(f"[DEBUG] Sheets only in master: {master_sheets - new_sheets}")
+            print(f"[DEBUG] Sheets only in new: {new_sheets - master_sheets}")
+        else:
+            print(f"[DEBUG] Sheet names match perfectly!")
+        
+        # Add keys to the COPIES, not the originals
+        master_df_copy['_key'] = create_key(master_df_copy)
+        new_df_copy['_key'] = create_key(new_df_copy)
+        
+        print(f"[DEBUG] Master unique keys: {master_df_copy['_key'].nunique()}")
+        print(f"[DEBUG] New unique keys: {new_df_copy['_key'].nunique()}")
+        print(f"[DEBUG] Common keys: {len(set(master_df_copy['_key']) & set(new_df_copy['_key']))}")
+        
+        # CRITICAL: Check for duplicate keys within each dataset
+        master_duplicates = master_df_copy[master_df_copy['_key'].duplicated(keep=False)]
+        new_duplicates = new_df_copy[new_df_copy['_key'].duplicated(keep=False)]
+        
+        if len(master_duplicates) > 0:
+            print(f"[DEBUG] WARNING: Found {len(master_duplicates)} duplicate keys in MASTER dataset!")
+            duplicate_keys = master_duplicates['_key'].unique()
+            for dup_key in duplicate_keys[:3]:  # Show first 3 examples
+                dup_rows = master_df_copy[master_df_copy['_key'] == dup_key]
+                print(f"[DEBUG] Master duplicate key '{dup_key}' appears {len(dup_rows)} times:")
+                for idx, row in dup_rows.iterrows():
+                    print(f"[DEBUG]   Row {idx}: sheet='{row.get('sheet', '')}', code='{row.get('code', '')}', desc='{str(row.get('description', ''))[:50]}...'")
+        
+        if len(new_duplicates) > 0:
+            print(f"[DEBUG] WARNING: Found {len(new_duplicates)} duplicate keys in NEW dataset!")
+            duplicate_keys = new_duplicates['_key'].unique()
+            for dup_key in duplicate_keys[:3]:  # Show first 3 examples
+                dup_rows = new_df_copy[new_df_copy['_key'] == dup_key]
+                print(f"[DEBUG] New duplicate key '{dup_key}' appears {len(dup_rows)} times:")
+                for idx, row in dup_rows.iterrows():
+                    print(f"[DEBUG]   Row {idx}: sheet='{row.get('sheet', '')}', code='{row.get('code', '')}', desc='{str(row.get('description', ''))[:50]}...'")
+        
+        # Handle duplicate keys by using row position within each unique key group
+        if not master_duplicates.empty or not new_duplicates.empty:
+            print(f"[DEBUG] Making keys unique by adding row position within duplicate groups...")
+            
+            # Use a robust method to create unique keys using groupby and cumcount
+            def create_unique_keys_with_position(df):
+                # Ensure the DataFrame is sorted to have a consistent order for cumcount
+                # IMPORTANT: Sorting by the key itself ensures that the position is deterministic
+                df_sorted = df.sort_values(by=['_key']).reset_index(drop=True)
+                
+                # Create a positional counter within each group of duplicate keys
+                df_sorted['_pos'] = df_sorted.groupby('_key').cumcount()
+                
+                # Create the unique key by combining the base key and the position
+                df_sorted['_unique_key'] = df_sorted['_key'] + '|POS_' + df_sorted['_pos'].astype(str)
+                
+                # Drop the temporary position column
+                df_sorted = df_sorted.drop(columns=['_pos'])
+                return df_sorted
+
+            # Apply the function to both DataFrames
+            master_df_copy = create_unique_keys_with_position(master_df_copy)
+            new_df_copy = create_unique_keys_with_position(new_df_copy)
+            
+            key_column = '_unique_key'
+        else:
+            # No duplicates, use original keys
+            master_df_copy['_unique_key'] = master_df_copy['_key']
+            new_df_copy['_unique_key'] = new_df_copy['_key']
+            key_column = '_unique_key'
         
         # Prepare new offer columns
         new_columns = {
@@ -3168,38 +3370,150 @@ Review the rows below and adjust validity as needed."""
             'total_price': f'total_price[{new_offer_name}]'
         }
         
-        # Rename columns in new_df
-        new_df_renamed = new_df.rename(columns=new_columns)
+        # Create a mapping from key to new offer values
+        new_offer_mapping = {}
+        print(f"[DEBUG] New DataFrame columns: {new_df_copy.columns.tolist()}")
+        print(f"[DEBUG] Looking for columns: {list(new_columns.keys())}")
         
-        # Get the columns to merge (only the new offer columns plus the key)
-        merge_columns = ['_key'] + list(new_columns.values())
-        new_df_for_merge = new_df_renamed[merge_columns]
+        for idx, row in new_df_copy.iterrows():
+            key = row[key_column]  # Use the unique key
+            values = {}
+            for old_col, new_col in new_columns.items():
+                if old_col in new_df_copy.columns:
+                    value = row[old_col]
+                    values[new_col] = value
+                    # Debug first few rows
+                    if idx < 3:
+                        print(f"[DEBUG] Row {idx}: {old_col} = {value} (type: {type(value)})")
+                else:
+                    values[new_col] = 0
+                    if idx < 3:
+                        print(f"[DEBUG] Row {idx}: {old_col} NOT FOUND, using 0")
+            new_offer_mapping[key] = values
         
-        # Merge datasets
-        merged_df = master_df.merge(new_df_for_merge, on='_key', how='outer')
+        print(f"[DEBUG] Created mapping for {len(new_offer_mapping)} unique keys")
         
-        # Fill NaN values with 0 for numeric columns
-        for col in new_columns.values():
-            if col in merged_df.columns:
-                merged_df[col] = merged_df[col].fillna(0)
+        # Debug: Show a sample of the mapping
+        sample_keys = list(new_offer_mapping.keys())[:3]
+        for sample_key in sample_keys:
+            print(f"[DEBUG] Sample mapping '{sample_key}': {new_offer_mapping[sample_key]}")
         
-        # For rows that only exist in the new dataset, fill base columns from new_df
-        mask = merged_df['sheet'].isna()
-        if mask.any():
-            # Get the base columns from new_df for unmatched rows
-            unmatched_keys = merged_df.loc[mask, '_key'].values
-            unmatched_new_data = new_df[new_df['_key'].isin(unmatched_keys)]
+        # Check for exact match in structure using unique keys
+        master_unique_keys = set(master_df_copy[key_column])
+        new_unique_keys = set(new_df_copy[key_column])
+        
+        if master_unique_keys != new_unique_keys:
+            print(f"[DEBUG] WARNING: Unique key sets don't match exactly!")
+            print(f"[DEBUG] Keys only in master: {len(master_unique_keys - new_unique_keys)}")
+            print(f"[DEBUG] Keys only in new: {len(new_unique_keys - master_unique_keys)}")
             
-            base_columns = ['sheet', 'category', 'code', 'description', 'unit']
-            for col in base_columns:
-                if col in unmatched_new_data.columns:
-                    for key in unmatched_keys:
-                        row_data = unmatched_new_data[unmatched_new_data['_key'] == key]
-                        if not row_data.empty:
-                            merged_df.loc[merged_df['_key'] == key, col] = row_data[col].iloc[0]
+            # Show some examples of mismatched keys
+            only_in_master = list(master_unique_keys - new_unique_keys)[:3]
+            only_in_new = list(new_unique_keys - master_unique_keys)[:3]
+            print(f"[DEBUG] Sample keys only in master: {only_in_master}")
+            print(f"[DEBUG] Sample keys only in new: {only_in_new}")
+        else:
+            print(f"[DEBUG] PERFECT MATCH: All unique keys match exactly! This is expected for the same offer.")
         
-        # Remove the temporary key column
-        merged_df = merged_df.drop('_key', axis=1)
+        # Start with the master DataFrame structure
+        merged_df = master_df_copy.copy()
+        
+        # Add the new offer columns
+        for new_col in new_columns.values():
+            merged_df[new_col] = 0  # Initialize with zeros
+        
+        # Fill in the values from the new offer using the unique key mapping
+        matched_count = 0
+        for idx, row in merged_df.iterrows():
+            key = row[key_column]  # Use the unique key
+            if key in new_offer_mapping:
+                for new_col, value in new_offer_mapping[key].items():
+                    merged_df.at[idx, new_col] = value
+                    # Debug first few assignments
+                    if idx < 3:
+                        print(f"[DEBUG] Assigned row {idx}, col {new_col} = {value}")
+                matched_count += 1
+            else:
+                # If the key from master is not in the new offer mapping, it means this row is missing in the new offer
+                # We should fill its new offer columns with 0
+                for new_col in new_columns.values():
+                    merged_df.at[idx, new_col] = 0
+                if idx < 3:
+                    print(f"[DEBUG] Row {idx}: Key '{key}' not found in mapping, filling with 0")
+        
+        print(f"[DEBUG] Successfully matched {matched_count} out of {len(merged_df)} rows")
+        
+        # Debug: Check the actual values being assigned
+        total_assigned_quantity = 0
+        total_assigned_unit_price = 0
+        total_assigned_total_price = 0
+        
+        for new_col in new_columns.values():
+            if 'quantity' in new_col:
+                col_sum = pd.to_numeric(merged_df[new_col], errors='coerce').fillna(0).sum()
+                total_assigned_quantity += col_sum
+                print(f"[DEBUG] Total {new_col}: {col_sum}")
+            elif 'unit_price' in new_col:
+                col_sum = pd.to_numeric(merged_df[new_col], errors='coerce').fillna(0).sum()
+                total_assigned_unit_price += col_sum
+                print(f"[DEBUG] Total {new_col}: {col_sum}")
+            elif 'total_price' in new_col:
+                col_sum = pd.to_numeric(merged_df[new_col], errors='coerce').fillna(0).sum()
+                total_assigned_total_price += col_sum
+                print(f"[DEBUG] Total {new_col}: {col_sum}")
+        
+        print(f"[DEBUG] Total assigned - Quantity: {total_assigned_quantity}, Unit Price: {total_assigned_unit_price}, Total Price: {total_assigned_total_price}")
+        
+        # Handle any new rows that don't exist in master (shouldn't happen in comparison mode, but just in case)
+        unmatched_keys = set(new_offer_mapping.keys()) - set(merged_df[key_column])
+        if unmatched_keys:
+            print(f"[DEBUG] Found {len(unmatched_keys)} unmatched keys from new dataset, adding them to the master set.")
+            
+            # Create a list to hold the new rows
+            rows_to_add = []
+            
+            # Get the columns from the master DataFrame to ensure consistency
+            master_cols = merged_df.columns
+            
+            # Add unmatched rows
+            for key in unmatched_keys:
+                # Find the original row in new_df_copy
+                new_row_series = new_df_copy[new_df_copy[key_column] == key].iloc[0]
+                
+                # Create a new row for the merged dataset
+                merged_row = {col: None for col in master_cols} # Initialize with None
+                
+                # Copy base columns
+                for col in ['sheet', 'category', 'code', 'description', 'unit']:
+                    if col in new_row_series:
+                        merged_row[col] = new_row_series[col]
+            
+                # Initialize all existing offer columns with 0
+                for col in master_cols:
+                    if col.startswith(('quantity[', 'unit_price[', 'total_price[')):
+                        merged_row[col] = 0
+            
+                # Set the new offer values
+                for new_col, value in new_offer_mapping[key].items():
+                    merged_row[new_col] = value
+            
+                # Add the unique key temporarily for debugging
+                merged_row[key_column] = key
+            
+                # Append to list
+                rows_to_add.append(merged_row)
+            
+            # Convert list of dicts to DataFrame and concatenate
+            if rows_to_add:
+                unmatched_df = pd.DataFrame(rows_to_add)
+                merged_df = pd.concat([merged_df, unmatched_df], ignore_index=True)
+                print(f"[DEBUG] Added {len(unmatched_df)} new rows to the comparison.")
+        
+        # Remove the temporary key columns
+        columns_to_drop = ['_key', '_unique_key']
+        for col in columns_to_drop:
+            if col in merged_df.columns:
+                merged_df = merged_df.drop(col, axis=1)
         
         # Reorder columns to maintain the specified order
         base_columns = ['sheet', 'category', 'code', 'description', 'unit']
@@ -3207,35 +3521,23 @@ Review the rows below and adjust validity as needed."""
         # Get all offer columns in the order they were added
         offer_columns = []
         for col in merged_df.columns:
-            if col.startswith(('quantity_', 'unit_price_', 'total_price_', 'quantity[', 'unit_price[', 'total_price[')):
+            if col.startswith(('quantity[', 'unit_price[', 'total_price[')):
                 offer_columns.append(col)
         
         # Sort offer columns by offer name to maintain consistent order
-        # Handle both old format (prefix_offer) and new format (prefix[offer])
         offer_names = set()
         for col in offer_columns:
             if '[' in col and ']' in col:
-                # New format: prefix[offer]
                 offer_name = col.split('[')[1].split(']')[0]
-                offer_names.add(offer_name)
-            elif '_' in col:
-                # Old format: prefix_offer
-                offer_name = col.split('_', 1)[1]
                 offer_names.add(offer_name)
         
         offer_names = sorted(offer_names)
         ordered_offer_columns = []
         for offer in offer_names:
             for prefix in ['quantity', 'unit_price', 'total_price']:
-                # Try new format first
                 col_name = f'{prefix}[{offer}]'
                 if col_name in merged_df.columns:
                     ordered_offer_columns.append(col_name)
-                else:
-                    # Fallback to old format
-                    col_name = f'{prefix}_{offer}'
-                    if col_name in merged_df.columns:
-                        ordered_offer_columns.append(col_name)
         
         # Final column order
         final_columns = base_columns + ordered_offer_columns
@@ -3244,7 +3546,32 @@ Review the rows below and adjust validity as needed."""
         final_columns = [col for col in final_columns if col in merged_df.columns]
         merged_df = merged_df[final_columns]
         
-        print(f"[DEBUG] Merged dataset has {len(merged_df)} rows and columns: {merged_df.columns.tolist()}")
+        # Skip duplicate removal - we already handled duplicates properly during key generation
+        # Removing duplicates here would corrupt the data since identical rows in comparison
+        # scenarios (like comparing the same file twice) would be incorrectly removed
+        print(f"[DEBUG] Skipping duplicate removal to preserve data integrity")
+        
+        # Verify the merge worked correctly
+        print(f"[DEBUG] Final merged dataset has {len(merged_df)} rows and columns: {merged_df.columns.tolist()}")
+        
+        # Check that the new offer columns have reasonable values
+        for new_col in new_columns.values():
+            if new_col in merged_df.columns:
+                non_zero_count = (merged_df[new_col] != 0).sum()
+                # Convert to numeric and handle errors safely
+                try:
+                    numeric_col = pd.to_numeric(merged_df[new_col], errors='coerce').fillna(0)
+                    total_sum = numeric_col.sum()
+                    print(f"[DEBUG] Column {new_col}: {non_zero_count} non-zero values, sum = {total_sum}")
+                except Exception as e:
+                    print(f"[DEBUG] Column {new_col}: {non_zero_count} non-zero values, sum calculation failed: {e}")
+                    # Fix the column to be numeric
+                    merged_df[new_col] = pd.to_numeric(merged_df[new_col], errors='coerce').fillna(0)
+        
+        # Sample of merged data for verification
+        print(f"[DEBUG] Sample of merged data:")
+        print(merged_df.head(3).to_string())
+        
         return merged_df
 
     def _on_confirm_mapped_file_review(self, file_mapping):
