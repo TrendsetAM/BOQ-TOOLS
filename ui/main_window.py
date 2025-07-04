@@ -1568,6 +1568,9 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 for widget in summary_frame.winfo_children():
                     widget.destroy()
                 
+                # Configure the grid for the summary frame to allow the scrollbar to show
+                summary_frame.grid_columnconfigure(0, weight=1)
+                
                 if is_comparison:
                     # Handle comparison dataset - create separate rows for each offer
                     print("[DEBUG] Creating comparison summary")
@@ -1634,6 +1637,12 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                         
                         summary_tree.insert('', 'end', values=display_values, tags=('offer',))
                         print(f"[DEBUG] Added summary row for {offer_name}: {display_values[:3]}...")
+                    
+                    # Add horizontal scrollbar
+                    hsb_summary = ttk.Scrollbar(summary_frame, orient=tk.HORIZONTAL, command=summary_tree.xview)
+                    summary_tree.configure(xscrollcommand=hsb_summary.set)
+                    summary_tree.grid(row=0, column=0, sticky=tk.EW)
+                    hsb_summary.grid(row=1, column=0, sticky=tk.EW)
                     
                 else:
                     # Handle single offer dataset (original logic)
@@ -1710,7 +1719,12 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     
                     summary_tree.insert('', 'end', values=display_values, tags=('offer',))
                 
+                # Add horizontal scrollbar for the summary grid
+                hsb_summary = ttk.Scrollbar(summary_frame, orient=tk.HORIZONTAL, command=summary_tree.xview)
+                summary_tree.configure(xscrollcommand=hsb_summary.set)
                 summary_tree.grid(row=0, column=0, sticky=tk.EW)
+                hsb_summary.grid(row=1, column=0, sticky=tk.EW)
+                
                 summary_frame.grid()
                 tab.summary_tree = summary_tree
                 

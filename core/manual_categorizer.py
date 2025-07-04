@@ -1217,4 +1217,4 @@ def get_manual_categorization_categories() -> List[str]:
         "Cleaning and Cabling of PV Mod.",
         "Tracker Inst.",
         "Other",
-    ] 
+    ]
