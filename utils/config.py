@@ -26,6 +26,9 @@ class ColumnType(Enum):
     TOTAL_PRICE = "total_price"
     UNIT = "unit"
     CODE = "code"
+    SCOPE = "scope"
+    MANHOURS = "manhours"
+    WAGE = "wage"
     IGNORE = "ignore"
 
 
@@ -124,7 +127,7 @@ class BOQConfig:
             
             ColumnType.TOTAL_PRICE: ColumnMapping(
                 keywords=["total", "total price", "total cost", "value",
-                         "total amount", "sum", "total value", "cost", "price"],
+                         "total amount", "sum", "total value", "price", "amount"],
                 weight=1.0,
                 required=True,
                 data_type="currency",
@@ -145,6 +148,29 @@ class BOQConfig:
                 weight=0.7,
                 required=True,
                 data_type="text"
+            ),
+            
+            ColumnType.SCOPE: ColumnMapping(
+                keywords=["scope"],
+                weight=0.5,
+                required=False,
+                data_type="text"
+            ),
+            
+            ColumnType.MANHOURS: ColumnMapping(
+                keywords=["ore/u.m.", "ore", "manhours", "man hours"],
+                weight=0.6,
+                required=False,
+                data_type="numeric",
+                validation_pattern=r"^\d+(\.\d+)?$"
+            ),
+            
+            ColumnType.WAGE: ColumnMapping(
+                keywords=["euro/hour", "wage", "hourly rate"],
+                weight=0.6,
+                required=False,
+                data_type="numeric",
+                validation_pattern=r"^\d+(\.\d{1,2})?$"
             )
         }
     

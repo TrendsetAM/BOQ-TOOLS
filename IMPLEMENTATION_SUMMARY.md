@@ -34,7 +34,7 @@ BOQ-TOOLS/
 ```
 
 ### 2. **Configuration System (`utils/config.py`)**
-- **6 Column Types**: Description, Quantity, Unit Price, Total Price, Unit, Code
+- **9 Column Types**: Description, Quantity, Unit Price, Total Price, Unit, Code, Scope, Manhours, Wage
 - **Extensive Keyword Mappings**: 80+ keywords across all column types
 - **Sheet Classifications**: 8 sheet types (BOQ main, summary, preliminaries, etc.)
 - **Validation Thresholds**: Configurable confidence scores and limits
@@ -121,7 +121,7 @@ except (FileNotFoundError, InvalidFileException, MemoryError) as e:
 ### **Processing Capabilities**
 - **File Formats**: .xlsx (primary), .xls (legacy support)
 - **Sheet Types**: 8 different BOQ sheet classifications
-- **Column Types**: 6 standard BOQ column types
+- **Column Types**: 9 standard BOQ column types
 - **Data Limits**: 10,000 rows × 50 columns per sheet
 - **Memory Limits**: Configurable up to 512MB
 - **Processing Speed**: ~1000 rows/second on standard hardware

@@ -607,7 +607,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             return
         # Radio button options for mapped type
         mapped_type_options = [
-            "description", "quantity", "unit_price", "total_price", "unit", "code", "ignore"
+            "description", "quantity", "unit_price", "total_price", "unit", "code", "scope", "manhours", "wage", "ignore"
         ]
         required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
         # Dialog to edit mapped type
@@ -1356,13 +1356,13 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     ordered_types.append(t)
                     seen.add(t)
             # Add standard columns not mapped by user at the end
-            std_order = ['code', 'sheet', 'category', 'description', 'quantity', 'unit_price', 'total_price', 'unit']
+            std_order = ['code', 'sheet', 'category', 'description', 'quantity', 'unit_price', 'total_price', 'unit', 'scope', 'manhours', 'wage']
             for t in std_order:
                 if t not in ordered_types:
                     ordered_types.append(t)
             return ordered_types
         else:
-            return ['code', 'sheet', 'category', 'description', 'quantity', 'unit_price', 'total_price', 'unit']
+            return ['code', 'sheet', 'category', 'description', 'quantity', 'unit_price', 'total_price', 'unit', 'scope', 'manhours', 'wage']
 
     def _build_final_grid_dataframe(self, file_mapping):
         import pandas as pd
@@ -1373,7 +1373,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         else:
             required_types = ["description", "quantity", "unit_price", "total_price", "unit", "code"]
         # Row review display order
-        display_column_order = ["code", "sheet", "category", "description", "unit", "quantity", "unit_price", "total_price"]
+        display_column_order = ["code", "sheet", "category", "description", "unit", "quantity", "unit_price", "total_price", "scope", "manhours", "wage"]
         
         # Helper function to parse numbers
         def parse_number(val):
@@ -1445,7 +1445,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                             idx = mapped_type_to_index.get(col)
                             val = row_data[idx] if idx is not None and idx < len(row_data) else ""
                             # Parse numeric values
-                            if col in ['quantity', 'unit_price', 'total_price']:
+                            if col in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']:
                                 val = parse_number(val)
                             row_dict[col] = val
                     rows.append(row_dict)
@@ -1453,7 +1453,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         if rows:
             df = pd.DataFrame(rows)
             # Ensure numeric columns are properly typed
-            for col in ['quantity', 'unit_price', 'total_price']:
+            for col in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
                     df[col] = df[col].fillna(0)

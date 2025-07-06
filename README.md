@@ -8,7 +8,6 @@ A powerful and intelligent desktop application designed to streamline the proces
 - **Interactive User Interface**: A user-friendly graphical interface to manage, process, and review BOQ files.
 - **Advanced Categorization**: Sophisticated automatic and manual categorization of BOQ items.
 - **Powerful Validation**: A robust validation engine to ensure data integrity and consistency.
-- **Command-Line Interface (CLI)**: For power users and automation, a full-featured CLI is available.
 - **High Configurability**: Easily customize the application's behavior to fit specific BOQ formats and project requirements.
 - **Flexible Exporting**: Export processed data into well-formatted Excel files.
 
@@ -72,62 +71,7 @@ The application allows you to save your analysis and mappings to a file. This is
 - **Save Mappings**: Saves only the sheet, column, and row mappings to a `.pkl` file. This is ideal for creating a reusable template for BOQs with a consistent layout.
 - **Load Analysis/Mappings**: You can load a previously saved `.pkl` file to either resume a session or apply a saved mapping to a new file.
 
-## Installation
 
-1. **Clone the repository**:
-   ```bash
-   git clone <repository-url>
-   cd BOQ-TOOLS
-   ```
-
-2. **Create a virtual environment**:
-   ```bash
-   python -m venv venv
-   ```
-
-3. **Activate the virtual environment**:
-   - On Windows: `venv\Scripts\activate`
-   - On macOS/Linux: `source venv/bin/activate`
-
-4. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## Usage
-
-### Running the Application (GUI)
-
-Launch the graphical user interface.
-
-**Option 1: Using the launcher script (Windows)**
-```bash
-run.bat
-```
-
-**Option 2: Using Python**
-```bash
-python main.py
-```
-
-### Running the Application (CLI)
-
-To use the command-line interface, you can pass arguments to `main.py`.
-
-**Process a single file:**
-```bash
-python main.py --file "path/to/your/boq.xlsx" --output "path/to/output_dir"
-```
-
-**Run in interactive CLI mode:**
-```bash
-python main.py --interactive
-```
-
-**See all CLI options:**
-```bash
-python main.py --help
-```
 
 ## Configuration
 
@@ -147,14 +91,3 @@ Key configurable areas include:
 - **PyInstaller**: For packaging the application into a standalone executable.
 - **PyQt5 / PySide6**: The application requires a Qt binding for its user interface. Please install one of them manually (`pip install PyQt5` or `pip install PySide6`).
 
-## License
-
-[Add your license information here]
-
-## Contributing
-
-[Add contribution guidelines here]
-
-## Support
-
-[Add support information here] 

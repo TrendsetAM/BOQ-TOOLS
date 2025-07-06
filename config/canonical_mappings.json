@@ -4,7 +4,6 @@
     "desc",
     "item description",
     "work description",
-    "scope",
     "item",
     "activity",
     "task",
@@ -60,5 +59,24 @@
     "boq code",
     "schedule no",
     "Code"
+  ],
+  "scope": [
+    "scope",
+    "SCOPE"
+  ],
+  "manhours": [
+    "ore/u.m.",
+    "ore",
+    "manhours",
+    "man hours",
+    "labour ore/u.m.",
+    "labor ore/u.m."
+  ],
+  "wage": [
+    "euro/hour",
+    "wage",
+    "hourly rate",
+    "labour euro/hour",
+    "labor euro/hour"
   ]
 }
