@@ -1,40 +1,76 @@
-# BOQ Tools - Bill of Quantities Excel Processor
+# BOQ Tools - Bill of Quantities (BOQ) Excel Processor
 
-A comprehensive Python application for processing and analyzing Bill of Quantities (BoQ) Excel files with intelligent column mapping, sheet classification, and validation.
+A powerful and intelligent desktop application designed to streamline the processing and analysis of Bill of Quantities (BOQ) Excel files. It automates tedious tasks like data extraction, classification, and validation, providing a comprehensive suite of tools for professionals dealing with BOQs.
 
-## Features
+## Key Features
 
-- **Intelligent Column Mapping**: Automatically identifies and maps columns based on common BoQ terminology
-- **Sheet Classification**: Classifies different types of BoQ sheets (main, summary, preliminaries, etc.)
-- **Validation System**: Comprehensive validation with configurable thresholds
-- **Modular Architecture**: Clean separation of concerns with core, UI, and utility modules
-- **Configuration System**: Flexible configuration for different BoQ formats and requirements
+- **Intelligent File Processing**: Automatically reads and understands complex BOQ Excel files, including multi-sheet documents.
+- **Interactive User Interface**: A user-friendly graphical interface to manage, process, and review BOQ files.
+- **Advanced Categorization**: Sophisticated automatic and manual categorization of BOQ items.
+- **Powerful Validation**: A robust validation engine to ensure data integrity and consistency.
+- **Command-Line Interface (CLI)**: For power users and automation, a full-featured CLI is available.
+- **High Configurability**: Easily customize the application's behavior to fit specific BOQ formats and project requirements.
+- **Flexible Exporting**: Export processed data into well-formatted Excel files.
 
-## Project Structure
+## Functionalities in Detail
 
-```
-BOQ-TOOLS/
-├── main.py                 # Main application entry point
-├── requirements.txt        # Python dependencies
-├── setup.py               # Package configuration
-├── run.bat                # Windows launcher script
-├── README.md              # This file
-├── .gitignore             # Git ignore rules
-├── core/                  # Core business logic
-│   ├── __init__.py
-│   └── boq_processor.py   # Main BOQ processor class
-├── ui/                    # User interface
-│   ├── __init__.py
-│   └── main_window.py     # Tkinter UI
-├── utils/                 # Utilities
-│   ├── __init__.py
-│   ├── config.py          # Configuration system
-│   └── logger.py          # Logging setup
-├── resources/             # Resources folder
-│   └── .gitkeep
-└── examples/              # Example scripts
-    └── config_demo.py     # Configuration system demo
-```
+### File Processing Engine
+
+The core of the application is a sophisticated engine that can handle a wide variety of BOQ file formats.
+
+- **Broad File Support**: Natively processes both modern (`.xlsx`) and legacy (`.xls`) Excel formats.
+- **Memory Efficient**: Designed to handle large files without consuming excessive memory.
+- **Sheet Classification**: Automatically identifies and classifies different types of sheets within a workbook (e.g., Main BOQ, Summary, Preliminaries, Notes).
+- **Intelligent Column Mapping**: Automatically detects and maps columns to standard BOQ fields like `Description`, `Quantity`, `Unit`, `Rate`, and `Total`, even with non-standard column headers.
+- **Row Classification**: Distinguishes between header rows, data rows, sub-total rows, and ignored rows.
+
+### User Interface
+
+The application provides a rich, interactive user interface that makes processing BOQs intuitive and efficient.
+
+- **Main Dashboard**: A central window to add, remove, and manage BOQ files for processing.
+- **Data Preview**: Preview the contents of an Excel file before committing to a full processing run.
+- **Live Progress Tracking**: Real-time progress dialogs for long-running operations.
+- **Interactive Categorization**:
+    - **Sheet Categorization**: If the app is unsure about a sheet's type, it will prompt the user to classify it manually.
+    - **Row Categorization**: For items that cannot be categorized automatically, a dialog allows for quick manual categorization.
+- **Review and Correction**:
+    - **Category Review**: A dedicated dialog to review, edit, and approve the automatic categorization results.
+    - **Row Review**: Inspect and correct the classification of individual rows.
+- **Categorization Statistics**: View detailed statistics about the categorization process, including categorized and uncategorized items.
+- **Centralized Settings**: A comprehensive settings dialog to manage all application configurations.
+
+### Advanced Categorization
+
+- **Automatic Categorization**: Leverages a customizable keyword-based dictionary to automatically categorize BOQ items.
+- **Manual Override**: Full control to manually categorize items that are ambiguous or require specific classification.
+- **Category Dictionary Management**: Easily manage and extend the category dictionary used for automatic categorization.
+
+### Validation
+
+- **Data Integrity Checks**: Validates data against a set of configurable rules.
+- **Confidence Scoring**: Provides confidence scores for automatic classifications to help identify potential errors.
+
+### Exporting
+
+- **Styled Excel Exports**: Export the processed and cleaned data into a new, well-formatted, and styled Excel file.
+- **Inclusion of Reports**: Option to include validation and summary reports in the exported file.
+
+### Command-Line Interface (CLI)
+
+For automation and power users, a CLI provides access to the application's core functionalities.
+
+- **File Processing**: Process one or more files directly from the command line.
+- **Batch Operations**: Script batch processing of multiple BOQ files.
+- **Interactive Mode**: An interactive CLI mode for guided processing.
+
+## Saving and Resuming Work
+
+The application allows you to save your analysis and mappings to a file. This is useful for resuming your work later or for reusing a set of mappings on a new BOQ file that has a similar structure.
+
+- **Save Analysis**: Saves the entire state of your current analysis, including the processed data and all mappings, to a `.pkl` file. This allows you to close the application and perfectly restore your session later.
+- **Save Mappings**: Saves only the sheet, column, and row mappings to a `.pkl` file. This is ideal for creating a reusable template for BOQs with a consistent layout.
+- **Load Analysis/Mappings**: You can load a previously saved `.pkl` file to either resume a session or apply a saved mapping to a new file.
 
 ## Installation
 
@@ -44,14 +80,14 @@ BOQ-TOOLS/
    cd BOQ-TOOLS
    ```
 
-2. **Create virtual environment**:
+2. **Create a virtual environment**:
    ```bash
    python -m venv venv
    ```
 
-3. **Activate virtual environment**:
-   - Windows: `venv\Scripts\activate`
-   - Linux/Mac: `source venv/bin/activate`
+3. **Activate the virtual environment**:
+   - On Windows: `venv\Scripts\activate`
+   - On macOS/Linux: `source venv/bin/activate`
 
 4. **Install dependencies**:
    ```bash
@@ -60,143 +96,56 @@ BOQ-TOOLS/
 
 ## Usage
 
-### Running the Application
+### Running the Application (GUI)
 
-**Option 1: Using the launcher script**
+Launch the graphical user interface.
+
+**Option 1: Using the launcher script (Windows)**
 ```bash
 run.bat
 ```
 
-**Option 2: Direct Python execution**
+**Option 2: Using Python**
 ```bash
 python main.py
 ```
 
-**Option 3: Using virtual environment**
+### Running the Application (CLI)
+
+To use the command-line interface, you can pass arguments to `main.py`.
+
+**Process a single file:**
 ```bash
-venv\Scripts\python.exe main.py
+python main.py --file "path/to/your/boq.xlsx" --output "path/to/output_dir"
 ```
 
-### Configuration System Demo
-
-Run the configuration system demo to see how the intelligent mapping works:
-
+**Run in interactive CLI mode:**
 ```bash
-python examples/config_demo.py
+python main.py --interactive
 ```
 
-## Configuration System
-
-The BOQ Tools configuration system (`utils/config.py`) provides comprehensive settings for:
-
-### Column Mappings
-
-The system automatically maps Excel columns to BoQ data types using keyword matching:
-
-- **Description**: `["description", "item", "work", "activity", "task", "detail", ...]`
-- **Quantity**: `["qty", "quantity", "no", "number", "count", ...]`
-- **Unit Price**: `["unit price", "rate", "price per unit", "unit cost", ...]`
-- **Total Price**: `["total", "total price", "total cost", "value", ...]`
-- **Classification**: `["type", "category", "class", "mandatory", "optional", ...]`
-- **Unit**: `["unit", "measurement", "measure", "uom", "unit of measure", ...]`
-- **Code**: `["code", "item code", "reference", "ref", "item no", ...]`
-- **Remarks**: `["remarks", "notes", "comments", "observation", "note", ...]`
-
-### Sheet Classifications
-
-Automatically classifies different types of BoQ sheets:
-
-- **BOQ Main**: Main bill of quantities
-- **Summary**: Summary and total sheets
-- **Preliminaries**: General items and requirements
-- **Substructure**: Foundation and substructure works
-- **Superstructure**: Structural and framing works
-- **Finishes**: Interior and exterior finishes
-- **Services**: MEP and building services
-- **External Works**: Site works and landscaping
-
-### Validation Thresholds
-
-Configurable validation settings:
-
-- Minimum column confidence: 0.7
-- Minimum sheet confidence: 0.6
-- Maximum empty rows percentage: 30%
-- Minimum data rows: 5
-- Maximum header rows: 10
-
-### Processing Limits
-
-Performance and resource limits:
-
-- Maximum file size: 50 MB
-- Maximum sheets per file: 20
-- Maximum rows per sheet: 10,000
-- Maximum columns per sheet: 50
-- Timeout: 300 seconds
-- Memory limit: 512 MB
-
-### Export Settings
-
-Default export configuration:
-
-- Output format: XLSX
-- Include summary: Yes
-- Include validation report: Yes
-- Backup original: Yes
-- Compression level: 6
-
-## Using the Configuration System
-
-```python
-from utils.config import get_config, ColumnType
-
-# Get configuration instance
-config = get_config()
-
-# Get column mapping for a specific type
-description_mapping = config.get_column_mapping(ColumnType.DESCRIPTION)
-
-# Get all required columns
-required_columns = config.get_required_columns()
-
-# Classify a sheet
-sheet_type, confidence = config.get_sheet_classification("BOQ Main", ["description", "quantity"])
-
-# Access validation thresholds
-min_confidence = config.validation_thresholds.min_column_confidence
-
-# Access processing limits
-max_file_size = config.processing_limits.max_file_size_mb
+**See all CLI options:**
+```bash
+python main.py --help
 ```
 
-## Development
+## Configuration
 
-### Adding New Column Types
+The application is highly configurable via the `config/boq_settings.json` file. Through the UI, settings can be modified in the **Settings Dialog**.
 
-1. Add new enum value to `ColumnType`
-2. Add mapping configuration in `_setup_column_mappings()`
-3. Update validation patterns if needed
-
-### Adding New Sheet Classifications
-
-1. Add new `SheetClassification` in `_setup_sheet_classifications()`
-2. Define keywords and confidence thresholds
-3. Test with `config_demo.py`
-
-### Customizing Validation
-
-Modify the `ValidationThresholds` dataclass to adjust:
-- Confidence thresholds
-- Row limits
-- Data requirements
+Key configurable areas include:
+- **Column Mappings**: Keywords used to identify columns.
+- **Sheet Classifications**: Keywords to classify Excel sheets.
+- **Validation Thresholds**: Rules for the data validation engine.
+- **Processing Limits**: Settings for file size, memory usage, etc.
 
 ## Dependencies
 
-- **pandas**: Data manipulation and analysis
-- **openpyxl**: Excel file reading and writing
-- **PyInstaller**: Creating standalone executables
-- **pathlib2**: Path manipulation (for older Python versions)
+- **pandas**: For data manipulation and analysis.
+- **openpyxl**: For reading and writing Excel files.
+- **xlrd**: For reading legacy `.xls` Excel files.
+- **PyInstaller**: For packaging the application into a standalone executable.
+- **PyQt5 / PySide6**: The application requires a Qt binding for its user interface. Please install one of them manually (`pip install PyQt5` or `pip install PySide6`).
 
 ## License
 

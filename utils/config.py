@@ -24,10 +24,8 @@ class ColumnType(Enum):
     QUANTITY = "quantity"
     UNIT_PRICE = "unit_price"
     TOTAL_PRICE = "total_price"
-    CLASSIFICATION = "classification"
     UNIT = "unit"
     CODE = "code"
-    REMARKS = "remarks"
     IGNORE = "ignore"
 
 
@@ -133,14 +131,6 @@ class BOQConfig:
                 validation_pattern=r"^\d+(\.\d{1,2})?$"
             ),
             
-            ColumnType.CLASSIFICATION: ColumnMapping(
-                keywords=["type", "category", "class", "mandatory", "optional", "priority",
-                         "classification", "group", "section", "division", "class type"],
-                weight=0.8,
-                required=False,
-                data_type="text"
-            ),
-            
             ColumnType.UNIT: ColumnMapping(
                 keywords=["unit", "measurement", "measure", "uom", "unit of measure",
                          "unit:", "measurement unit"],
@@ -154,14 +144,6 @@ class BOQConfig:
                          "code:", "reference:", "item code:", "boq code"],
                 weight=0.7,
                 required=True,
-                data_type="text"
-            ),
-            
-            ColumnType.REMARKS: ColumnMapping(
-                keywords=["remarks", "notes", "comments", "observation", "note",
-                         "remarks:", "notes:", "comments:", "observation:"],
-                weight=0.5,
-                required=False,
                 data_type="text"
             )
         }

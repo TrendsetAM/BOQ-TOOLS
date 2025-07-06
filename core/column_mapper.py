@@ -596,7 +596,7 @@ class ColumnMapper:
             canonical_type = self._canonical_type_for_header(original_header)
             if canonical_type:
                 # 100% confidence for canonical match
-                col_type = getattr(ColumnType, canonical_type.upper(), ColumnType.REMARKS)
+                col_type = getattr(ColumnType, canonical_type.upper(), ColumnType.IGNORE)
                 mapping = ColumnMapping(
                     column_index=col_idx,
                     original_header=original_header,

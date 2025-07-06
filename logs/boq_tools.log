@@ -22879,3 +22879,15 @@ RuntimeError: main thread is not in main loop
 2025-07-04 18:52:50,463 [INFO] core.auto_categorizer: Collected 0 unique descriptions for manual review
 2025-07-04 18:52:50,464 [INFO] core.auto_categorizer: Total frequency: 0
 2025-07-04 18:52:50,464 [INFO] core.auto_categorizer: Match type breakdown for manual review:
+2025-07-06 19:02:45,370 [INFO] root: Logging system initialized
+2025-07-06 19:02:45,370 [INFO] root: Configuration loaded successfully
+2025-07-06 19:02:45,370 [INFO] core.sheet_classifier: Sheet Classifier initialized
+2025-07-06 19:02:45,380 [INFO] core.column_mapper: Loaded canonical mappings from C:\Users\Admin\AppData\Roaming\BOQ-TOOLS\canonical_mappings.json
+2025-07-06 19:02:45,380 [INFO] core.column_mapper: Column Mapper initialized
+2025-07-06 19:02:45,381 [INFO] core.row_classifier: Row Classifier initialized
+2025-07-06 19:02:45,381 [INFO] core.validator: Data Validator initialized
+2025-07-06 19:02:45,381 [INFO] core.mapping_generator: Mapping Generator initialized
+2025-07-06 19:02:45,381 [INFO] utils.export: ExcelExporter initialized.
+2025-07-06 19:02:45,381 [INFO] root: Core components initialized successfully
+2025-07-06 19:02:45,382 [INFO] root: Settings loaded successfully
+2025-07-06 19:02:45,382 [INFO] root: BOQ Tools v1.0.0 initialized successfully
