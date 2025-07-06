@@ -549,11 +549,21 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         v_scrollbar.grid(row=0, column=1, sticky=tk.NS)
         h_scrollbar.grid(row=1, column=0, sticky=tk.EW)
         
-        # Required types
+        # Required types (base required + successfully mapped new columns)
         if self.column_mapper and hasattr(self.column_mapper, 'config'):
-            required_types = {col_type.value for col_type in self.column_mapper.config.get_required_columns()}
+            base_required_types = {col_type.value for col_type in self.column_mapper.config.get_required_columns()}
         else:
-            required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+            base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        
+        # Add new columns as "required" if they are successfully mapped (confidence > 0)
+        required_types = base_required_types.copy()
+        if hasattr(sheet, 'column_mappings'):
+            for mapping in sheet.column_mappings:
+                mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                confidence = getattr(mapping, 'confidence', 0)
+                # Treat scope, manhours, wage as required if successfully mapped
+                if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                    required_types.add(mapped_type)
         
         # Populate treeview with column mappings
         if hasattr(sheet, 'column_mappings'):
@@ -609,7 +619,15 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         mapped_type_options = [
             "description", "quantity", "unit_price", "total_price", "unit", "code", "scope", "manhours", "wage", "ignore"
         ]
-        required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        # Base required types + new columns if successfully mapped
+        base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        required_types = base_required_types.copy()
+        if hasattr(sheet, 'column_mappings'):
+            for mapping in sheet.column_mappings:
+                mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                confidence = getattr(mapping, 'confidence', 0)
+                if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                    required_types.add(mapped_type)
         # Dialog to edit mapped type
         dialog = tk.Toplevel(self.root)
         dialog.title(f"Edit Column: {column_name}")
@@ -738,7 +756,15 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             self._update_status("No user-edited columns to propagate.")
             return
         count = 0
-        required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        # Base required types + new columns if successfully mapped
+        base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        required_types = base_required_types.copy()
+        if hasattr(source_sheet, 'column_mappings'):
+            for mapping in source_sheet.column_mappings:
+                mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                confidence = getattr(mapping, 'confidence', 0)
+                if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                    required_types.add(mapped_type)
         affected_sheets = set()
         for edited_cm in user_edited:
             edited_header = getattr(edited_cm, 'original_header', None)
@@ -997,7 +1023,15 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             if show_dialogs:
                 messagebox.showwarning("No Column Mapper", "Column mapper not available. Please reload the file.")
             return 0, 0, 0
-        required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        # Base required types + new columns if successfully mapped
+        base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        required_types = base_required_types.copy()
+        if hasattr(sheet, 'column_mappings'):
+            for mapping in sheet.column_mappings:
+                mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                confidence = getattr(mapping, 'confidence', 0)
+                if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                    required_types.add(mapped_type)
         saved_count = 0
         failed_count = 0
         already_present_count = 0
@@ -1124,12 +1158,23 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             self.row_review_notebook.add(frame, text=sheet.sheet_name)
             # Use standard mapped column names for display and value extraction
             if self.column_mapper and hasattr(self.column_mapper, 'config'):
-                required_types = [col_type.value for col_type in self.column_mapper.config.get_required_columns()]
+                base_required_types = [col_type.value for col_type in self.column_mapper.config.get_required_columns()]
             else:
-                required_types = ["description", "quantity", "unit_price", "total_price", "unit", "code"]
+                base_required_types = ["description", "quantity", "unit_price", "total_price", "unit", "code"]
+            
+            # Add new columns as "required" if they are successfully mapped (confidence > 0)
+            required_types = base_required_types.copy()
+            if hasattr(sheet, 'column_mappings'):
+                for mapping in sheet.column_mappings:
+                    mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                    confidence = getattr(mapping, 'confidence', 0)
+                    # Treat scope, manhours, wage as required if successfully mapped
+                    if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                        if mapped_type not in required_types:
+                            required_types.append(mapped_type)
             
             # Define the correct column order for display
-            display_column_order = ["code", "description", "unit", "quantity", "unit_price", "total_price"]
+            display_column_order = ["code", "description", "unit", "quantity", "unit_price", "total_price", "scope", "manhours", "wage"]
             
             # Use the display order, but only include columns that are actually mapped
             available_columns = []
@@ -1155,7 +1200,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 if col == "status":
                     tree.column(col, width=80, anchor=tk.CENTER)
                 else:
-                    tree.column(col, width=120 if col != "#" else 40, anchor=tk.W)
+                    tree.column(col, width=120 if col != "#" else 40, anchor=tk.W, minwidth=50, stretch=False)
             # Add scrollbars
             v_scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=tree.yview)
             h_scrollbar = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=tree.xview)
@@ -1186,10 +1231,17 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                         val = row_data[idx] if idx is not None and idx < len(row_data) else ""
                         
                         # Apply number formatting for specific columns
-                        if col in ['unit_price', 'total_price']:
+                        if col in ['unit_price', 'total_price', 'wage']:
                             val = format_number(val, is_currency=True)
-                        elif col == 'quantity':
+                        elif col in ['quantity', 'manhours']:
                             val = format_number(val, is_currency=False)
+                            # Special formatting for manhours - only 2 decimals
+                            if col == 'manhours' and val and val != '':
+                                try:
+                                    num_val = float(str(val).replace(',', '.'))
+                                    val = f"{num_val:.2f}"
+                                except:
+                                    pass
                         
                         row_values.append(val)
                     is_valid = getattr(rc, 'row_type', None) == RowType.PRIMARY_LINE_ITEM or getattr(rc, 'row_type', None) == 'primary_line_item'
@@ -1369,9 +1421,20 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         rows = []
         # Determine required types and display order as in row review
         if self.column_mapper and hasattr(self.column_mapper, 'config'):
-            required_types = [col_type.value for col_type in self.column_mapper.config.get_required_columns()]
+            base_required_types = [col_type.value for col_type in self.column_mapper.config.get_required_columns()]
         else:
-            required_types = ["description", "quantity", "unit_price", "total_price", "unit", "code"]
+            base_required_types = ["description", "quantity", "unit_price", "total_price", "unit", "code"]
+        
+        # Add new columns as "required" if they are successfully mapped
+        required_types = base_required_types.copy()
+        for sheet in getattr(file_mapping, 'sheets', []):
+            if hasattr(sheet, 'column_mappings'):
+                for mapping in sheet.column_mappings:
+                    mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                    confidence = getattr(mapping, 'confidence', 0)
+                    if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                        if mapped_type not in required_types:
+                            required_types.append(mapped_type)
         # Row review display order
         display_column_order = ["code", "sheet", "category", "description", "unit", "quantity", "unit_price", "total_price", "scope", "manhours", "wage"]
         
@@ -1516,7 +1579,15 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             tree = ttk.Treeview(tree_frame, columns=final_display_columns, show='headings', height=20)
             for col in final_display_columns:
                 tree.heading(col, text=col.capitalize() if col != '#' else '#')
-                tree.column(col, width=150, minwidth=100)
+                # Auto-size columns based on content and header, with special handling for description
+                if col == 'description':
+                    # Description column gets fixed width due to long text
+                    width = 250
+                else:
+                    # Auto-size based on content and header
+                    width = self._calculate_column_width(display_df, col, col.capitalize())
+                
+                tree.column(col, width=width, minwidth=50, stretch=False)
             vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
             hsb = ttk.Scrollbar(tree_frame, orient="horizontal", command=tree.xview)
             tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
@@ -1819,9 +1890,20 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 if col == 'category':
                     # Category is already in pretty format - use directly
                     values.append(str(value))
-                elif col in ['quantity', 'unit_price', 'total_price'] or col.startswith(('quantity[', 'unit_price[', 'total_price[', 'quantity_', 'unit_price_', 'total_price_')):
+                elif col in ['quantity', 'unit_price', 'total_price', 'wage'] or col.startswith(('quantity[', 'unit_price[', 'total_price[', 'wage[', 'quantity_', 'unit_price_', 'total_price_', 'wage_')):
                     # Format numeric columns (including comparison columns)
                     values.append(format_number(value))
+                elif col in ['manhours'] or col.startswith(('manhours[', 'manhours_')):
+                    # Special formatting for manhours - only 2 decimals
+                    try:
+                        if pd.isna(value) or value == '':
+                            formatted_val = ""
+                        else:
+                            num_val = float(str(value).replace(',', '.'))
+                            formatted_val = f"{num_val:.2f}".replace('.', ',')
+                        values.append(formatted_val)
+                    except:
+                        values.append(str(value))
                 else:
                     values.append(str(value))
             
@@ -1958,7 +2040,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             
             # Ensure numeric columns are numbers (including comparison columns)
             for col in df.columns:
-                if col in ['quantity', 'unit_price', 'total_price'] or col.startswith(('quantity[', 'unit_price[', 'total_price[', 'quantity_', 'unit_price_', 'total_price_')):
+                if col in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage'] or col.startswith(('quantity[', 'unit_price[', 'total_price[', 'manhours[', 'wage[', 'quantity_', 'unit_price_', 'total_price_', 'manhours_', 'wage_')):
                     df[col] = df[col].apply(parse_number)
             
             # Write to Excel with formatting
@@ -1974,10 +2056,14 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 
                 # Format numeric columns (including comparison columns)
                 num_format = workbook.add_format({'num_format': '#,##0.00', 'align': 'right'})
+                manhours_format = workbook.add_format({'num_format': '#,##0.00', 'align': 'right'})  # 2 decimals for manhours
                 for col in df.columns:
-                    if col in ['quantity', 'unit_price', 'total_price'] or col.startswith(('quantity[', 'unit_price[', 'total_price[', 'quantity_', 'unit_price_', 'total_price_')):
+                    if col in ['quantity', 'unit_price', 'total_price', 'wage'] or col.startswith(('quantity[', 'unit_price[', 'total_price[', 'wage[', 'quantity_', 'unit_price_', 'total_price_', 'wage_')):
                         col_idx = df.columns.get_loc(col)
                         worksheet.set_column(col_idx, col_idx, 15, num_format)
+                    elif col in ['manhours'] or col.startswith(('manhours[', 'manhours_')):
+                        col_idx = df.columns.get_loc(col)
+                        worksheet.set_column(col_idx, col_idx, 15, manhours_format)
                 
                 # Data validation for category column
                 if 'category' in df.columns:
@@ -2834,12 +2920,22 @@ Review the rows below and adjust validity as needed."""
         
         # Determine required columns
         if self.column_mapper and hasattr(self.column_mapper, 'config'):
-            required_types = [col_type.value for col_type in self.column_mapper.config.get_required_columns()]
+            base_required_types = [col_type.value for col_type in self.column_mapper.config.get_required_columns()]
         else:
-            required_types = ["description", "quantity", "unit_price", "total_price", "unit", "code"]
+            base_required_types = ["description", "quantity", "unit_price", "total_price", "unit", "code"]
         
-        # Display column order
-        display_column_order = ["code", "description", "unit", "quantity", "unit_price", "total_price"]
+        # Add new columns as "required" if they are successfully mapped
+        required_types = base_required_types.copy()
+        if hasattr(sheet, 'column_mappings'):
+            for mapping in sheet.column_mappings:
+                mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                confidence = getattr(mapping, 'confidence', 0)
+                if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                    if mapped_type not in required_types:
+                        required_types.append(mapped_type)
+        
+        # Display column order (include new columns)
+        display_column_order = ["code", "description", "unit", "quantity", "unit_price", "total_price", "scope", "manhours", "wage"]
         available_columns = [col for col in display_column_order if col in required_types]
         
         # Create column mapping
@@ -2857,7 +2953,7 @@ Review the rows below and adjust validity as needed."""
             if col == "status":
                 tree.column(col, width=80, anchor=tk.CENTER)
             else:
-                tree.column(col, width=120 if col != "#" else 40, anchor=tk.W)
+                tree.column(col, width=120 if col != "#" else 40, anchor=tk.W, minwidth=50, stretch=False)
         
         # Add scrollbars
         v_scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=tree.yview)
@@ -2922,7 +3018,7 @@ Review the rows below and adjust validity as needed."""
         
         # Check if any column names contain offer-specific suffixes (both old and new formats)
         for col in df.columns:
-            if any(col.startswith(prefix) for prefix in ['quantity_', 'unit_price_', 'total_price_', 'quantity[', 'unit_price[', 'total_price[']):
+            if any(col.startswith(prefix) for prefix in ['quantity_', 'unit_price_', 'total_price_', 'manhours_', 'wage_', 'quantity[', 'unit_price[', 'total_price[', 'manhours[', 'wage[']):
                 return True
         return False
     
@@ -2937,14 +3033,24 @@ Review the rows below and adjust validity as needed."""
         column_mapping = {
             'quantity': f'quantity[{offer_name}]',
             'unit_price': f'unit_price[{offer_name}]',
-            'total_price': f'total_price[{offer_name}]'
+            'total_price': f'total_price[{offer_name}]',
+            'manhours': f'manhours[{offer_name}]',
+            'wage': f'wage[{offer_name}]'
         }
         
         comparison_df = comparison_df.rename(columns=column_mapping)
         
-        # Reorder columns according to the specified order: sheet, category, code, description, unit, quantity[Offer1], unit_price[Offer1], total_price[Offer1]
+        # Reorder columns according to the specified order: sheet, category, code, description, unit, quantity[Offer1], unit_price[Offer1], total_price[Offer1], scope, manhours[Offer1], wage[Offer1]
         base_columns = ['sheet', 'category', 'code', 'description', 'unit']
         offer_columns = [f'quantity[{offer_name}]', f'unit_price[{offer_name}]', f'total_price[{offer_name}]']
+        
+        # Add new columns if they exist (scope stays as-is, manhours and wage get offer suffix)
+        if 'scope' in comparison_df.columns:
+            base_columns.append('scope')
+        if f'manhours[{offer_name}]' in comparison_df.columns:
+            offer_columns.append(f'manhours[{offer_name}]')
+        if f'wage[{offer_name}]' in comparison_df.columns:
+            offer_columns.append(f'wage[{offer_name}]')
         
         # Only include columns that exist in the DataFrame
         ordered_columns = []
@@ -2968,6 +3074,29 @@ Review the rows below and adjust validity as needed."""
         if hasattr(tab, 'final_data_tree'):
             tree = tab.final_data_tree
             
+            # Store current column widths to preserve user changes
+            current_widths = {}
+            if hasattr(tree, 'column'):
+                try:
+                    current_columns = tree['columns'] if tree['columns'] else []
+                    for col in current_columns:
+                        try:
+                            current_widths[col] = tree.column(col, 'width')
+                        except:
+                            pass
+                except:
+                    pass
+            
+            # Also check if tab has stored column widths from previous user interactions
+            if hasattr(tab, 'user_column_widths'):
+                for col, width in tab.user_column_widths.items():
+                    current_widths[col] = width
+                print(f"[DEBUG] Restored {len(tab.user_column_widths)} user column widths from tab")
+            
+            # Initialize user column widths storage if not exists
+            if not hasattr(tab, 'user_column_widths'):
+                tab.user_column_widths = {}
+            
             # Update treeview columns
             new_columns = list(comparison_df.columns)
             tree['columns'] = new_columns
@@ -2985,15 +3114,242 @@ Review the rows below and adjust validity as needed."""
                     display_name = col.replace('_', ' ').title()
                 
                 tree.heading(col, text=display_name)
-                if col.startswith(('quantity_', 'unit_price_', 'total_price_', 'quantity[', 'unit_price[', 'total_price[')):
-                    tree.column(col, width=120, anchor=tk.E)  # Right-align numeric columns
+                
+                # Determine column width - preserve user changes or auto-size
+                if col in current_widths:
+                    # Use previously set width (user may have resized)
+                    width = current_widths[col]
+                    print(f"[DEBUG] Preserving user width for {col}: {width}px")
+                elif col == 'description':
+                    # Description column gets fixed width due to long text
+                    width = 250
                 else:
-                    tree.column(col, width=120, anchor=tk.W)
+                    # Auto-size based on content and header
+                    width = self._calculate_column_width(comparison_df, col, display_name)
+                
+                # CRITICAL: Set column properties with stretch=False to prevent auto-fitting
+                # Use smaller minwidth to allow better narrowing
+                if col.startswith(('quantity_', 'unit_price_', 'total_price_', 'manhours_', 'wage_', 'quantity[', 'unit_price[', 'total_price[', 'manhours[', 'wage[')):
+                    tree.column(col, width=width, minwidth=50, anchor=tk.E, stretch=False)
+                else:
+                    tree.column(col, width=width, minwidth=50, anchor=tk.W, stretch=False)
+            
+            # Store current widths in tab for future reference
+            for col in new_columns:
+                try:
+                    tab.user_column_widths[col] = tree.column(col, 'width')
+                except:
+                    pass
             
             # Repopulate the treeview
             self._populate_final_data_treeview(tree, comparison_df, new_columns)
+            
+            # Remove any existing resize bindings to avoid conflicts
+            try:
+                tree.unbind('<Button-1>')
+                tree.unbind('<ButtonRelease-1>')
+                tree.unbind('<B1-Motion>')
+                tree.unbind('<Configure>')
+                tree.unbind('<Motion>')
+            except:
+                pass  # Events might not be bound yet
+            
+            # Prevent the treeview from auto-adjusting column widths
+            def prevent_auto_resize(event=None):
+                """Prevent automatic column width adjustments"""
+                # Don't interfere during active resizing
+                if resize_state['prevent_auto_resize'] or resize_state['resizing']:
+                    return "break"
+                    
+                if hasattr(tab, 'user_column_widths'):
+                    for col, width in tab.user_column_widths.items():
+                        try:
+                            current_width = tree.column(col, 'width')
+                            if current_width != width and abs(current_width - width) > 5:  # Only restore if significant difference
+                                tree.column(col, width=width, minwidth=50)
+                                print(f"[DEBUG] Restored column {col} width to {width}px (was {current_width}px)")
+                        except:
+                            pass
+                return "break"  # Prevent further event processing
+            
+            # Track resize state - make it persistent across BOQ loads
+            if not hasattr(tab, 'resize_state'):
+                tab.resize_state = {
+                    'resizing': False, 
+                    'resize_column': None, 
+                    'start_x': 0, 
+                    'original_width': 0,
+                    'prevent_auto_resize': False
+                }
+            resize_state = tab.resize_state
+            
+            def on_button_press(event):
+                """Handle mouse button press - check if we're starting a resize"""
+                try:
+                    region = tree.identify_region(event.x, event.y)
+                    if region == "separator":
+                        # Find which column we're resizing
+                        col = tree.identify_column(event.x)
+                        if col and col.startswith('#'):
+                            col_index = int(col[1:]) - 1  # Convert #1, #2, etc to 0, 1, etc
+                            if 0 <= col_index < len(new_columns):
+                                resize_state['resizing'] = True
+                                resize_state['resize_column'] = new_columns[col_index]
+                                resize_state['start_x'] = event.x
+                                resize_state['original_width'] = tree.column(resize_state['resize_column'], 'width')
+                                resize_state['prevent_auto_resize'] = True
+                                print(f"[DEBUG] Started resizing column {resize_state['resize_column']} from {resize_state['original_width']}px")
+                                return "break"  # Prevent default behavior
+                except Exception as e:
+                    print(f"[DEBUG] Error in button press: {e}")
+                
+                # Not a resize operation, allow normal processing
+                resize_state['prevent_auto_resize'] = False
+                return None
+            
+            def on_button_motion(event):
+                """Handle mouse motion during resize"""
+                if resize_state['resizing'] and resize_state['resize_column']:
+                    try:
+                        # Calculate new width based on mouse movement
+                        delta = event.x - resize_state['start_x']
+                        new_width = max(50, resize_state['original_width'] + delta)  # Lower minimum for narrowing
+                        
+                        # Temporarily disable auto-resize prevention during manual resize
+                        resize_state['prevent_auto_resize'] = True
+                        
+                        # Apply the new width immediately with explicit override
+                        tree.column(resize_state['resize_column'], width=new_width, minwidth=50)
+                        
+                        # Update stored width immediately to prevent snap-back
+                        if not hasattr(tab, 'user_column_widths'):
+                            tab.user_column_widths = {}
+                        tab.user_column_widths[resize_state['resize_column']] = new_width
+                        
+                        print(f"[DEBUG] Resizing column {resize_state['resize_column']} to {new_width}px")
+                        return "break"
+                    except Exception as e:
+                        print(f"[DEBUG] Error in motion: {e}")
+                return None 
+            
+            def on_button_release(event):
+                """Handle mouse button release - finalize resize"""
+                if resize_state['resizing'] and resize_state['resize_column']:
+                    try:
+                        col = resize_state['resize_column']
+                        final_width = tree.column(col, 'width')
+                        
+                        # Store the user's preferred width
+                        if not hasattr(tab, 'user_column_widths'):
+                            tab.user_column_widths = {}
+                        tab.user_column_widths[col] = final_width
+                        
+                        print(f"[DEBUG] Finished resizing column {col} to {final_width}px - saved preference")
+                        
+                        # Reset resize state
+                        resize_state['resizing'] = False
+                        resize_state['resize_column'] = None
+                        resize_state['start_x'] = 0
+                        resize_state['original_width'] = 0
+                        resize_state['prevent_auto_resize'] = False
+                        
+                        return "break"
+                    except Exception as e:
+                        print(f"[DEBUG] Error in button release: {e}")
+                
+                resize_state['prevent_auto_resize'] = False
+                return None
+            
+            # Bind the events with proper return values to control event propagation
+            tree.bind('<Button-1>', on_button_press)
+            tree.bind('<B1-Motion>', on_button_motion)
+            tree.bind('<ButtonRelease-1>', on_button_release)
+            
+            # Prevent configure events from auto-resizing columns
+            tree.bind('<Configure>', prevent_auto_resize)
+            
+            # Override the default column adjustment behavior
+            def override_column_width(col, option=None, **kw):
+                """Override column width setting to prevent auto-adjustments"""
+                if option == 'width' and resize_state['prevent_auto_resize']:
+                    # During resize, allow the width change
+                    return tree.tk.call(tree._w, 'column', col, '-width', kw.get('width', kw.get('w', 100)))
+                elif option == 'width' and col in tab.user_column_widths:
+                    # Use stored user width
+                    return tree.tk.call(tree._w, 'column', col, '-width', tab.user_column_widths[col])
+                else:
+                    # Default behavior for other options
+                    return tree.tk.call(tree._w, 'column', col, f'-{option}' if option else '', *kw.values())
+            
+            # Apply the override (this is a bit hacky but necessary for Tkinter)
+            # Only patch if not already patched
+            if not hasattr(tree, '_column_patched'):
+                original_column = tree.column
+                def patched_column(col, option=None, **kw):
+                    if option == 'width' and not kw and not resize_state['prevent_auto_resize'] and hasattr(tab, 'user_column_widths') and col in tab.user_column_widths:
+                        # Return stored user-defined width (GET operation)
+                        return tab.user_column_widths[col]
+                    else:
+                        return original_column(col, option, **kw)
+                
+                tree.column = patched_column
+                tree._column_patched = True
         
         print(f"[DEBUG] Updated comparison display with {len(comparison_df)} rows and {len(comparison_df.columns)} columns")
+    
+    def _calculate_column_width(self, df, column_name, display_name):
+        """Calculate optimal column width based on content and header"""
+        import tkinter.font as tkFont
+        
+        try:
+            # Get default font for measurements
+            font = tkFont.nametofont("TkDefaultFont")
+        except:
+            # Fallback if font not available
+            # Approximate character width
+            header_width = len(display_name) * 8
+            max_content_width = 0
+            
+            if column_name in df.columns:
+                sample_size = min(100, len(df))
+                if sample_size > 0:
+                    sample_data = df[column_name].head(sample_size)
+                    for value in sample_data:
+                        if value is not None and str(value).strip():
+                            content_width = len(str(value)) * 8
+                            max_content_width = max(max_content_width, content_width)
+            
+            optimal_width = max(header_width, max_content_width) + 30  # Extra padding
+            return max(100, min(optimal_width, 400))
+        
+        # Measure header width with proper font
+        header_width = font.measure(display_name)
+        print(f"[DEBUG] Header '{display_name}' width: {header_width}px")
+        
+        # Check content width (sample first 100 rows for performance)
+        max_content_width = 0
+        sample_size = min(100, len(df))
+        
+        if column_name in df.columns and sample_size > 0:
+            sample_data = df[column_name].head(sample_size)
+            for value in sample_data:
+                if value is not None and str(value).strip():
+                    content_width = font.measure(str(value))
+                    max_content_width = max(max_content_width, content_width)
+        
+        print(f"[DEBUG] Column '{column_name}' max content width: {max_content_width}px")
+        
+        # Calculate optimal width (ensure header is fully visible + padding)
+        optimal_width = max(header_width + 30, max_content_width + 20)  # Extra padding for header
+        
+        # Apply reasonable limits
+        min_width = 100  # Increased minimum to ensure headers show
+        max_width = 400  # Increased maximum for better visibility
+        
+        final_width = max(min_width, min(optimal_width, max_width))
+        print(f"[DEBUG] Column '{column_name}' final width: {final_width}px")
+        
+        return final_width
     
     def _extract_mapping_from_tab(self, tab):
         """Extract mapping information from the current tab for reuse"""
@@ -3112,6 +3468,16 @@ Review the rows below and adjust validity as needed."""
             # Build DataFrame from the new file
             new_df = self._build_dataframe_from_mapping(file_mapping, master_mapping)
             
+            # Debug: Check if new DataFrame has unit column with values
+            if 'unit' in new_df.columns:
+                unit_values = new_df['unit'].value_counts()
+                print(f"[DEBUG] New DataFrame unit values: {unit_values.to_dict()}")
+                empty_units = (new_df['unit'] == '') | (new_df['unit'].isna())
+                if empty_units.any():
+                    print(f"[DEBUG] WARNING: New DataFrame has {empty_units.sum()} empty unit values!")
+            else:
+                print(f"[DEBUG] CRITICAL: New DataFrame missing unit column!")
+            
             # Apply categories from master mapping
             new_df = self._apply_categories_from_mapping(new_df, master_mapping)
             
@@ -3121,6 +3487,9 @@ Review the rows below and adjust validity as needed."""
             # Debug: Check master DF state before merge
             print(f"[DEBUG] Before merge - Master DF shape: {master_df.shape}")
             print(f"[DEBUG] Before merge - Master DF columns: {master_df.columns.tolist()}")
+            if 'unit' in master_df.columns:
+                master_unit_values = master_df['unit'].value_counts()
+                print(f"[DEBUG] Before merge - Master DF unit values: {master_unit_values.to_dict()}")
             if 'total_price' in master_df.columns:
                 print(f"[DEBUG] Before merge - Master DF total_price sum: {master_df['total_price'].sum()}")
             
@@ -3172,6 +3541,14 @@ Review the rows below and adjust validity as needed."""
             col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
             sheet_name = sheet.sheet_name
             
+            # Debug: Check if unit is in the column headers
+            print(f"[DEBUG] Sheet {sheet_name} column headers: {col_headers}")
+            if 'unit' in col_headers:
+                unit_index = col_headers.index('unit')
+                print(f"[DEBUG] Unit column found at index {unit_index}")
+            else:
+                print(f"[DEBUG] WARNING: Unit column not found in headers for sheet {sheet_name}!")
+            
             # Get row classifications and sort them by row_index to maintain consistent order
             row_classifications = sorted(getattr(sheet, 'row_classifications', []), key=lambda rc: rc.row_index)
             
@@ -3203,6 +3580,15 @@ Review the rows below and adjust validity as needed."""
                 row_dict = {}
                 for i, col_header in enumerate(col_headers):
                     value = row_data[i] if i < len(row_data) else ''
+                    # Handle empty values consistently with original logic
+                    if col_header in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']:
+                        # For numeric columns, preserve empty strings as empty strings (not convert to 0)
+                        # This ensures consistent behavior with saved mappings
+                        if value == '' or value is None or (isinstance(value, str) and value.strip() == ''):
+                            value = ''
+                    # Debug unit column specifically
+                    if col_header == 'unit':
+                        print(f"[DEBUG] Unit value for row {rc.row_index}: '{value}' (type: {type(value)})")
                     row_dict[col_header] = value
                 
                 # Add sheet name with consistent column name
@@ -3228,8 +3614,8 @@ Review the rows below and adjust validity as needed."""
                 if old_name in df.columns and new_name not in df.columns:
                     df.rename(columns={old_name: new_name}, inplace=True)
             
-            # Ensure we have all required columns
-            required_columns = ['sheet', 'code', 'description', 'unit', 'quantity', 'unit_price', 'total_price']
+            # Ensure we have all required columns (including new ones)
+            required_columns = ['sheet', 'code', 'description', 'unit', 'quantity', 'unit_price', 'total_price', 'scope', 'manhours', 'wage']
             for col in required_columns:
                 if col not in df.columns:
                     df[col] = ''
@@ -3238,11 +3624,18 @@ Review the rows below and adjust validity as needed."""
             # Do NOT sort to maintain the exact order from the Excel file
             df = df.reset_index(drop=True)
             
+            # Debug: Check unit column values
+            if 'unit' in df.columns:
+                unit_values = df['unit'].value_counts()
+                print(f"[DEBUG] Built DataFrame unit values: {unit_values.to_dict()}")
+            else:
+                print(f"[DEBUG] WARNING: Unit column missing in built DataFrame!")
+            
             print(f"[DEBUG] Built DataFrame with {len(df)} rows and columns: {df.columns.tolist()}")
             return df
         else:
-            # Return empty DataFrame with consistent structure
-            return pd.DataFrame(columns=['sheet', 'code', 'description', 'unit', 'quantity', 'unit_price', 'total_price'])
+            # Return empty DataFrame with consistent structure (including new columns)
+            return pd.DataFrame(columns=['sheet', 'code', 'description', 'unit', 'quantity', 'unit_price', 'total_price', 'scope', 'manhours', 'wage'])
     
     def _apply_categories_from_mapping(self, df, master_mapping):
         """Apply categories from master mapping to the new DataFrame"""
@@ -3293,9 +3686,13 @@ Review the rows below and adjust validity as needed."""
             key_parts = []
             for col in ['sheet', 'category', 'code', 'description', 'unit']:
                 if col in df.columns:
-                    # Clean and normalize the values
+                    # Clean and normalize the values WITHOUT modifying the original DataFrame
                     values = df[col].fillna('').astype(str).str.strip()
                     key_parts.append(values)
+                    # Debug: Check if unit column has values
+                    if col == 'unit':
+                        unique_units = values.unique()
+                        print(f"[DEBUG] Unit values in key creation: {unique_units[:10]}...")  # Show first 10
                 else:
                     key_parts.append(pd.Series([''] * len(df)))
             
@@ -3381,7 +3778,9 @@ Review the rows below and adjust validity as needed."""
         new_columns = {
             'quantity': f'quantity[{new_offer_name}]',
             'unit_price': f'unit_price[{new_offer_name}]',
-            'total_price': f'total_price[{new_offer_name}]'
+            'total_price': f'total_price[{new_offer_name}]',
+            'manhours': f'manhours[{new_offer_name}]',
+            'wage': f'wage[{new_offer_name}]'
         }
         
         # Create a mapping from key to new offer values
@@ -3432,6 +3831,20 @@ Review the rows below and adjust validity as needed."""
         # Start with the master DataFrame structure
         merged_df = master_df_copy.copy()
         
+        # Debug: Check if unit column exists and has values before merge
+        if 'unit' in merged_df.columns:
+            unit_values_before = merged_df['unit'].value_counts()
+            print(f"[DEBUG] Unit column before merge - unique values: {unit_values_before.to_dict()}")
+        else:
+            print(f"[DEBUG] WARNING: Unit column not found in master DataFrame!")
+        
+        # CRITICAL FIX: Preserve unit column values during merge
+        # Store the unit column values before any operations
+        unit_backup = None
+        if 'unit' in merged_df.columns:
+            unit_backup = merged_df['unit'].copy()
+            print(f"[DEBUG] Backed up unit column with {len(unit_backup)} values")
+        
         # Add the new offer columns
         for new_col in new_columns.values():
             merged_df[new_col] = 0  # Initialize with zeros
@@ -3461,6 +3874,8 @@ Review the rows below and adjust validity as needed."""
         total_assigned_quantity = 0
         total_assigned_unit_price = 0
         total_assigned_total_price = 0
+        total_assigned_manhours = 0
+        total_assigned_wage = 0
         
         for new_col in new_columns.values():
             if 'quantity' in new_col:
@@ -3475,8 +3890,16 @@ Review the rows below and adjust validity as needed."""
                 col_sum = pd.to_numeric(merged_df[new_col], errors='coerce').fillna(0).sum()
                 total_assigned_total_price += col_sum
                 print(f"[DEBUG] Total {new_col}: {col_sum}")
+            elif 'manhours' in new_col:
+                col_sum = pd.to_numeric(merged_df[new_col], errors='coerce').fillna(0).sum()
+                total_assigned_manhours += col_sum
+                print(f"[DEBUG] Total {new_col}: {col_sum}")
+            elif 'wage' in new_col:
+                col_sum = pd.to_numeric(merged_df[new_col], errors='coerce').fillna(0).sum()
+                total_assigned_wage += col_sum
+                print(f"[DEBUG] Total {new_col}: {col_sum}")
         
-        print(f"[DEBUG] Total assigned - Quantity: {total_assigned_quantity}, Unit Price: {total_assigned_unit_price}, Total Price: {total_assigned_total_price}")
+        print(f"[DEBUG] Total assigned - Quantity: {total_assigned_quantity}, Unit Price: {total_assigned_unit_price}, Total Price: {total_assigned_total_price}, Manhours: {total_assigned_manhours}, Wage: {total_assigned_wage}")
         
         # Handle any new rows that don't exist in master (shouldn't happen in comparison mode, but just in case)
         unmatched_keys = set(new_offer_mapping.keys()) - set(merged_df[key_column])
@@ -3535,7 +3958,7 @@ Review the rows below and adjust validity as needed."""
         # Get all offer columns in the order they were added
         offer_columns = []
         for col in merged_df.columns:
-            if col.startswith(('quantity[', 'unit_price[', 'total_price[')):
+            if col.startswith(('quantity[', 'unit_price[', 'total_price[', 'manhours[', 'wage[')):
                 offer_columns.append(col)
         
         # Sort offer columns by offer name to maintain consistent order
@@ -3548,10 +3971,14 @@ Review the rows below and adjust validity as needed."""
         offer_names = sorted(offer_names)
         ordered_offer_columns = []
         for offer in offer_names:
-            for prefix in ['quantity', 'unit_price', 'total_price']:
+            for prefix in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']:
                 col_name = f'{prefix}[{offer}]'
                 if col_name in merged_df.columns:
                     ordered_offer_columns.append(col_name)
+        
+        # Add scope if it exists (it doesn't get offer-specific suffixes)
+        if 'scope' in merged_df.columns and 'scope' not in base_columns:
+            base_columns.append('scope')
         
         # Final column order
         final_columns = base_columns + ordered_offer_columns
@@ -3559,6 +3986,42 @@ Review the rows below and adjust validity as needed."""
         # Only include columns that exist
         final_columns = [col for col in final_columns if col in merged_df.columns]
         merged_df = merged_df[final_columns]
+        
+        # CRITICAL FIX: Restore unit column values if they were lost during merge
+        if unit_backup is not None and 'unit' in merged_df.columns:
+            # Check if unit column was corrupted during merge
+            unit_values_after = merged_df['unit'].value_counts()
+            print(f"[DEBUG] Unit column after merge - unique values: {unit_values_after.to_dict()}")
+            
+            # If unit column is mostly empty but we have backup, restore it
+            empty_count = (merged_df['unit'] == '').sum() + merged_df['unit'].isna().sum()
+            total_count = len(merged_df)
+            
+            if empty_count > total_count * 0.5:  # If more than 50% empty, restore from backup
+                print(f"[DEBUG] Unit column corrupted ({empty_count}/{total_count} empty), restoring from backup")
+                merged_df['unit'] = unit_backup
+                unit_values_restored = merged_df['unit'].value_counts()
+                print(f"[DEBUG] Unit column restored - unique values: {unit_values_restored.to_dict()}")
+            else:
+                print(f"[DEBUG] Unit column preserved correctly ({empty_count}/{total_count} empty)")
+        
+        # Final debug of unit column
+        if 'unit' in merged_df.columns:
+            final_unit_values = merged_df['unit'].value_counts()
+            print(f"[DEBUG] FINAL unit column values: {final_unit_values.to_dict()}")
+        else:
+            print(f"[DEBUG] FINAL: Unit column missing from merged DataFrame!")
+        
+        # Debug: Check if unit column still exists and has values after reordering
+        if 'unit' in merged_df.columns:
+            unit_values_after = merged_df['unit'].value_counts()
+            print(f"[DEBUG] Unit column after merge - unique values: {unit_values_after.to_dict()}")
+            # Check if any unit values are empty when they shouldn't be
+            empty_units = (merged_df['unit'] == '') | (merged_df['unit'].isna())
+            if empty_units.any():
+                print(f"[DEBUG] WARNING: Found {empty_units.sum()} empty unit values after merge!")
+        else:
+            print(f"[DEBUG] CRITICAL: Unit column missing after column reordering!")
         
         # Skip duplicate removal - we already handled duplicates properly during key generation
         # Removing duplicates here would corrupt the data since identical rows in comparison
