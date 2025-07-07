@@ -999,6 +999,12 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         if not self.file_mapping or not hasattr(self.file_mapping, 'sheets'):
             self._update_status("No file loaded for row mapping.")
             return
+            
+        # CRITICAL VALIDATION: Check for missing required columns before proceeding
+        validation_result = self._validate_required_columns()
+        if not validation_result['is_valid']:
+            self._show_missing_columns_warning(validation_result)
+            return
         
         try:
             # Import row classifier here to avoid circular imports
@@ -1147,6 +1153,109 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 f"Please check the logs for more details."
             )
             self._update_status(f"Row mapping failed: {str(e)}")
+
+    def _validate_required_columns(self):
+        """
+        Validate that all required columns are properly mapped across all sheets.
+        Returns a dictionary with validation results.
+        """
+        # Define required columns
+        base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        
+        validation_result = {
+            'is_valid': True,
+            'missing_columns': {},  # sheet_name -> [missing_column_types]
+            'unmapped_sheets': [],
+            'total_sheets': 0,
+            'valid_sheets': 0
+        }
+        
+        if not self.file_mapping or not hasattr(self.file_mapping, 'sheets'):
+            validation_result['is_valid'] = False
+            return validation_result
+        
+        for sheet in self.file_mapping.sheets:
+            validation_result['total_sheets'] += 1
+            sheet_name = sheet.sheet_name
+            
+            # Get mapped types for this sheet
+            mapped_types = set()
+            if hasattr(sheet, 'column_mappings'):
+                for mapping in sheet.column_mappings:
+                    mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                    confidence = getattr(mapping, 'confidence', 0)
+                    # Only count columns with reasonable confidence or user-edited
+                    if confidence > 0 or getattr(mapping, 'user_edited', False):
+                        mapped_types.add(mapped_type)
+            
+            # Check for missing required columns
+            missing_columns = []
+            for required_type in base_required_types:
+                if required_type not in mapped_types:
+                    missing_columns.append(required_type)
+            
+            if missing_columns:
+                validation_result['is_valid'] = False
+                validation_result['missing_columns'][sheet_name] = missing_columns
+            else:
+                validation_result['valid_sheets'] += 1
+        
+        return validation_result
+    
+    def _show_missing_columns_warning(self, validation_result):
+        """
+        Show a detailed warning dialog about missing required columns.
+        """
+        from tkinter import messagebox
+        
+        missing_info = validation_result['missing_columns']
+        total_sheets = validation_result['total_sheets']
+        valid_sheets = validation_result['valid_sheets']
+        
+        # Build detailed message
+        message_parts = [
+            f"⚠️ COLUMN MAPPING INCOMPLETE ⚠️",
+            f"",
+            f"Cannot proceed to row mapping because some required columns are not mapped.",
+            f"",
+            f"Status: {valid_sheets}/{total_sheets} sheets have complete column mappings.",
+            f""
+        ]
+        
+        if missing_info:
+            message_parts.append("Missing required columns by sheet:")
+            message_parts.append("")
+            
+            for sheet_name, missing_columns in missing_info.items():
+                message_parts.append(f"📋 {sheet_name}:")
+                for col in missing_columns:
+                    message_parts.append(f"   • {col}")
+                message_parts.append("")
+        
+        message_parts.extend([
+            "Required columns for BOQ processing:",
+            "• description (item descriptions)",
+            "• quantity (quantities)",  
+            "• unit (units of measurement)",
+            "• unit_price (unit prices)",
+            "• total_price (total prices)",
+            "• code (position codes)",
+            "",
+            "Please:",
+            "1. Review the column mappings in each sheet tab",
+            "2. Double-click columns to edit their mapping",
+            "3. Ensure all required columns are properly mapped",
+            "4. Try row mapping again"
+        ])
+        
+        full_message = "\n".join(message_parts)
+        
+        messagebox.showerror(
+            "Missing Required Columns",
+            full_message
+        )
+        
+        self._update_status(f"Column mapping incomplete: {total_sheets - valid_sheets} sheets need attention")
 
     def _refresh_sheet_tabs(self):
         """Refresh the sheet tabs to show updated row mapping information"""
@@ -2017,6 +2126,10 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         print(f"[DEBUG] DataFrame columns: {dataframe.columns.tolist()}")
         print(f"[DEBUG] Requested columns: {columns}")
         
+        # Unit column validation - ensure it's present in the data
+        if 'unit' in columns and 'unit' not in dataframe.columns:
+            print(f"[WARNING] Unit column requested but not found in DataFrame columns: {dataframe.columns.tolist()}")
+        
         # Helper to format numbers consistently
         def format_number(val, is_currency=False):
             try:
@@ -2047,6 +2160,10 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 if col == 'category':
                     # Category is already in pretty format - use directly
                     values.append(str(value))
+                elif col == 'unit':
+                    # Unit column handling
+                    unit_value = str(value) if value != '' else ''
+                    values.append(unit_value)
                 elif col in ['quantity', 'unit_price', 'total_price', 'wage'] or col.startswith(('quantity[', 'unit_price[', 'total_price[', 'wage[', 'quantity_', 'unit_price_', 'total_price_', 'wage_')):
                     # Format numeric columns (including comparison columns)
                     values.append(format_number(value))
@@ -2064,7 +2181,6 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 else:
                     values.append(str(value))
             
-            print(f"[DEBUG] Adding row {index}: {values[:3]}...")  # Show first 3 values
             tree.insert('', 'end', values=values, tags=(f'row_{index}',))
         
         print(f"[DEBUG] Finished populating treeview with {len(dataframe)} rows")
@@ -3246,6 +3362,20 @@ Review the rows below and adjust validity as needed."""
     
     def _update_comparison_display(self, tab, comparison_df):
         """Update the display to show the comparison DataFrame"""
+        # Debug: Check if unit column exists in comparison DataFrame
+        print(f"[DEBUG] _update_comparison_display: DataFrame columns: {comparison_df.columns.tolist()}")
+        if 'unit' in comparison_df.columns:
+            unit_values = comparison_df['unit'].value_counts()
+            empty_units = comparison_df['unit'].isna().sum() + (comparison_df['unit'] == '').sum()
+            total_rows = len(comparison_df)
+            print(f"[DEBUG] Unit column: {total_rows - empty_units}/{total_rows} values populated")
+            if total_rows - empty_units > 0:
+                print(f"[DEBUG] ✅ Unit values found: {unit_values.to_dict()}")
+            else:
+                print(f"[DEBUG] ❌ All unit values are empty!")
+        else:
+            print(f"[DEBUG] ❌ Unit column missing from comparison DataFrame!")
+        
         # Update the treeview with new columns
         if hasattr(tab, 'final_data_tree'):
             tree = tab.final_data_tree
@@ -3273,8 +3403,24 @@ Review the rows below and adjust validity as needed."""
             if not hasattr(tab, 'user_column_widths'):
                 tab.user_column_widths = {}
             
-            # Update treeview columns
+            # CRITICAL FIX: Ensure unit column is present like in single BOQ mode
             new_columns = list(comparison_df.columns)
+            
+            # Enforce required columns similar to _build_final_grid_dataframe
+            required_base_columns = ['sheet', 'category', 'code', 'description', 'unit']
+            for req_col in required_base_columns:
+                if req_col not in new_columns and req_col not in comparison_df.columns:
+                    print(f"[DEBUG] Adding missing required column: {req_col}")
+                    comparison_df[req_col] = ''  # Add empty column
+                    new_columns.append(req_col)
+                elif req_col in comparison_df.columns and req_col not in new_columns:
+                    print(f"[DEBUG] Adding existing column to display: {req_col}")
+                    new_columns.append(req_col)
+            
+            # CRITICAL FIX: Use DataFrame column order directly to avoid column misalignment
+            # The TreeView display columns MUST match the DataFrame column order exactly
+            # to prevent values from being displayed in wrong columns
+            new_columns = comparison_df.columns.tolist()
             tree['columns'] = new_columns
             
             # Update column headings and widths
@@ -3727,16 +3873,26 @@ Review the rows below and adjust validity as needed."""
             if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
                 continue
                 
-            col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
+            # CRITICAL FIX: Use column mapping positions to extract data correctly
+            column_mappings = getattr(sheet, 'column_mappings', [])
             sheet_name = sheet.sheet_name
             
-            # Debug: Check if unit is in the column headers
-            print(f"[DEBUG] Sheet {sheet_name} column headers: {col_headers}")
-            if 'unit' in col_headers:
-                unit_index = col_headers.index('unit')
-                print(f"[DEBUG] Unit column found at index {unit_index}")
-            else:
-                print(f"[DEBUG] WARNING: Unit column not found in headers for sheet {sheet_name}!")
+            # Create mapping from column position to mapped type
+            col_position_to_type = {}
+            for cm in column_mappings:
+                if hasattr(cm, 'column_index') and hasattr(cm, 'mapped_type'):
+                    col_position_to_type[cm.column_index] = cm.mapped_type
+            
+            # Debug: Check column mapping structure
+            print(f"[DEBUG] Sheet {sheet_name} column position mapping: {col_position_to_type}")
+            unit_position = None
+            for pos, mapped_type in col_position_to_type.items():
+                if mapped_type == 'unit':
+                    unit_position = pos
+                    print(f"[DEBUG] Unit column found at Excel position {pos}")
+                    break
+            if unit_position is None:
+                print(f"[DEBUG] WARNING: Unit column not found in mappings for sheet {sheet_name}!")
             
             # Get row classifications and sort them by row_index to maintain consistent order
             row_classifications = sorted(getattr(sheet, 'row_classifications', []), key=lambda rc: rc.row_index)
@@ -3765,20 +3921,27 @@ Review the rows below and adjust validity as needed."""
                 if row_data is None:
                     row_data = []
                 
-                # Build dict for DataFrame with consistent column names
+                # Build dict for DataFrame using CORRECT column positions
                 row_dict = {}
-                for i, col_header in enumerate(col_headers):
-                    value = row_data[i] if i < len(row_data) else ''
+                for col_position, mapped_type in col_position_to_type.items():
+                    value = row_data[col_position] if col_position < len(row_data) else ''
                     # Handle empty values consistently with original logic
-                    if col_header in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']:
+                    if mapped_type in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']:
                         # For numeric columns, preserve empty strings as empty strings (not convert to 0)
                         # This ensures consistent behavior with saved mappings
                         if value == '' or value is None or (isinstance(value, str) and value.strip() == ''):
                             value = ''
-                    # Debug unit column specifically
-                    if col_header == 'unit':
-                        print(f"[DEBUG] Unit value for row {rc.row_index}: '{value}' (type: {type(value)})")
-                    row_dict[col_header] = value
+                    # Debug unit column specifically - CRITICAL DEBUGGING
+                    if mapped_type == 'unit':
+                        print(f"[DEBUG] ⚠️  Unit extraction for row {rc.row_index}:")
+                        print(f"[DEBUG]   Position: {col_position}")
+                        print(f"[DEBUG]   Row data length: {len(row_data)}")
+                        print(f"[DEBUG]   Raw value: '{value}' (type: {type(value)})")
+                        print(f"[DEBUG]   Full row data: {row_data}")
+                        # Check if this looks like a valid unit value
+                        if value in ['Quantity', 'quantity', 'Description', 'description', 'Code', 'code']:
+                            print(f"[DEBUG] ❌ INVALID UNIT VALUE DETECTED: '{value}' - This suggests column mapping is wrong!")
+                    row_dict[mapped_type] = value
                 
                 # Add sheet name with consistent column name
                 row_dict['sheet'] = sheet.sheet_name
@@ -3817,9 +3980,16 @@ Review the rows below and adjust validity as needed."""
             # Debug: Check unit column values
             if 'unit' in df.columns:
                 unit_values = df['unit'].value_counts()
-                print(f"[DEBUG] Built DataFrame unit values: {unit_values.to_dict()}")
+                empty_units = df['unit'].isna().sum() + (df['unit'] == '').sum()
+                print(f"[DEBUG] _build_dataframe_from_mapping FINAL unit check:")
+                print(f"[DEBUG]   Unit values: {unit_values.to_dict()}")
+                print(f"[DEBUG]   Empty units: {empty_units}/{len(df)}")
+                if empty_units == len(df):
+                    print(f"[DEBUG] ❌ CRITICAL: ALL UNIT VALUES ARE EMPTY in _build_dataframe_from_mapping!")
+                else:
+                    print(f"[DEBUG] ✅ Unit values exist in _build_dataframe_from_mapping")
             else:
-                print(f"[DEBUG] WARNING: Unit column missing in built DataFrame!")
+                print(f"[DEBUG] ❌ CRITICAL: Unit column MISSING in _build_dataframe_from_mapping!")
             
             print(f"[DEBUG] Built DataFrame with {len(df)} rows and columns: {df.columns.tolist()}")
             return df
@@ -4029,11 +4199,24 @@ Review the rows below and adjust validity as needed."""
             print(f"[DEBUG] WARNING: Unit column not found in master DataFrame!")
         
         # CRITICAL FIX: Preserve unit column values during merge
-        # Store the unit column values before any operations
+        # Store the unit column values from the ORIGINAL master DataFrame (not the processed copy)
         unit_backup = None
-        if 'unit' in merged_df.columns:
+        if 'unit' in master_df.columns:
+            unit_backup = master_df['unit'].copy()
+            print(f"[DEBUG] Backed up unit column from ORIGINAL master DataFrame with {len(unit_backup)} values")
+            original_unit_values = master_df['unit'].value_counts()
+            print(f"[DEBUG] Original unit values: {original_unit_values.to_dict()}")
+            
+            # Check for invalid unit values in the original master DataFrame
+            invalid_master_units = master_df[master_df['unit'].isin(['Quantity', 'quantity', 'Description', 'description', 'Code', 'code'])]
+            if len(invalid_master_units) > 0:
+                print(f"[DEBUG] ⚠️  CRITICAL: Original master DataFrame contains {len(invalid_master_units)} INVALID unit values!")
+                print(f"[DEBUG] Sample invalid master unit rows:")
+                for idx, row in invalid_master_units.head(3).iterrows():
+                    print(f"[DEBUG]   Row {idx}: unit='{row['unit']}', code='{row.get('code', 'N/A')}', description='{row.get('description', 'N/A')[:50]}...'")
+        elif 'unit' in merged_df.columns:
             unit_backup = merged_df['unit'].copy()
-            print(f"[DEBUG] Backed up unit column with {len(unit_backup)} values")
+            print(f"[DEBUG] Backed up unit column from processed copy with {len(unit_backup)} values")
         
         # Add the new offer columns
         for new_col in new_columns.values():
@@ -4206,6 +4389,15 @@ Review the rows below and adjust validity as needed."""
         if 'unit' in merged_df.columns:
             unit_values_after = merged_df['unit'].value_counts()
             print(f"[DEBUG] Unit column after merge - unique values: {unit_values_after.to_dict()}")
+            
+            # Check for invalid unit values that suggest data corruption
+            invalid_units = merged_df[merged_df['unit'].isin(['Quantity', 'quantity', 'Description', 'description', 'Code', 'code'])]
+            if len(invalid_units) > 0:
+                print(f"[DEBUG] ⚠️  CRITICAL: Found {len(invalid_units)} rows with INVALID unit values!")
+                print(f"[DEBUG] Sample invalid unit rows:")
+                for idx, row in invalid_units.head(3).iterrows():
+                    print(f"[DEBUG]   Row {idx}: unit='{row['unit']}', code='{row.get('code', 'N/A')}', description='{row.get('description', 'N/A')[:50]}...'")
+                    
             # Check if any unit values are empty when they shouldn't be
             empty_units = (merged_df['unit'] == '') | (merged_df['unit'].isna())
             if empty_units.any():
