@@ -1700,17 +1700,17 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         # Row review display order
         display_column_order = ["code", "sheet", "category", "description", "unit", "quantity", "unit_price", "total_price", "scope", "manhours", "wage"]
         
-        # Helper function to parse numbers
-        def parse_number(val):
+        # Helper function to parse numbers - preserve empty values for manhours and wage
+        def parse_number(val, preserve_empty=False):
             if isinstance(val, (int, float)):
                 return float(val)
-            if pd.isna(val):
-                return 0.0
+            if pd.isna(val) or val == '' or (isinstance(val, str) and val.strip() == ''):
+                return '' if preserve_empty else 0.0
             s = str(val).replace('\u202f', '').replace(' ', '').replace(',', '.')
             try:
                 return float(s)
             except Exception:
-                return 0.0
+                return '' if preserve_empty else 0.0
         
         # Build mapping from mapped_type to column index for each sheet
         for sheet in getattr(file_mapping, 'sheets', []):
@@ -1769,9 +1769,11 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                         else:
                             idx = mapped_type_to_index.get(col)
                             val = row_data[idx] if idx is not None and idx < len(row_data) else ""
-                            # Parse numeric values
-                            if col in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']:
+                            # Parse numeric values - preserve empty values for manhours and wage
+                            if col in ['quantity', 'unit_price', 'total_price']:
                                 val = parse_number(val)
+                            elif col in ['manhours', 'wage']:
+                                val = parse_number(val, preserve_empty=True)
                             row_dict[col] = val
                     
                     # Preserve position information for future row matching (not displayed but stored)
@@ -1782,10 +1784,17 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         if rows:
             df = pd.DataFrame(rows)
             # Ensure numeric columns are properly typed
-            for col in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']:
+            for col in ['quantity', 'unit_price', 'total_price']:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
                     df[col] = df[col].fillna(0)
+            # Handle manhours and wage separately - preserve empty values
+            for col in ['manhours', 'wage']:
+                if col in df.columns:
+                    # Convert to numeric but keep empty strings as empty strings
+                    df[col] = df[col].apply(lambda x: pd.to_numeric(x, errors='coerce') if x != '' else '')
+                    # Only fill NaN with 0 if it was originally a number that failed to parse
+                    df[col] = df[col].apply(lambda x: 0 if pd.isna(x) and x != '' else x)
             # Only keep columns in display order that are present
             columns = [col for col in display_column_order if col in df.columns]
             df = df[columns]
@@ -2327,16 +2336,10 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 for col_num, value in enumerate(df.columns):
                     worksheet.write(0, col_num, value, header_format)
                 
-                # Format numeric columns (including comparison columns)
+                # Format numeric columns (including comparison columns) - 2 decimal places as requested
                 num_format = workbook.add_format({'num_format': '#,##0.00', 'align': 'right'})
                 manhours_format = workbook.add_format({'num_format': '#,##0.00', 'align': 'right'})  # 2 decimals for manhours
-                for col in df.columns:
-                    if col in ['quantity', 'unit_price', 'total_price', 'wage'] or col.startswith(('quantity[', 'unit_price[', 'total_price[', 'wage[', 'quantity_', 'unit_price_', 'total_price_', 'wage_')):
-                        col_idx = df.columns.get_loc(col)
-                        worksheet.set_column(col_idx, col_idx, 15, num_format)
-                    elif col in ['manhours'] or col.startswith(('manhours[', 'manhours_')):
-                        col_idx = df.columns.get_loc(col)
-                        worksheet.set_column(col_idx, col_idx, 15, manhours_format)
+                # Note: Column formatting is applied during autofit below to preserve both width and format
                 
                 # Data validation for category column
                 if 'category' in df.columns:
@@ -2347,12 +2350,20 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                         'input_message': 'Select a category from the list.'
                     })
                 
-                # Autofit columns
+                # Autofit columns while preserving number formatting
                 for i, col in enumerate(df.columns):
                     maxlen = max(
                         [len(str(x)) for x in df[col].astype(str).values] + [len(str(col))]
                     )
-                    worksheet.set_column(i, i, min(maxlen + 2, 30))
+                    width = min(maxlen + 2, 30)
+                    
+                    # Preserve number formatting when setting column width
+                    if col in ['quantity', 'unit_price', 'total_price', 'wage'] or col.startswith(('quantity[', 'unit_price[', 'total_price[', 'wage[', 'quantity_', 'unit_price_', 'total_price_', 'wage_')):
+                        worksheet.set_column(i, i, width, num_format)
+                    elif col in ['manhours'] or col.startswith(('manhours[', 'manhours_')):
+                        worksheet.set_column(i, i, width, manhours_format)
+                    else:
+                        worksheet.set_column(i, i, width)
                 
                 # Add summary sheet
                 if tab and hasattr(tab, 'summary_frame') and hasattr(tab, 'final_dataframe'):
@@ -3278,11 +3289,18 @@ Review the rows below and adjust validity as needed."""
                     idx = mapped_type_to_index.get(col)
                     val = row_data[idx] if idx is not None and idx < len(row_data) else ""
                     
-                    # Format numbers
-                    if col in ['unit_price', 'total_price']:
+                    # Format numbers - ensure consistent formatting with other row review
+                    if col in ['unit_price', 'total_price', 'wage']:
                         val = format_number(val, is_currency=True)
-                    elif col == 'quantity':
+                    elif col in ['quantity', 'manhours']:
                         val = format_number(val, is_currency=False)
+                        # Special formatting for manhours - only 2 decimals
+                        if col == 'manhours' and val and val != '':
+                            try:
+                                num_val = float(str(val).replace(',', '.'))
+                                val = f"{num_val:.2f}"
+                            except:
+                                pass
                     
                     row_values.append(val)
                 
