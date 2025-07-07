@@ -1056,7 +1056,7 @@ def update_master_dictionary(
 
 def execute_row_categorization(
     mapped_df,
-    category_dict_path: Path = Path('config/category_dictionary.json'),
+    category_dict_path: Optional[Path] = None,
     output_dir: Path = Path('examples'),
     user_manual_excel: Path = None,
     cleanup_temp: bool = True,
@@ -1095,6 +1095,7 @@ def execute_row_categorization(
     
     try:
         update_progress(0, "Loading category dictionary...")
+        # Use default path if none provided (which will use user config directory)
         category_dict = CategoryDictionary(category_dict_path)
         summary['category_dict_loaded'] = True
         all_stats['initial_dict_size'] = len(category_dict.mappings)

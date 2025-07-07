@@ -461,8 +461,8 @@ class CategorizationDialog:
                 from core.category_dictionary import CategoryDictionary
                 from pathlib import Path
                 
-                # Load the category dictionary
-                category_dict = CategoryDictionary(Path("config/category_dictionary.json"))
+                # Load the category dictionary (uses user config path automatically)
+                category_dict = CategoryDictionary()
                 
                 # Update the dictionary
                 update_result = update_master_dictionary(category_dict, manual_cats)
