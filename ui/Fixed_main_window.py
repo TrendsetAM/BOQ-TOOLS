@@ -362,9 +362,10 @@ class MainWindow:
     def _populate_file_tab(self, tab, file_mapping):
         """Populates a tab with the processed data from a file mapping."""
         # Debug: print all sheet names and their types
-        print('DEBUG: Sheets in file_mapping:')
+        # print('DEBUG: Sheets in file_mapping:')
         for s in file_mapping.sheets:
-            print(f'  {s.sheet_name} (sheet_type={getattr(s, "sheet_type", None)})')
+            # print(f'  {s.sheet_name} (sheet_type={getattr(s, "sheet_type", None)})')
+            pass
         
         # Clear any existing widgets (like loading/error labels)
         for widget in tab.winfo_children():

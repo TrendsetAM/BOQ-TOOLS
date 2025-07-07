@@ -71,7 +71,7 @@ def generate_manual_categorization_excel(review_descriptions: List,
     # Save the workbook
     wb.save(filepath)
     logger.info(f"Manual categorization Excel file created: {filepath}")
-    print(f"[DEBUG] Manual categorization Excel created at: {filepath}, exists: {filepath.exists()}")
+    # print(f"[DEBUG] Manual categorization Excel created at: {filepath}, exists: {filepath.exists()}")
     
     return filepath
 
@@ -383,8 +383,8 @@ def process_manual_categorizations(excel_filepath: Path,
     try:
         # Read the Excel file using pandas
         df: pd.DataFrame = pd.read_excel(excel_filepath, sheet_name="Categorization")
-        print(f"[DEBUG] Loaded manual categorization file columns: {list(df.columns)}")
-        print(f"[DEBUG] First few rows:\n{df.head()}")
+        # print(f"[DEBUG] Loaded manual categorization file columns: {list(df.columns)}")
+        # print(f"[DEBUG] First few rows:\n{df.head()}")
         logger.info(f"Successfully loaded Excel file with {len(df)} rows")
         
     except Exception as e:
@@ -1102,7 +1102,7 @@ def execute_row_categorization(
         update_progress(5, "Auto-categorizing rows...")
         from core.auto_categorizer import auto_categorize_dataset, collect_unmatched_descriptions
         auto_result = auto_categorize_dataset(mapped_df, category_dict)
-        print(f"[DEBUG] auto_categorize_dataset: total_rows={auto_result.total_rows}, matched_rows={auto_result.matched_rows}, unmatched_rows={auto_result.unmatched_rows}")
+        # print(f"[DEBUG] auto_categorize_dataset: total_rows={auto_result.total_rows}, matched_rows={auto_result.matched_rows}, unmatched_rows={auto_result.unmatched_rows}")
         auto_df = auto_result.dataframe
         all_stats['auto_stats'] = auto_result.match_statistics
         summary['auto_categorized'] = True
@@ -1123,7 +1123,7 @@ def execute_row_categorization(
             sheet_name_column=sheet_name_column,
             confidence_threshold=0.8
         )
-        print(f"[DEBUG] review_list: {len(review_list)} descriptions for manual review")
+        # print(f"[DEBUG] review_list: {len(review_list)} descriptions for manual review")
         all_stats['review_count'] = len(review_list)
         summary['review_collected'] = True
         
@@ -1149,7 +1149,7 @@ def execute_row_categorization(
         update_progress(30, "Generating manual categorization Excel file...")
         from core.manual_categorizer import generate_manual_categorization_excel
         available_categories = list(category_dict.get_all_categories())
-        print(f"[DEBUG] About to call generate_manual_categorization_excel with {len(review_list)} review descriptions, output_dir={output_dir}")
+        # print(f"[DEBUG] About to call generate_manual_categorization_excel with {len(review_list)} review descriptions, output_dir={output_dir}")
         excel_path = generate_manual_categorization_excel(review_list, available_categories, output_dir=output_dir)
         temp_files.append(excel_path)
         summary['manual_excel_generated'] = str(excel_path)

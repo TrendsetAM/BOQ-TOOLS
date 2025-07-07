@@ -490,7 +490,7 @@ class RowClassifier:
                            is_subtotal: bool, is_header: bool, is_notes: bool,
                            hierarchical_level: Optional[int], column_mapping: Dict[int, ColumnType]) -> Tuple[RowType, float, List[str]]:
         """Determine the type of a row based on simple validation rules (only required columns)"""
-        print(f"[DEBUG] row_data (len={len(row_data)}): {row_data}")
+        # print(f"[DEBUG] row_data (len={len(row_data)}): {row_data}")
         reasoning = []
         confidence = 0.0
         # Only check required columns for classification
@@ -504,7 +504,7 @@ class RowClassifier:
                 idx = col_indices[0]
                 val = row_data[idx] if idx < len(row_data) else ''
             required_values[req_type] = val
-            print(f"[DEBUG] Required {req_type}: col {col_indices[0] if col_indices else 'N/A'} value='{val}'")
+            # print(f"[DEBUG] Required {req_type}: col {col_indices[0] if col_indices else 'N/A'} value='{val}'")
         # Now use only these for classification
         has_description = bool(required_values[ColumnType.DESCRIPTION].strip())
         has_unit_price = self._is_positive_numeric(required_values[ColumnType.UNIT_PRICE])
@@ -524,23 +524,23 @@ class RowClassifier:
             reasoning.append(f"Missing required fields: {', '.join(missing_fields)} - INVALID line item")
             confidence = 0.9
             row_type = RowType.INVALID_LINE_ITEM
-        print(f"[DEBUG] Final row_type: {row_type}, Reasoning: {reasoning}")
+        # print(f"[DEBUG] Final row_type: {row_type}, Reasoning: {reasoning}")
         return row_type, confidence, reasoning
     
     def _is_positive_numeric(self, value: str) -> bool:
         """Check if value is a positive number (including 0), supports European formats"""
         try:
             # Remove currency symbols, commas, and all whitespace (including non-breaking)
-            print(f"[DEBUG] _is_positive_numeric: raw value='{value}'")
+            # print(f"[DEBUG] _is_positive_numeric: raw value='{value}'")
             clean_value = re.sub(r'[\$€£¥₹,\s\u00A0]', '', value)
             # Replace decimal comma with dot if present
             if ',' in value and value.count(',') == 1 and '.' not in value:
                 clean_value = clean_value.replace(',', '.')
-            print(f"[DEBUG] _is_positive_numeric: cleaned value='{clean_value}'")
+            # print(f"[DEBUG] _is_positive_numeric: cleaned value='{clean_value}'")
             num = float(clean_value)
             return num >= 0
         except (ValueError, TypeError):
-            print(f"[DEBUG] _is_positive_numeric: failed to parse '{value}'")
+            # print(f"[DEBUG] _is_positive_numeric: failed to parse '{value}'")
             return False
     
     def _is_numeric(self, value: str) -> bool:

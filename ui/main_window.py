@@ -579,10 +579,10 @@ class MainWindow:
         self.progress_var.set(0)
 
     def _populate_file_tab(self, tab, file_mapping):
-        print("[DEBUG] _populate_file_tab called for tab:", tab)
+        # print("[DEBUG] _populate_file_tab called for tab:", tab)
         """Populates a tab with the processed data from a file mapping."""
         # Debug: print all sheet names and their types
-        print('DEBUG: Sheets in file_mapping:')
+        # print('DEBUG: Sheets in file_mapping:')
         for s in file_mapping.sheets:
             print(f'  {s.sheet_name} (sheet_type={getattr(s, "sheet_type", None)})')
         
@@ -1077,26 +1077,28 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 # DEBUG: Log the column mapping and first few rows to diagnose indexing
                 # Only debug the "Miscellaneous" sheet where Bank Guarantee is located
                 if sheet.sheet_name == "Miscellaneous":
-                    print(f"[DEBUG] Column mapping for {sheet.sheet_name}: {column_mapping_dict}")
+                    # print(f"[DEBUG] Column mapping for {sheet.sheet_name}: {column_mapping_dict}")
                     if sheet_data:
-                        print(f"[DEBUG] First row data: {sheet_data[0] if len(sheet_data) > 0 else 'No data'}")
-                        print(f"[DEBUG] Row data length: {len(sheet_data[0]) if sheet_data else 0}")
+                        # print(f"[DEBUG] First row data: {sheet_data[0] if len(sheet_data) > 0 else 'No data'}")
+                        # print(f"[DEBUG] Row data length: {len(sheet_data[0]) if sheet_data else 0}")
                         
                         # Show headers to understand column mapping
                         if hasattr(sheet, 'column_mappings'):
-                            print(f"[DEBUG] Headers for {sheet.sheet_name}:")
+                            # print(f"[DEBUG] Headers for {sheet.sheet_name}:")
                             for i, col_mapping in enumerate(sheet.column_mappings):
                                 header = getattr(col_mapping, 'original_header', f'Column_{i}')
                                 mapped_type = getattr(col_mapping, 'mapped_type', 'unknown')
                                 confidence = getattr(col_mapping, 'confidence', 0)
-                                print(f"[DEBUG] Column {col_mapping.column_index}: '{header}' -> {mapped_type} (confidence: {confidence:.2f})")
+                                # print(f"[DEBUG] Column {col_mapping.column_index}: '{header}' -> {mapped_type} (confidence: {confidence:.2f})")
                         
                         # Show first 10 rows to find Bank Guarantee
                         for i in range(min(10, len(sheet_data))):
                             if any('Bank Guarantee' in str(cell) for cell in sheet_data[i]):
-                                print(f"[DEBUG] FOUND BANK GUARANTEE at row {i}: {sheet_data[i]}")
+                                # print(f"[DEBUG] FOUND BANK GUARANTEE at row {i}: {sheet_data[i]}")
+                                pass
                             else:
-                                print(f"[DEBUG] Row {i}: {sheet_data[i]}")
+                                # print(f"[DEBUG] Row {i}: {sheet_data[i]}")
+                                pass
                 
                 # Perform row classification
                 row_classification_result = row_classifier.classify_rows(sheet_data, column_mapping_dict, sheet.sheet_name)
@@ -1141,6 +1143,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 
             # After row mapping is complete and data is available:
             # Show the Row Review section with correct data
+                pass
             self._show_row_review(self.file_mapping, original_sheet_data)
             
         except Exception as e:
@@ -1623,19 +1626,19 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         try:
             current_tab_path = self.notebook.select()
             current_tab = self.notebook.select(current_tab_path)  # Get the actual tab widget
-            print("[DEBUG] Current tab path:", current_tab_path)
-            print("[DEBUG] Current tab widget:", current_tab)
-            print("[DEBUG] File mapping tabs:", [str(file_data['file_mapping'].tab) for file_data in self.controller.current_files.values()])
-            print("[DEBUG] Number of files:", len(self.controller.current_files))
+            # print("[DEBUG] Current tab path:", current_tab_path)
+            # print("[DEBUG] Current tab widget:", current_tab)
+            # print("[DEBUG] File mapping tabs:", [str(file_data['file_mapping'].tab) for file_data in self.controller.current_files.values()])
+            # print("[DEBUG] Number of files:", len(self.controller.current_files))
             
             for file_key, file_data in self.controller.current_files.items():
-                print("[DEBUG] Checking file_key:", file_key)
-                print("[DEBUG] file_data['file_mapping'].tab:", file_data['file_mapping'].tab)
-                print("[DEBUG] hasattr check:", hasattr(file_data['file_mapping'], 'tab'))
-                print("[DEBUG] tab comparison:", str(file_data['file_mapping'].tab) == str(current_tab_path))
+                # print("[DEBUG] Checking file_key:", file_key)
+                # print("[DEBUG] file_data['file_mapping'].tab:", file_data['file_mapping'].tab)
+                # print("[DEBUG] hasattr check:", hasattr(file_data['file_mapping'], 'tab'))
+                # print("[DEBUG] tab comparison:", str(file_data['file_mapping'].tab) == str(current_tab_path))
                 
                 if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
-                    print("[DEBUG] Found matching tab, storing data...")
+                    # print("[DEBUG] Found matching tab, storing data...")
                     # Store the categorized data
                     file_data['categorized_dataframe'] = final_dataframe
                     file_data['categorization_result'] = categorization_result
@@ -1643,16 +1646,17 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     file_mapping = file_data['file_mapping']
                     file_mapping.categorized_dataframe = final_dataframe
                     file_mapping.categorization_result = categorization_result
-                    print("[DEBUG] About to call _show_final_categorized_data...")
+                    # print("[DEBUG] About to call _show_final_categorized_data...")
                     # Show the final data grid in the main window - use the actual tab widget from file_mapping
                     self._show_final_categorized_data(file_mapping.tab, final_dataframe, categorization_result)
                     self._update_status("Categorization completed successfully - showing final data")
-                    print("[DEBUG] _show_final_categorized_data call completed")
+                    # print("[DEBUG] _show_final_categorized_data call completed")
                     break
                 else:
-                    print("[DEBUG] Tab mismatch or no tab attribute")
+                    # print("[DEBUG] Tab mismatch or no tab attribute")
+                    pass
         except Exception as e:
-            print("[DEBUG] Exception in _on_categorization_complete:", e)
+            # print("[DEBUG] Exception in _on_categorization_complete:", e)
             import traceback
             traceback.print_exc()
             logger.error(f"Error handling categorization completion: {e}")
@@ -1803,7 +1807,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         return df
 
     def _show_final_categorized_data(self, tab, final_dataframe, categorization_result):
-        print("[DEBUG] _show_final_categorized_data called for tab:", tab)
+        # print("[DEBUG] _show_final_categorized_data called for tab:", tab)
         try:
             # Get file_mapping for this tab (if it exists - won't exist for loaded analyses)
             file_mapping = None
@@ -1822,7 +1826,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 # Remove the 'category_internal' column if it exists (it's not needed for display)
                 if 'category_internal' in display_df.columns:
                     display_df = display_df.drop('category_internal', axis=1)
-                print(f"[DEBUG] Using loaded DataFrame directly with shape: {display_df.shape}")
+                # print(f"[DEBUG] Using loaded DataFrame directly with shape: {display_df.shape}")
             
             # Clear the current tab content
             for widget in tab.winfo_children():
@@ -1897,18 +1901,18 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     try:
                         return float(s)
                     except Exception as e:
-                        print(f"[DEBUG] Failed to parse number '{val}': {e}")
+                        # print(f"[DEBUG] Failed to parse number '{val}': {e}")
                         return 0.0
                 
                 # Get the current DataFrame (now uses pretty categories directly)
                 df = tab.final_dataframe if hasattr(tab, 'final_dataframe') else display_df
-                print("[DEBUG] DataFrame columns:", df.columns.tolist())
-                print("[DEBUG] First few rows of DataFrame:")
+                # print("[DEBUG] DataFrame columns:", df.columns.tolist())
+                # print("[DEBUG] First few rows of DataFrame:")
                 print(df.head().to_string())
                 
                 # Check if this is a comparison dataset
                 is_comparison = self._is_comparison_dataset(df)
-                print(f"[DEBUG] Is comparison dataset: {is_comparison}")
+                # print(f"[DEBUG] Is comparison dataset: {is_comparison}")
                 
                 # Remove old summary tree if present
                 for widget in summary_frame.winfo_children():
@@ -1919,7 +1923,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 
                 if is_comparison:
                     # Handle comparison dataset - create separate rows for each offer
-                    print("[DEBUG] Creating comparison summary")
+                    # print("[DEBUG] Creating comparison summary")
                     
                     # Find all offer columns
                     offer_columns = {}
@@ -1933,7 +1937,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                                 continue
                             offer_columns[offer_name] = col
                     
-                    print(f"[DEBUG] Found offer columns: {offer_columns}")
+                    # print(f"[DEBUG] Found offer columns: {offer_columns}")
                     
                     if not offer_columns:
                         summary_frame.grid_remove()
@@ -1982,7 +1986,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                                     display_values.append(str(val))
                         
                         summary_tree.insert('', 'end', values=display_values, tags=('offer',))
-                        print(f"[DEBUG] Added summary row for {offer_name}: {display_values[:3]}...")
+                        # print(f"[DEBUG] Added summary row for {offer_name}: {display_values[:3]}...")
                     
                     # Add horizontal scrollbar
                     hsb_summary = ttk.Scrollbar(summary_frame, orient=tk.HORIZONTAL, command=summary_tree.xview)
@@ -1992,7 +1996,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     
                 else:
                     # Handle single offer dataset (original logic)
-                    print("[DEBUG] Creating single offer summary")
+                    # print("[DEBUG] Creating single offer summary")
                     
                     # Find the correct total price column
                     price_col = None
@@ -2003,13 +2007,13 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                             price_col = col
                             break
                     
-                    print(f"[DEBUG] Using price column: {price_col}")
+                    # print(f"[DEBUG] Using price column: {price_col}")
                     if price_col and price_col in df.columns:
                         df[price_col] = df[price_col].apply(parse_number)
-                        print(f"[DEBUG] Price column after parsing:")
+                        # print(f"[DEBUG] Price column after parsing:")
                         print(df[price_col].head().to_string())
                     else:
-                        print("[DEBUG] No valid price column found for summary")
+                        # print("[DEBUG] No valid price column found for summary")
                         summary_frame.grid_remove()
                         return
                     
@@ -2017,11 +2021,11 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     cat_col = 'category'
                     if cat_col in df.columns and price_col and price_col in df.columns:
                         # Categories are already in pretty format, just group directly
-                        print(f"[DEBUG] Unique categories before grouping:", df[cat_col].unique())
+                        # print(f"[DEBUG] Unique categories before grouping:", df[cat_col].unique())
                         
                         # Create the summary dictionary with pretty category names
                         summary_dict = df.groupby(cat_col)[price_col].sum().to_dict()
-                        print("[DEBUG] Summary dict after grouping:", summary_dict)
+                        # print("[DEBUG] Summary dict after grouping:", summary_dict)
                         
                         # No need for complex mapping - categories are already pretty
                         # Just ensure we have all predefined categories with zero values if not present
@@ -2029,9 +2033,9 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                         for cat_pretty in categories_pretty:
                             final_summary[cat_pretty] = summary_dict.get(cat_pretty, 0.0)
                         
-                        print("[DEBUG] Final summary:", final_summary)
+                        # print("[DEBUG] Final summary:", final_summary)
                     else:
-                        print("[DEBUG] No category column or price column found!")
+                        # print("[DEBUG] No category column or price column found!")
                         final_summary = {cat: 0.0 for cat in categories_pretty}
                     
                     offer_label = self.current_offer_name if hasattr(self, 'current_offer_name') and self.current_offer_name else 'Offer'
@@ -2040,7 +2044,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     # Use the final summary to get values in the correct order
                     summary_values = [offer_label] + [final_summary[cat] for cat in categories_pretty]
                     
-                    print("[DEBUG] Final summary values:", summary_values)
+                    # print("[DEBUG] Final summary values:", summary_values)
                     
                     if len(summary_columns) <= 1:
                         summary_frame.grid_remove()
@@ -2125,15 +2129,15 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             tab.final_dataframe = display_df
             tab.categorization_result = categorization_result
         except Exception as e:
-            print("[DEBUG] Exception in _show_final_categorized_data:", e)
+            # print("[DEBUG] Exception in _show_final_categorized_data:", e)
             import traceback
             traceback.print_exc()
     
     def _populate_final_data_treeview(self, tree, dataframe, columns):
         """Populate the treeview with data from the final DataFrame, using pretty categories directly."""
-        print(f"[DEBUG] _populate_final_data_treeview called with DataFrame shape: {dataframe.shape}")
-        print(f"[DEBUG] DataFrame columns: {dataframe.columns.tolist()}")
-        print(f"[DEBUG] Requested columns: {columns}")
+        # print(f"[DEBUG] _populate_final_data_treeview called with DataFrame shape: {dataframe.shape}")
+        # print(f"[DEBUG] DataFrame columns: {dataframe.columns.tolist()}")
+        # print(f"[DEBUG] Requested columns: {columns}")
         
         # Unit column validation - ensure it's present in the data
         if 'unit' in columns and 'unit' not in dataframe.columns:
@@ -2156,7 +2160,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         for item in tree.get_children():
             tree.delete(item)
         
-        print(f"[DEBUG] Cleared existing items, now adding {len(dataframe)} rows")
+        # print(f"[DEBUG] Cleared existing items, now adding {len(dataframe)} rows")
         
         # Add data rows
         for index, row in dataframe.iterrows():
@@ -2192,7 +2196,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             
             tree.insert('', 'end', values=values, tags=(f'row_{index}',))
         
-        print(f"[DEBUG] Finished populating treeview with {len(dataframe)} rows")
+        # print(f"[DEBUG] Finished populating treeview with {len(dataframe)} rows")
     
     def _enable_final_data_editing(self, tree, dataframe):
         """Enable editing capabilities for the final data treeview. Only allow editing of the 'category' column with a dropdown."""
@@ -2233,7 +2237,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                                         dataframe.at[idx, 'category'] = new_pretty
                             combo.destroy()
                         except Exception as e:
-                            print(f"[DEBUG] Error saving combo: {e}")
+                            # print(f"[DEBUG] Error saving combo: {e}")
                             combo.destroy()
                     def cancel_combo(event=None):
                         combo.destroy()
@@ -2242,9 +2246,10 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     combo.bind('<Escape>', cancel_combo)
                     combo.focus()
             except Exception as e:
-                print(f"[DEBUG] Error in double-click editing: {e}")
+                # print(f"[DEBUG] Error in double-click editing: {e}")
+                pass
         tree.bind('<Double-1>', on_double_click)
-        print("[DEBUG] Double-click binding added to treeview (category only)")
+        # print("[DEBUG] Double-click binding added to treeview (category only)")
     
     def _apply_final_data_changes(self, tree, dataframe, tab):
         """Apply changes made in the grid to the final DataFrame"""
@@ -2318,7 +2323,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             df = dataframe.copy()
             
             # Categories are already in pretty format - no conversion needed
-            print(f"[DEBUG] Exporting with categories: {df['category'].unique() if 'category' in df.columns else 'No category column'}")
+            # print(f"[DEBUG] Exporting with categories: {df['category'].unique() if 'category' in df.columns else 'No category column'}")
             
             # Ensure numeric columns are numbers (including comparison columns)
             for col in df.columns:
@@ -2377,7 +2382,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     
                     if is_comparison:
                         # Handle comparison dataset - create separate rows for each offer
-                        print("[DEBUG] Exporting comparison summary")
+                        # print("[DEBUG] Exporting comparison summary")
                         
                         # Find all offer columns
                         offer_columns = {}
@@ -2391,7 +2396,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                                     continue
                                 offer_columns[offer_name] = col
                         
-                        print(f"[DEBUG] Export found offer columns: {offer_columns}")
+                        # print(f"[DEBUG] Export found offer columns: {offer_columns}")
                         
                         if offer_columns:
                             # Write headers with formatting
@@ -2425,7 +2430,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                                         summary_ws.write_number(row_idx, col_idx, val, num_format)
                                 
                                 row_idx += 1
-                                print(f"[DEBUG] Exported summary row for {offer_name}")
+                                # print(f"[DEBUG] Exported summary row for {offer_name}")
                             
                             # Format columns
                             for i in range(len(summary_columns)):
@@ -2436,7 +2441,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     
                     else:
                         # Handle single offer dataset (original logic)
-                        print("[DEBUG] Exporting single offer summary")
+                        # print("[DEBUG] Exporting single offer summary")
                         
                         # Find the correct total price column
                         price_col = None
@@ -2514,9 +2519,9 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             messagebox.showerror("Error", "No analysis to save.")
             return
         
-        print(f"[DEBUG] Saving analysis with DataFrame shape: {df.shape}")
-        print(f"[DEBUG] DataFrame columns: {df.columns.tolist()}")
-        print(f"[DEBUG] DataFrame first few rows:")
+        # print(f"[DEBUG] Saving analysis with DataFrame shape: {df.shape}")
+        # print(f"[DEBUG] DataFrame columns: {df.columns.tolist()}")
+        # print(f"[DEBUG] DataFrame first few rows:")
         print(df.head().to_string())
         
         if df.empty:
@@ -2530,12 +2535,13 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         mapping_data = None
         if hasattr(tab, 'stored_mapping_data') and tab.stored_mapping_data is not None:
             mapping_data = tab.stored_mapping_data
-            print(f"[DEBUG] Including stored mapping data with {len(mapping_data.get('sheets', []))} sheets")
+            # print(f"[DEBUG] Including stored mapping data with {len(mapping_data.get('sheets', []))} sheets")
         else:
             # Try to extract mapping data
             mapping_data = self._extract_mapping_from_tab(tab)
             if mapping_data:
-                print(f"[DEBUG] Extracted mapping data with {len(mapping_data.get('sheets', []))} sheets")
+                # print(f"[DEBUG] Extracted mapping data with {len(mapping_data.get('sheets', []))} sheets")
+                pass
         
         # Get comparison information if available
         comparison_offers = getattr(tab, 'comparison_offers', None)
@@ -2561,7 +2567,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             try:
                 with open(file_path, 'wb') as f:
                     pickle.dump(save_data, f)
-                print(f"[DEBUG] Successfully saved analysis to {file_path}")
+                # print(f"[DEBUG] Successfully saved analysis to {file_path}")
                 
                 # Show detailed success message
                 details = [f"DataFrame: {df.shape[0]} rows, {df.shape[1]} columns"]
@@ -2575,7 +2581,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 self._update_status(f"Analysis saved to: {file_path}")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to save analysis: {str(e)}")
-                print(f"[DEBUG] Failed to save: {e}")
+                # print(f"[DEBUG] Failed to save: {e}")
                 import traceback
                 traceback.print_exc()
 
@@ -2591,7 +2597,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         # Ensure the final DataFrame in the mapping data is the most current version from the UI
         if hasattr(tab, 'final_dataframe') and tab.final_dataframe is not None:
             mappings_data['final_dataframe'] = tab.final_dataframe.copy()
-            print(f"[DEBUG] Saving updated final DataFrame with shape: {tab.final_dataframe.shape}")
+            # print(f"[DEBUG] Saving updated final DataFrame with shape: {tab.final_dataframe.shape}")
         
         # Add the current offer name, which might have been updated
         if hasattr(self, 'current_offer_name') and self.current_offer_name:
@@ -2622,7 +2628,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 with open(file_path, 'rb') as f:
                     loaded_data = pickle.load(f)
                 
-                print(f"[DEBUG] Loaded data type: {type(loaded_data)}")
+                # print(f"[DEBUG] Loaded data type: {type(loaded_data)}")
                 
                 # Handle both old format (just DataFrame) and new format (dictionary)
                 if isinstance(loaded_data, dict):
@@ -2633,11 +2639,11 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     is_comparison = loaded_data.get('is_comparison', False)
                     analysis_type = loaded_data.get('analysis_type', 'unknown')
                     
-                    print(f"[DEBUG] Enhanced format - DataFrame shape: {df.shape if df is not None else 'None'}")
-                    print(f"[DEBUG] Offer name: {self.current_offer_name}")
-                    print(f"[DEBUG] Has mapping data: {mapping_data is not None}")
-                    print(f"[DEBUG] Comparison offers: {comparison_offers}")
-                    print(f"[DEBUG] Is comparison: {is_comparison}")
+                    # print(f"[DEBUG] Enhanced format - DataFrame shape: {df.shape if df is not None else 'None'}")
+                    # print(f"[DEBUG] Offer name: {self.current_offer_name}")
+                    # print(f"[DEBUG] Has mapping data: {mapping_data is not None}")
+                    # print(f"[DEBUG] Comparison offers: {comparison_offers}")
+                    # print(f"[DEBUG] Is comparison: {is_comparison}")
                 else:
                     # Legacy format - just DataFrame
                     df = loaded_data
@@ -2646,11 +2652,11 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     comparison_offers = None
                     is_comparison = False
                     analysis_type = 'legacy'
-                    print(f"[DEBUG] Legacy format - DataFrame shape: {df.shape if df is not None else 'None'}")
+                    # print(f"[DEBUG] Legacy format - DataFrame shape: {df.shape if df is not None else 'None'}")
                 
                 if isinstance(df, pd.DataFrame) and not df.empty:
-                    print(f"[DEBUG] DataFrame columns: {df.columns.tolist()}")
-                    print(f"[DEBUG] DataFrame first few rows:")
+                    # print(f"[DEBUG] DataFrame columns: {df.columns.tolist()}")
+                    # print(f"[DEBUG] DataFrame first few rows:")
                     print(df.head().to_string())
                     
                     # Create a new tab for the loaded analysis
@@ -2668,11 +2674,11 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                         # Validate and fix position data integrity
                         self._validate_position_data_integrity(mapping_data)
                         tab.stored_mapping_data = mapping_data
-                        print(f"[DEBUG] Stored mapping data with {len(mapping_data.get('sheets', []))} sheets")
+                        # print(f"[DEBUG] Stored mapping data with {len(mapping_data.get('sheets', []))} sheets")
                     
                     if comparison_offers:
                         tab.comparison_offers = comparison_offers
-                        print(f"[DEBUG] Stored comparison offers: {comparison_offers}")
+                        # print(f"[DEBUG] Stored comparison offers: {comparison_offers}")
                     
                     # Show the data in the grid
                     self._show_final_categorized_data(tab, df, None)
@@ -2689,14 +2695,14 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     
                 elif isinstance(df, pd.DataFrame) and df.empty:
                     messagebox.showerror("Error", "The loaded analysis contains an empty DataFrame")
-                    print("[DEBUG] DataFrame is empty")
+                    # print("[DEBUG] DataFrame is empty")
                 else:
                     messagebox.showerror("Error", "Invalid analysis file format - no DataFrame found")
-                    print(f"[DEBUG] Invalid format - df type: {type(df)}")
+                    # print(f"[DEBUG] Invalid format - df type: {type(df)}")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to load analysis: {str(e)}")
                 logger.error(f"Failed to load analysis from {file_path}: {e}", exc_info=True)
-                print(f"[DEBUG] Exception loading analysis: {e}")
+                # print(f"[DEBUG] Exception loading analysis: {e}")
                 import traceback
                 traceback.print_exc()
 
@@ -2714,7 +2720,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             
             # Check if this is the first comparison (need to restructure master dataset)
             if not self._is_comparison_dataset(master_df):
-                print("[DEBUG] Converting master dataset to comparison format")
+                # print("[DEBUG] Converting master dataset to comparison format")
                 
                 # Extract and store mapping data before converting to comparison format
                 master_mapping = self._extract_mapping_from_tab(tab)
@@ -2765,7 +2771,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             self._process_comparison_file(tab, filename, new_offer_name, master_mapping)
             
         except Exception as e:
-            print(f"[DEBUG] Error in _compare_full: {e}")
+            # print(f"[DEBUG] Error in _compare_full: {e}")
             import traceback
             traceback.print_exc()
             messagebox.showerror("Error", f"Failed to start comparison: {str(e)}")
@@ -2793,20 +2799,23 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             self._validate_position_data_integrity(mapping_data)
                 
             self.saved_mapping = mapping_data
-            print(f"[DEBUG] Loaded mapping with {len(mapping_data['sheets'])} sheets")
+            # print(f"[DEBUG] Loaded mapping with {len(mapping_data['sheets'])} sheets")
             
             # Debug: Check if mapping contains final categorized data
             if 'final_dataframe' in mapping_data:
                 df = mapping_data['final_dataframe']
-                print(f"[DEBUG] Mapping contains final DataFrame with shape: {df.shape if df is not None else None}")
+                # print(f"[DEBUG] Mapping contains final DataFrame with shape: {df.shape if df is not None else None}")
                 if df is not None and 'category' in df.columns:
-                    print(f"[DEBUG] Final DataFrame has category column with {len(df)} rows")
+                    # print(f"[DEBUG] Final DataFrame has category column with {len(df)} rows")
+                    pass
                 else:
-                    print("[DEBUG] Final DataFrame missing category column")
+                    # print("[DEBUG] Final DataFrame missing category column")
+                    pass
             else:
-                print("[DEBUG] Mapping does NOT contain final DataFrame - will require categorization")
+                # print("[DEBUG] Mapping does NOT contain final DataFrame - will require categorization")
             
             # Step 2: Prompt for BOQ file to analyze
+                pass
             self._update_status("Mapping loaded. Please select a BOQ file to analyze.")
             
             # Prompt for offer name
@@ -2828,7 +2837,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load mapping: {str(e)}")
-            print(f"[DEBUG] Error loading mapping: {e}")
+            # print(f"[DEBUG] Error loading mapping: {e}")
             import traceback
             traceback.print_exc()
 
@@ -2858,8 +2867,8 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 processor.load_file(Path(filepath))
                 visible_sheets = processor.get_visible_sheets()
                 
-                print(f"[DEBUG] File has sheets: {visible_sheets}")
-                print(f"[DEBUG] Mapping expects sheets: {[s['sheet_name'] for s in mapping_data['sheets']]}")
+                # print(f"[DEBUG] File has sheets: {visible_sheets}")
+                # print(f"[DEBUG] Mapping expects sheets: {[s['sheet_name'] for s in mapping_data['sheets']]}")
                 
                 # Step 2: Validate sheets
                 mapping_sheets = {s['sheet_name'] for s in mapping_data['sheets']}
@@ -2884,7 +2893,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 self.root.after(0, lambda: self._apply_saved_mappings(tab, file_mapping, mapping_data, loading_label))
                 
             except Exception as e:
-                print(f"[DEBUG] Error in process_with_mapping: {e}")
+                # print(f"[DEBUG] Error in process_with_mapping: {e}")
                 import traceback
                 traceback.print_exc()
                 self.root.after(0, lambda: self._on_processing_error(tab, filename, loading_label))
@@ -2894,7 +2903,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
     def _apply_saved_mappings(self, tab, file_mapping, mapping_data, loading_widget):
         """Apply saved column and row mappings to the processed file with strict validation"""
         try:
-            print("[DEBUG] Applying saved mappings with strict validation...")
+            # print("[DEBUG] Applying saved mappings with strict validation...")
             
             # Apply column mappings and validate structure
             for sheet in file_mapping.sheets:
@@ -2905,7 +2914,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 if not saved_sheet:
                     continue
                 
-                print(f"[DEBUG] Validating structure for sheet: {sheet_name}")
+                # print(f"[DEBUG] Validating structure for sheet: {sheet_name}")
                 
                 # Strict validation: columns must match exactly
                 if not self._validate_exact_column_structure(sheet, saved_sheet):
@@ -2933,7 +2942,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 self._apply_exact_column_mappings(sheet, saved_sheet)
                 self._apply_exact_row_classifications(sheet, saved_sheet)
                 
-                print(f"[DEBUG] Sheet '{sheet_name}': Structure validated and mappings applied")
+                # print(f"[DEBUG] Sheet '{sheet_name}': Structure validated and mappings applied")
             
             # ENHANCED VALIDATION: Position-description validation for the entire file
             logger.info("Performing position-description validation for Use Mapping workflow...")
@@ -2966,7 +2975,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             messagebox.showinfo("Mapping Applied", success_msg)
             
         except Exception as e:
-            print(f"[DEBUG] Error applying mappings: {e}")
+            # print(f"[DEBUG] Error applying mappings: {e}")
             import traceback
             traceback.print_exc()
             messagebox.showerror("Error", f"Failed to apply mappings: {str(e)}")
@@ -2988,25 +2997,25 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     header = saved_mapping.get('original_header', '')
                     saved_headers.append(header)
             
-            print(f"[DEBUG] Current headers ({len(current_headers)}): {current_headers}")
-            print(f"[DEBUG] Saved headers ({len(saved_headers)}): {saved_headers}")
+            # print(f"[DEBUG] Current headers ({len(current_headers)}): {current_headers}")
+            # print(f"[DEBUG] Saved headers ({len(saved_headers)}): {saved_headers}")
             
             # Must have same number of columns
             if len(current_headers) != len(saved_headers):
-                print(f"[DEBUG] Column count mismatch: {len(current_headers)} vs {len(saved_headers)}")
+                # print(f"[DEBUG] Column count mismatch: {len(current_headers)} vs {len(saved_headers)}")
                 return False
             
             # Headers must match exactly (case-sensitive)
             for i, (current, saved) in enumerate(zip(current_headers, saved_headers)):
                 if current.strip() != saved.strip():
-                    print(f"[DEBUG] Header mismatch at position {i}: '{current}' vs '{saved}'")
+                    # print(f"[DEBUG] Header mismatch at position {i}: '{current}' vs '{saved}'")
                     return False
             
-            print("[DEBUG] Column structure validation passed")
+            # print("[DEBUG] Column structure validation passed")
             return True
             
         except Exception as e:
-            print(f"[DEBUG] Error validating column structure: {e}")
+            # print(f"[DEBUG] Error validating column structure: {e}")
             return False
 
     def _validate_exact_row_structure(self, sheet, saved_sheet):
@@ -3028,7 +3037,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                             saved_valid_rows.append(row_data)
                             saved_valid_indices.append(row_index)
             
-            print(f"[DEBUG] Saved mapping has {len(saved_valid_rows)} valid rows at indices: {saved_valid_indices[:10]}...")
+            # print(f"[DEBUG] Saved mapping has {len(saved_valid_rows)} valid rows at indices: {saved_valid_indices[:10]}...")
             
             # Get current row data for the same indices
             current_valid_rows = []
@@ -3052,12 +3061,12 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             current_valid_rows.sort(key=lambda x: x[0])
             current_row_data = [row_data for _, row_data in current_valid_rows]
             
-            print(f"[DEBUG] Current file has {len(current_row_data)} rows at the expected valid indices")
+            # print(f"[DEBUG] Current file has {len(current_row_data)} rows at the expected valid indices")
             
             # Must have same number of valid rows
             if len(current_row_data) != len(saved_valid_rows):
-                print(f"[DEBUG] Valid row count mismatch: {len(current_row_data)} vs {len(saved_valid_rows)}")
-                print(f"[DEBUG] Missing indices: {set(saved_valid_indices) - {idx for idx, _ in current_valid_rows}}")
+                # print(f"[DEBUG] Valid row count mismatch: {len(current_row_data)} vs {len(saved_valid_rows)}")
+                # print(f"[DEBUG] Missing indices: {set(saved_valid_indices) - {idx for idx, _ in current_valid_rows}}")
                 return False
             
             # Each valid row must match exactly
@@ -3076,19 +3085,19 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     mismatched_rows += 1
                     if mismatched_rows <= 3:  # Show first 3 mismatches for debugging
                         row_idx = saved_valid_indices[i] if i < len(saved_valid_indices) else i
-                        print(f"[DEBUG] Valid row {row_idx} mismatch:")
+                        # print(f"[DEBUG] Valid row {row_idx} mismatch:")
                         print(f"  Current: {current_normalized[:3]}...")
                         print(f"  Saved:   {saved_normalized[:3]}...")
             
             if mismatched_rows > 0:
-                print(f"[DEBUG] {mismatched_rows} valid rows don't match exactly")
+                # print(f"[DEBUG] {mismatched_rows} valid rows don't match exactly")
                 return False
             
-            print("[DEBUG] Row structure validation passed - all valid rows match")
+            # print("[DEBUG] Row structure validation passed - all valid rows match")
             return True
             
         except Exception as e:
-            print(f"[DEBUG] Error validating row structure: {e}")
+            # print(f"[DEBUG] Error validating row structure: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -3113,11 +3122,12 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     cm.mapped_type = saved_mapping.get('mapped_type', 'unknown')
                     cm.confidence = saved_mapping.get('confidence', 1.0)
                     cm.user_edited = saved_mapping.get('user_edited', True)
-                    print(f"[DEBUG] Applied exact mapping: {original_header} -> {cm.mapped_type}")
+                    # print(f"[DEBUG] Applied exact mapping: {original_header} -> {cm.mapped_type}")
             
         except Exception as e:
-            print(f"[DEBUG] Error applying column mappings: {e}")
+            # print(f"[DEBUG] Error applying column mappings: {e}")
 
+            pass
     def _apply_exact_row_classifications(self, sheet, saved_sheet):
         """Apply the saved row classifications exactly"""
         try:
@@ -3139,13 +3149,14 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                         row_index = getattr(current_rc, 'row_index', i)
                         self.row_validity[sheet_name][row_index] = is_valid
                         
-                        print(f"[DEBUG] Row {row_index}: {'Valid' if is_valid else 'Invalid'} (from saved mapping)")
+                        # print(f"[DEBUG] Row {row_index}: {'Valid' if is_valid else 'Invalid'} (from saved mapping)")
             
-            print(f"[DEBUG] Applied exact row classifications for {len(self.row_validity[sheet_name])} rows")
+            # print(f"[DEBUG] Applied exact row classifications for {len(self.row_validity[sheet_name])} rows")
             
         except Exception as e:
-            print(f"[DEBUG] Error applying row classifications: {e}")
+            # print(f"[DEBUG] Error applying row classifications: {e}")
 
+            pass
     def _show_mapped_file_review(self, tab, file_mapping, mapping_data):
         """Show the file with applied mappings in Row Review mode"""
         try:
@@ -3192,7 +3203,7 @@ Review the rows below and adjust validity as needed."""
             self.tab_id_to_file_mapping[tab_id] = file_mapping
             
         except Exception as e:
-            print(f"[DEBUG] Error showing mapped file review: {e}")
+            # print(f"[DEBUG] Error showing mapped file review: {e}")
             import traceback
             traceback.print_exc()
 
@@ -3375,26 +3386,29 @@ Review the rows below and adjust validity as needed."""
         
         comparison_df = comparison_df[ordered_columns]
         
-        print(f"[DEBUG] Converted to comparison format with columns: {comparison_df.columns.tolist()}")
+        # print(f"[DEBUG] Converted to comparison format with columns: {comparison_df.columns.tolist()}")
         return comparison_df
     
     def _update_comparison_display(self, tab, comparison_df):
         """Update the display to show the comparison DataFrame"""
         # Debug: Check if unit column exists in comparison DataFrame
-        print(f"[DEBUG] _update_comparison_display: DataFrame columns: {comparison_df.columns.tolist()}")
+        # print(f"[DEBUG] _update_comparison_display: DataFrame columns: {comparison_df.columns.tolist()}")
         if 'unit' in comparison_df.columns:
             unit_values = comparison_df['unit'].value_counts()
             empty_units = comparison_df['unit'].isna().sum() + (comparison_df['unit'] == '').sum()
             total_rows = len(comparison_df)
-            print(f"[DEBUG] Unit column: {total_rows - empty_units}/{total_rows} values populated")
+            # print(f"[DEBUG] Unit column: {total_rows - empty_units}/{total_rows} values populated")
             if total_rows - empty_units > 0:
-                print(f"[DEBUG] ✅ Unit values found: {unit_values.to_dict()}")
+                # print(f"[DEBUG] ✅ Unit values found: {unit_values.to_dict()}")
+                pass
             else:
-                print(f"[DEBUG] ❌ All unit values are empty!")
+                # print(f"[DEBUG] ❌ All unit values are empty!")
+                pass
         else:
-            print(f"[DEBUG] ❌ Unit column missing from comparison DataFrame!")
+            # print(f"[DEBUG] ❌ Unit column missing from comparison DataFrame!")
         
         # Update the treeview with new columns
+            pass
         if hasattr(tab, 'final_data_tree'):
             tree = tab.final_data_tree
             
@@ -3415,7 +3429,7 @@ Review the rows below and adjust validity as needed."""
             if hasattr(tab, 'user_column_widths'):
                 for col, width in tab.user_column_widths.items():
                     current_widths[col] = width
-                print(f"[DEBUG] Restored {len(tab.user_column_widths)} user column widths from tab")
+                # print(f"[DEBUG] Restored {len(tab.user_column_widths)} user column widths from tab")
             
             # Initialize user column widths storage if not exists
             if not hasattr(tab, 'user_column_widths'):
@@ -3428,11 +3442,11 @@ Review the rows below and adjust validity as needed."""
             required_base_columns = ['sheet', 'category', 'code', 'description', 'unit']
             for req_col in required_base_columns:
                 if req_col not in new_columns and req_col not in comparison_df.columns:
-                    print(f"[DEBUG] Adding missing required column: {req_col}")
+                    # print(f"[DEBUG] Adding missing required column: {req_col}")
                     comparison_df[req_col] = ''  # Add empty column
                     new_columns.append(req_col)
                 elif req_col in comparison_df.columns and req_col not in new_columns:
-                    print(f"[DEBUG] Adding existing column to display: {req_col}")
+                    # print(f"[DEBUG] Adding existing column to display: {req_col}")
                     new_columns.append(req_col)
             
             # CRITICAL FIX: Use DataFrame column order directly to avoid column misalignment
@@ -3459,7 +3473,7 @@ Review the rows below and adjust validity as needed."""
                 if col in current_widths:
                     # Use previously set width (user may have resized)
                     width = current_widths[col]
-                    print(f"[DEBUG] Preserving user width for {col}: {width}px")
+                    # print(f"[DEBUG] Preserving user width for {col}: {width}px")
                 elif col == 'description':
                     # Description column gets fixed width due to long text
                     width = 250
@@ -3507,7 +3521,7 @@ Review the rows below and adjust validity as needed."""
                             current_width = tree.column(col, 'width')
                             if current_width != width and abs(current_width - width) > 5:  # Only restore if significant difference
                                 tree.column(col, width=width, minwidth=50)
-                                print(f"[DEBUG] Restored column {col} width to {width}px (was {current_width}px)")
+                                # print(f"[DEBUG] Restored column {col} width to {width}px (was {current_width}px)")
                         except:
                             pass
                 return "break"  # Prevent further event processing
@@ -3538,12 +3552,13 @@ Review the rows below and adjust validity as needed."""
                                 resize_state['start_x'] = event.x
                                 resize_state['original_width'] = tree.column(resize_state['resize_column'], 'width')
                                 resize_state['prevent_auto_resize'] = True
-                                print(f"[DEBUG] Started resizing column {resize_state['resize_column']} from {resize_state['original_width']}px")
+                                # print(f"[DEBUG] Started resizing column {resize_state['resize_column']} from {resize_state['original_width']}px")
                                 return "break"  # Prevent default behavior
                 except Exception as e:
-                    print(f"[DEBUG] Error in button press: {e}")
+                    # print(f"[DEBUG] Error in button press: {e}")
                 
                 # Not a resize operation, allow normal processing
+                    pass
                 resize_state['prevent_auto_resize'] = False
                 return None
             
@@ -3566,10 +3581,11 @@ Review the rows below and adjust validity as needed."""
                             tab.user_column_widths = {}
                         tab.user_column_widths[resize_state['resize_column']] = new_width
                         
-                        print(f"[DEBUG] Resizing column {resize_state['resize_column']} to {new_width}px")
+                        # print(f"[DEBUG] Resizing column {resize_state['resize_column']} to {new_width}px")
                         return "break"
                     except Exception as e:
-                        print(f"[DEBUG] Error in motion: {e}")
+                        # print(f"[DEBUG] Error in motion: {e}")
+                        pass
                 return None 
             
             def on_button_release(event):
@@ -3584,7 +3600,7 @@ Review the rows below and adjust validity as needed."""
                             tab.user_column_widths = {}
                         tab.user_column_widths[col] = final_width
                         
-                        print(f"[DEBUG] Finished resizing column {col} to {final_width}px - saved preference")
+                        # print(f"[DEBUG] Finished resizing column {col} to {final_width}px - saved preference")
                         
                         # Reset resize state
                         resize_state['resizing'] = False
@@ -3595,8 +3611,9 @@ Review the rows below and adjust validity as needed."""
                         
                         return "break"
                     except Exception as e:
-                        print(f"[DEBUG] Error in button release: {e}")
+                        # print(f"[DEBUG] Error in button release: {e}")
                 
+                        pass
                 resize_state['prevent_auto_resize'] = False
                 return None
             
@@ -3635,7 +3652,7 @@ Review the rows below and adjust validity as needed."""
                 tree.column = patched_column
                 tree._column_patched = True
         
-        print(f"[DEBUG] Updated comparison display with {len(comparison_df)} rows and {len(comparison_df.columns)} columns")
+        # print(f"[DEBUG] Updated comparison display with {len(comparison_df)} rows and {len(comparison_df.columns)} columns")
     
     def _calculate_column_width(self, df, column_name, display_name):
         """Calculate optimal column width based on content and header"""
@@ -3664,7 +3681,7 @@ Review the rows below and adjust validity as needed."""
         
         # Measure header width with proper font
         header_width = font.measure(display_name)
-        print(f"[DEBUG] Header '{display_name}' width: {header_width}px")
+        # print(f"[DEBUG] Header '{display_name}' width: {header_width}px")
         
         # Check content width (sample first 100 rows for performance)
         max_content_width = 0
@@ -3677,7 +3694,7 @@ Review the rows below and adjust validity as needed."""
                     content_width = font.measure(str(value))
                     max_content_width = max(max_content_width, content_width)
         
-        print(f"[DEBUG] Column '{column_name}' max content width: {max_content_width}px")
+        # print(f"[DEBUG] Column '{column_name}' max content width: {max_content_width}px")
         
         # Calculate optimal width (ensure header is fully visible + padding)
         optimal_width = max(header_width + 30, max_content_width + 20)  # Extra padding for header
@@ -3687,7 +3704,7 @@ Review the rows below and adjust validity as needed."""
         max_width = 400  # Increased maximum for better visibility
         
         final_width = max(min_width, min(optimal_width, max_width))
-        print(f"[DEBUG] Column '{column_name}' final width: {final_width}px")
+        # print(f"[DEBUG] Column '{column_name}' final width: {final_width}px")
         
         return final_width
     
@@ -3695,7 +3712,7 @@ Review the rows below and adjust validity as needed."""
         """Extract mapping information from the current tab for reuse"""
         # First, check if we already have stored mapping data in the tab (for comparison datasets)
         if hasattr(tab, 'stored_mapping_data') and tab.stored_mapping_data is not None:
-            print("[DEBUG] Using stored mapping data from tab")
+            # print("[DEBUG] Using stored mapping data from tab")
             return tab.stored_mapping_data
         
         # Try to find the file mapping for this tab (for original datasets)
@@ -3733,11 +3750,11 @@ Review the rows below and adjust validity as needed."""
                 
                 # Store the mapping data in the tab for future use
                 tab.stored_mapping_data = mapping_data
-                print("[DEBUG] Extracted and stored mapping data from file_mapping")
+                # print("[DEBUG] Extracted and stored mapping data from file_mapping")
                 return mapping_data
         
         # If no file mapping found, return None
-        print("[DEBUG] Could not extract mapping from tab - no file mapping found")
+        # print("[DEBUG] Could not extract mapping from tab - no file mapping found")
         return None
     
     def _process_comparison_file(self, master_tab, filepath, new_offer_name, master_mapping):
@@ -3754,8 +3771,8 @@ Review the rows below and adjust validity as needed."""
                 processor.load_file(Path(filepath))
                 visible_sheets = processor.get_visible_sheets()
                 
-                print(f"[DEBUG] Comparison file has sheets: {visible_sheets}")
-                print(f"[DEBUG] Master mapping expects sheets: {[s['sheet_name'] for s in master_mapping['sheets']]}")
+                # print(f"[DEBUG] Comparison file has sheets: {visible_sheets}")
+                # print(f"[DEBUG] Master mapping expects sheets: {[s['sheet_name'] for s in master_mapping['sheets']]}")
                 
                 # Step 2: Validate sheets match exactly
                 mapping_sheets = {s['sheet_name'] for s in master_mapping['sheets']}
@@ -3779,7 +3796,7 @@ Review the rows below and adjust validity as needed."""
                 self.root.after(0, lambda: self._apply_mapping_and_merge(master_tab, file_mapping, master_mapping, new_offer_name))
                 
             except Exception as e:
-                print(f"[DEBUG] Error in process_comparison_file: {e}")
+                # print(f"[DEBUG] Error in process_comparison_file: {e}")
                 import traceback
                 traceback.print_exc()
                 self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to process comparison file: {str(e)}"))
@@ -3789,7 +3806,7 @@ Review the rows below and adjust validity as needed."""
     def _apply_mapping_and_merge(self, master_tab, file_mapping, master_mapping, new_offer_name):
         """Apply master mapping to new file and merge with comparison dataset"""
         try:
-            print(f"[DEBUG] Applying master mapping and merging for offer: {new_offer_name}")
+            # print(f"[DEBUG] Applying master mapping and merging for offer: {new_offer_name}")
             
             # ENHANCED VALIDATION: Position-description validation before applying mappings
             logger.info("Performing position-description validation for Compare Full workflow...")
@@ -3824,39 +3841,43 @@ Review the rows below and adjust validity as needed."""
             # Debug: Check if new DataFrame has unit column with values
             if 'unit' in new_df.columns:
                 unit_values = new_df['unit'].value_counts()
-                print(f"[DEBUG] New DataFrame unit values: {unit_values.to_dict()}")
+                # print(f"[DEBUG] New DataFrame unit values: {unit_values.to_dict()}")
                 empty_units = (new_df['unit'] == '') | (new_df['unit'].isna())
                 if empty_units.any():
-                    print(f"[DEBUG] WARNING: New DataFrame has {empty_units.sum()} empty unit values!")
+                    # print(f"[DEBUG] WARNING: New DataFrame has {empty_units.sum()} empty unit values!")
+                    pass
             else:
-                print(f"[DEBUG] CRITICAL: New DataFrame missing unit column!")
+                # print(f"[DEBUG] CRITICAL: New DataFrame missing unit column!")
             
             # Apply categories from master mapping
+                pass
             new_df = self._apply_categories_from_mapping(new_df, master_mapping)
             
             # Merge with the master comparison dataset
             master_df = master_tab.final_dataframe
             
             # Debug: Check master DF state before merge
-            print(f"[DEBUG] Before merge - Master DF shape: {master_df.shape}")
-            print(f"[DEBUG] Before merge - Master DF columns: {master_df.columns.tolist()}")
+            # print(f"[DEBUG] Before merge - Master DF shape: {master_df.shape}")
+            # print(f"[DEBUG] Before merge - Master DF columns: {master_df.columns.tolist()}")
             if 'unit' in master_df.columns:
                 master_unit_values = master_df['unit'].value_counts()
-                print(f"[DEBUG] Before merge - Master DF unit values: {master_unit_values.to_dict()}")
+                # print(f"[DEBUG] Before merge - Master DF unit values: {master_unit_values.to_dict()}")
             if 'total_price' in master_df.columns:
-                print(f"[DEBUG] Before merge - Master DF total_price sum: {master_df['total_price'].sum()}")
+                # print(f"[DEBUG] Before merge - Master DF total_price sum: {master_df['total_price'].sum()}")
             
+                pass
             merged_df = self._merge_comparison_datasets(master_df, new_df, new_offer_name)
             
             # Debug: Check master DF state after merge (should be unchanged)
-            print(f"[DEBUG] After merge - Master DF shape: {master_df.shape}")
-            print(f"[DEBUG] After merge - Master DF columns: {master_df.columns.tolist()}")
+            # print(f"[DEBUG] After merge - Master DF shape: {master_df.shape}")
+            # print(f"[DEBUG] After merge - Master DF columns: {master_df.columns.tolist()}")
             if 'total_price' in master_df.columns:
-                print(f"[DEBUG] After merge - Master DF total_price sum: {master_df['total_price'].sum()}")
-            print(f"[DEBUG] After merge - Merged DF shape: {merged_df.shape}")
-            print(f"[DEBUG] After merge - Merged DF columns: {merged_df.columns.tolist()}")
+                # print(f"[DEBUG] After merge - Master DF total_price sum: {master_df['total_price'].sum()}")
+            # print(f"[DEBUG] After merge - Merged DF shape: {merged_df.shape}")
+            # print(f"[DEBUG] After merge - Merged DF columns: {merged_df.columns.tolist()}")
             
             # Update the master tab
+                pass
             master_tab.final_dataframe = merged_df
             if not hasattr(master_tab, 'comparison_offers'):
                 master_tab.comparison_offers = []
@@ -3873,7 +3894,7 @@ Review the rows below and adjust validity as needed."""
             messagebox.showinfo("Success", f"BOQ '{new_offer_name}' has been added to the comparison dataset!")
             
         except Exception as e:
-            print(f"[DEBUG] Error in _apply_mapping_and_merge: {e}")
+            # print(f"[DEBUG] Error in _apply_mapping_and_merge: {e}")
             import traceback
             traceback.print_exc()
             messagebox.showerror("Error", f"Failed to merge comparison data: {str(e)}")
@@ -3902,17 +3923,18 @@ Review the rows below and adjust validity as needed."""
                     col_position_to_type[cm.column_index] = cm.mapped_type
             
             # Debug: Check column mapping structure
-            print(f"[DEBUG] Sheet {sheet_name} column position mapping: {col_position_to_type}")
+            # print(f"[DEBUG] Sheet {sheet_name} column position mapping: {col_position_to_type}")
             unit_position = None
             for pos, mapped_type in col_position_to_type.items():
                 if mapped_type == 'unit':
                     unit_position = pos
-                    print(f"[DEBUG] Unit column found at Excel position {pos}")
+                    # print(f"[DEBUG] Unit column found at Excel position {pos}")
                     break
             if unit_position is None:
-                print(f"[DEBUG] WARNING: Unit column not found in mappings for sheet {sheet_name}!")
+                # print(f"[DEBUG] WARNING: Unit column not found in mappings for sheet {sheet_name}!")
             
             # Get row classifications and sort them by row_index to maintain consistent order
+                pass
             row_classifications = sorted(getattr(sheet, 'row_classifications', []), key=lambda rc: rc.row_index)
             
             # Use the same validity logic as the original processing
@@ -3951,14 +3973,15 @@ Review the rows below and adjust validity as needed."""
                             value = ''
                     # Debug unit column specifically - CRITICAL DEBUGGING
                     if mapped_type == 'unit':
-                        print(f"[DEBUG] ⚠️  Unit extraction for row {rc.row_index}:")
-                        print(f"[DEBUG]   Position: {col_position}")
-                        print(f"[DEBUG]   Row data length: {len(row_data)}")
-                        print(f"[DEBUG]   Raw value: '{value}' (type: {type(value)})")
-                        print(f"[DEBUG]   Full row data: {row_data}")
+                        # print(f"[DEBUG] ⚠️  Unit extraction for row {rc.row_index}:")
+                        # print(f"[DEBUG]   Position: {col_position}")
+                        # print(f"[DEBUG]   Row data length: {len(row_data)}")
+                        # print(f"[DEBUG]   Raw value: '{value}' (type: {type(value)})")
+                        # print(f"[DEBUG]   Full row data: {row_data}")
                         # Check if this looks like a valid unit value
                         if value in ['Quantity', 'quantity', 'Description', 'description', 'Code', 'code']:
-                            print(f"[DEBUG] ❌ INVALID UNIT VALUE DETECTED: '{value}' - This suggests column mapping is wrong!")
+                            # print(f"[DEBUG] ❌ INVALID UNIT VALUE DETECTED: '{value}' - This suggests column mapping is wrong!")
+                            pass
                     row_dict[mapped_type] = value
                 
                 # Add sheet name with consistent column name
@@ -3999,17 +4022,20 @@ Review the rows below and adjust validity as needed."""
             if 'unit' in df.columns:
                 unit_values = df['unit'].value_counts()
                 empty_units = df['unit'].isna().sum() + (df['unit'] == '').sum()
-                print(f"[DEBUG] _build_dataframe_from_mapping FINAL unit check:")
-                print(f"[DEBUG]   Unit values: {unit_values.to_dict()}")
-                print(f"[DEBUG]   Empty units: {empty_units}/{len(df)}")
+                # print(f"[DEBUG] _build_dataframe_from_mapping FINAL unit check:")
+                # print(f"[DEBUG]   Unit values: {unit_values.to_dict()}")
+                # print(f"[DEBUG]   Empty units: {empty_units}/{len(df)}")
                 if empty_units == len(df):
-                    print(f"[DEBUG] ❌ CRITICAL: ALL UNIT VALUES ARE EMPTY in _build_dataframe_from_mapping!")
+                    # print(f"[DEBUG] ❌ CRITICAL: ALL UNIT VALUES ARE EMPTY in _build_dataframe_from_mapping!")
+                    pass
                 else:
-                    print(f"[DEBUG] ✅ Unit values exist in _build_dataframe_from_mapping")
+                    # print(f"[DEBUG] ✅ Unit values exist in _build_dataframe_from_mapping")
+                    pass
             else:
-                print(f"[DEBUG] ❌ CRITICAL: Unit column MISSING in _build_dataframe_from_mapping!")
+                # print(f"[DEBUG] ❌ CRITICAL: Unit column MISSING in _build_dataframe_from_mapping!")
             
-            print(f"[DEBUG] Built DataFrame with {len(df)} rows and columns: {df.columns.tolist()}")
+            # print(f"[DEBUG] Built DataFrame with {len(df)} rows and columns: {df.columns.tolist()}")
+                pass
             return df
         else:
             # Return empty DataFrame with consistent structure (including new columns)
@@ -4038,7 +4064,7 @@ Review the rows below and adjust validity as needed."""
                     lambda x: category_mapping.get(str(x).strip().lower(), '')
                 )
                 
-                print(f"[DEBUG] Applied categories to {len(df)} rows, {(df['category'] != '').sum()} matched")
+                # print(f"[DEBUG] Applied categories to {len(df)} rows, {(df['category'] != '').sum()} matched")
         
         return df
     
@@ -4046,7 +4072,7 @@ Review the rows below and adjust validity as needed."""
         """Merge the new dataset with the master comparison dataset"""
         import pandas as pd
         
-        print(f"[DEBUG] Starting merge - Master DF shape: {master_df.shape}, New DF shape: {new_df.shape}")
+        # print(f"[DEBUG] Starting merge - Master DF shape: {master_df.shape}, New DF shape: {new_df.shape}")
         
         # CRITICAL FIX: Create copies to avoid modifying the original DataFrames
         master_df_copy = master_df.copy()
@@ -4054,13 +4080,13 @@ Review the rows below and adjust validity as needed."""
         
         # ROW ORDER PRESERVATION: Store original order from master DataFrame
         master_df_copy['_original_order'] = range(len(master_df_copy))
-        print(f"[DEBUG] Row order preservation: Stored original order for {len(master_df_copy)} rows")
+        # print(f"[DEBUG] Row order preservation: Stored original order for {len(master_df_copy)} rows")
         
         # Reset indices to ensure clean merging
         master_df_copy = master_df_copy.reset_index(drop=True)
         new_df_copy = new_df_copy.reset_index(drop=True)
         
-        print(f"[DEBUG] After reset - Master DF shape: {master_df_copy.shape}, New DF shape: {new_df_copy.shape}")
+        # print(f"[DEBUG] After reset - Master DF shape: {master_df_copy.shape}, New DF shape: {new_df_copy.shape}")
         
         # Create composite keys for exact matching - use ALL identifying columns
         def create_key(df):
@@ -4074,7 +4100,7 @@ Review the rows below and adjust validity as needed."""
                     # Debug: Check if unit column has values
                     if col == 'unit':
                         unique_units = values.unique()
-                        print(f"[DEBUG] Unit values in key creation: {unique_units[:10]}...")  # Show first 10
+                        # print(f"[DEBUG] Unit values in key creation: {unique_units[:10]}...")  # Show first 10
                 else:
                     key_parts.append(pd.Series([''] * len(df)))
             
@@ -4082,52 +4108,56 @@ Review the rows below and adjust validity as needed."""
             return key_parts[0] + '|' + key_parts[1] + '|' + key_parts[2] + '|' + key_parts[3] + '|' + key_parts[4]
         
         # Debug: Show unique sheet names in both datasets
-        print(f"[DEBUG] Master dataset sheets: {sorted(master_df_copy['sheet'].unique())}")
-        print(f"[DEBUG] New dataset sheets: {sorted(new_df_copy['sheet'].unique())}")
+        # print(f"[DEBUG] Master dataset sheets: {sorted(master_df_copy['sheet'].unique())}")
+        # print(f"[DEBUG] New dataset sheets: {sorted(new_df_copy['sheet'].unique())}")
         
         # Check if sheet names match
         master_sheets = set(master_df_copy['sheet'].unique())
         new_sheets = set(new_df_copy['sheet'].unique())
         if master_sheets != new_sheets:
-            print(f"[DEBUG] WARNING: Sheet names don't match!")
-            print(f"[DEBUG] Sheets only in master: {master_sheets - new_sheets}")
-            print(f"[DEBUG] Sheets only in new: {new_sheets - master_sheets}")
+            # print(f"[DEBUG] WARNING: Sheet names don't match!")
+            # print(f"[DEBUG] Sheets only in master: {master_sheets - new_sheets}")
+            # print(f"[DEBUG] Sheets only in new: {new_sheets - master_sheets}")
+            pass
         else:
-            print(f"[DEBUG] Sheet names match perfectly!")
+            # print(f"[DEBUG] Sheet names match perfectly!")
+            pass
         
         # Add keys to the COPIES, not the originals
         master_df_copy['_key'] = create_key(master_df_copy)
         new_df_copy['_key'] = create_key(new_df_copy)
         
-        print(f"[DEBUG] Master unique keys: {master_df_copy['_key'].nunique()}")
-        print(f"[DEBUG] New unique keys: {new_df_copy['_key'].nunique()}")
-        print(f"[DEBUG] Common keys: {len(set(master_df_copy['_key']) & set(new_df_copy['_key']))}")
+        # print(f"[DEBUG] Master unique keys: {master_df_copy['_key'].nunique()}")
+        # print(f"[DEBUG] New unique keys: {new_df_copy['_key'].nunique()}")
+        # print(f"[DEBUG] Common keys: {len(set(master_df_copy['_key']) & set(new_df_copy['_key']))}")
         
         # CRITICAL: Check for duplicate keys within each dataset
         master_duplicates = master_df_copy[master_df_copy['_key'].duplicated(keep=False)]
         new_duplicates = new_df_copy[new_df_copy['_key'].duplicated(keep=False)]
         
         if len(master_duplicates) > 0:
-            print(f"[DEBUG] WARNING: Found {len(master_duplicates)} duplicate keys in MASTER dataset!")
+            # print(f"[DEBUG] WARNING: Found {len(master_duplicates)} duplicate keys in MASTER dataset!")
             duplicate_keys = master_duplicates['_key'].unique()
             for dup_key in duplicate_keys[:3]:  # Show first 3 examples
                 dup_rows = master_df_copy[master_df_copy['_key'] == dup_key]
-                print(f"[DEBUG] Master duplicate key '{dup_key}' appears {len(dup_rows)} times:")
+                # print(f"[DEBUG] Master duplicate key '{dup_key}' appears {len(dup_rows)} times:")
                 for idx, row in dup_rows.iterrows():
-                    print(f"[DEBUG]   Row {idx}: sheet='{row.get('sheet', '')}', code='{row.get('code', '')}', desc='{str(row.get('description', ''))[:50]}...'")
+                    # print(f"[DEBUG]   Row {idx}: sheet='{row.get('sheet', '')}', code='{row.get('code', '')}', desc='{str(row.get('description', ''))[:50]}...'")
         
+                    pass
         if len(new_duplicates) > 0:
-            print(f"[DEBUG] WARNING: Found {len(new_duplicates)} duplicate keys in NEW dataset!")
+            # print(f"[DEBUG] WARNING: Found {len(new_duplicates)} duplicate keys in NEW dataset!")
             duplicate_keys = new_duplicates['_key'].unique()
             for dup_key in duplicate_keys[:3]:  # Show first 3 examples
                 dup_rows = new_df_copy[new_df_copy['_key'] == dup_key]
-                print(f"[DEBUG] New duplicate key '{dup_key}' appears {len(dup_rows)} times:")
+                # print(f"[DEBUG] New duplicate key '{dup_key}' appears {len(dup_rows)} times:")
                 for idx, row in dup_rows.iterrows():
-                    print(f"[DEBUG]   Row {idx}: sheet='{row.get('sheet', '')}', code='{row.get('code', '')}', desc='{str(row.get('description', ''))[:50]}...'")
+                    # print(f"[DEBUG]   Row {idx}: sheet='{row.get('sheet', '')}', code='{row.get('code', '')}', desc='{str(row.get('description', ''))[:50]}...'")
         
         # Handle duplicate keys by using row position within each unique key group
+                    pass
         if not master_duplicates.empty or not new_duplicates.empty:
-            print(f"[DEBUG] Making keys unique by adding row position within duplicate groups...")
+            # print(f"[DEBUG] Making keys unique by adding row position within duplicate groups...")
             
             # Use a robust method to create unique keys using groupby and cumcount
             def create_unique_keys_with_position(df):
@@ -4148,19 +4178,20 @@ Review the rows below and adjust validity as needed."""
                         df_with_pos['_row_num'] = df_with_pos['Position'].str.extract(r'_(\d+)$')[0].astype(int)
                         df_with_pos = df_with_pos.sort_values('_row_num').reset_index(drop=True)
                         df_with_pos = df_with_pos.drop(columns=['_row_num'])
-                        print(f"[DEBUG] Row order preservation: Sorted by Position field to maintain Excel row order")
+                        # print(f"[DEBUG] Row order preservation: Sorted by Position field to maintain Excel row order")
                     except Exception as e:
-                        print(f"[DEBUG] Row order preservation: Could not sort by Position field: {e}")
+                        # print(f"[DEBUG] Row order preservation: Could not sort by Position field: {e}")
                         # Fallback: preserve original order by not sorting
                         pass
                 elif '_original_order' in df_with_pos.columns:
                     # Fallback: sort by original order
                     df_with_pos = df_with_pos.sort_values('_original_order').reset_index(drop=True)
-                    print(f"[DEBUG] Row order preservation: Sorted by original order")
+                    # print(f"[DEBUG] Row order preservation: Sorted by original order")
                 else:
-                    print(f"[DEBUG] Row order preservation: No Position or original order field found, preserving current order")
+                    # print(f"[DEBUG] Row order preservation: No Position or original order field found, preserving current order")
                 
                 # Drop the temporary position column
+                    pass
                 df_with_pos = df_with_pos.drop(columns=['_pos'])
                 return df_with_pos
 
@@ -4186,8 +4217,8 @@ Review the rows below and adjust validity as needed."""
         
         # Create a mapping from key to new offer values
         new_offer_mapping = {}
-        print(f"[DEBUG] New DataFrame columns: {new_df_copy.columns.tolist()}")
-        print(f"[DEBUG] Looking for columns: {list(new_columns.keys())}")
+        # print(f"[DEBUG] New DataFrame columns: {new_df_copy.columns.tolist()}")
+        # print(f"[DEBUG] Looking for columns: {list(new_columns.keys())}")
         
         for idx, row in new_df_copy.iterrows():
             key = row[key_column]  # Use the unique key
@@ -4198,66 +4229,72 @@ Review the rows below and adjust validity as needed."""
                     values[new_col] = value
                     # Debug first few rows
                     if idx < 3:
-                        print(f"[DEBUG] Row {idx}: {old_col} = {value} (type: {type(value)})")
+                        # print(f"[DEBUG] Row {idx}: {old_col} = {value} (type: {type(value)})")
+                        pass
                 else:
                     values[new_col] = 0
                     if idx < 3:
-                        print(f"[DEBUG] Row {idx}: {old_col} NOT FOUND, using 0")
+                        # print(f"[DEBUG] Row {idx}: {old_col} NOT FOUND, using 0")
+                        pass
             new_offer_mapping[key] = values
         
-        print(f"[DEBUG] Created mapping for {len(new_offer_mapping)} unique keys")
+        # print(f"[DEBUG] Created mapping for {len(new_offer_mapping)} unique keys")
         
         # Debug: Show a sample of the mapping
         sample_keys = list(new_offer_mapping.keys())[:3]
         for sample_key in sample_keys:
-            print(f"[DEBUG] Sample mapping '{sample_key}': {new_offer_mapping[sample_key]}")
+            # print(f"[DEBUG] Sample mapping '{sample_key}': {new_offer_mapping[sample_key]}")
         
         # Check for exact match in structure using unique keys
+            pass
         master_unique_keys = set(master_df_copy[key_column])
         new_unique_keys = set(new_df_copy[key_column])
         
         if master_unique_keys != new_unique_keys:
-            print(f"[DEBUG] WARNING: Unique key sets don't match exactly!")
-            print(f"[DEBUG] Keys only in master: {len(master_unique_keys - new_unique_keys)}")
-            print(f"[DEBUG] Keys only in new: {len(new_unique_keys - master_unique_keys)}")
+            # print(f"[DEBUG] WARNING: Unique key sets don't match exactly!")
+            # print(f"[DEBUG] Keys only in master: {len(master_unique_keys - new_unique_keys)}")
+            # print(f"[DEBUG] Keys only in new: {len(new_unique_keys - master_unique_keys)}")
             
             # Show some examples of mismatched keys
             only_in_master = list(master_unique_keys - new_unique_keys)[:3]
             only_in_new = list(new_unique_keys - master_unique_keys)[:3]
-            print(f"[DEBUG] Sample keys only in master: {only_in_master}")
-            print(f"[DEBUG] Sample keys only in new: {only_in_new}")
+            # print(f"[DEBUG] Sample keys only in master: {only_in_master}")
+            # print(f"[DEBUG] Sample keys only in new: {only_in_new}")
         else:
-            print(f"[DEBUG] PERFECT MATCH: All unique keys match exactly! This is expected for the same offer.")
+            # print(f"[DEBUG] PERFECT MATCH: All unique keys match exactly! This is expected for the same offer.")
         
         # Start with the master DataFrame structure
+            pass
         merged_df = master_df_copy.copy()
         
         # Debug: Check if unit column exists and has values before merge
         if 'unit' in merged_df.columns:
             unit_values_before = merged_df['unit'].value_counts()
-            print(f"[DEBUG] Unit column before merge - unique values: {unit_values_before.to_dict()}")
+            # print(f"[DEBUG] Unit column before merge - unique values: {unit_values_before.to_dict()}")
         else:
-            print(f"[DEBUG] WARNING: Unit column not found in master DataFrame!")
+            # print(f"[DEBUG] WARNING: Unit column not found in master DataFrame!")
         
         # CRITICAL FIX: Preserve unit column values during merge
         # Store the unit column values from the ORIGINAL master DataFrame (not the processed copy)
+            pass
         unit_backup = None
         if 'unit' in master_df.columns:
             unit_backup = master_df['unit'].copy()
-            print(f"[DEBUG] Backed up unit column from ORIGINAL master DataFrame with {len(unit_backup)} values")
+            # print(f"[DEBUG] Backed up unit column from ORIGINAL master DataFrame with {len(unit_backup)} values")
             original_unit_values = master_df['unit'].value_counts()
-            print(f"[DEBUG] Original unit values: {original_unit_values.to_dict()}")
+            # print(f"[DEBUG] Original unit values: {original_unit_values.to_dict()}")
             
             # Check for invalid unit values in the original master DataFrame
             invalid_master_units = master_df[master_df['unit'].isin(['Quantity', 'quantity', 'Description', 'description', 'Code', 'code'])]
             if len(invalid_master_units) > 0:
-                print(f"[DEBUG] ⚠️  CRITICAL: Original master DataFrame contains {len(invalid_master_units)} INVALID unit values!")
-                print(f"[DEBUG] Sample invalid master unit rows:")
+                # print(f"[DEBUG] ⚠️  CRITICAL: Original master DataFrame contains {len(invalid_master_units)} INVALID unit values!")
+                # print(f"[DEBUG] Sample invalid master unit rows:")
                 for idx, row in invalid_master_units.head(3).iterrows():
-                    print(f"[DEBUG]   Row {idx}: unit='{row['unit']}', code='{row.get('code', 'N/A')}', description='{row.get('description', 'N/A')[:50]}...'")
+                    # print(f"[DEBUG]   Row {idx}: unit='{row['unit']}', code='{row.get('code', 'N/A')}', description='{row.get('description', 'N/A')[:50]}...'")
+                    pass
         elif 'unit' in merged_df.columns:
             unit_backup = merged_df['unit'].copy()
-            print(f"[DEBUG] Backed up unit column from processed copy with {len(unit_backup)} values")
+            # print(f"[DEBUG] Backed up unit column from processed copy with {len(unit_backup)} values")
         
         # Add the new offer columns
         for new_col in new_columns.values():
@@ -4272,7 +4309,8 @@ Review the rows below and adjust validity as needed."""
                     merged_df.at[idx, new_col] = value
                     # Debug first few assignments
                     if idx < 3:
-                        print(f"[DEBUG] Assigned row {idx}, col {new_col} = {value}")
+                        # print(f"[DEBUG] Assigned row {idx}, col {new_col} = {value}")
+                        pass
                 matched_count += 1
             else:
                 # If the key from master is not in the new offer mapping, it means this row is missing in the new offer
@@ -4280,11 +4318,12 @@ Review the rows below and adjust validity as needed."""
                 for new_col in new_columns.values():
                     merged_df.at[idx, new_col] = 0
                 if idx < 3:
-                    print(f"[DEBUG] Row {idx}: Key '{key}' not found in mapping, filling with 0")
+                    # print(f"[DEBUG] Row {idx}: Key '{key}' not found in mapping, filling with 0")
         
-        print(f"[DEBUG] Successfully matched {matched_count} out of {len(merged_df)} rows")
+        # print(f"[DEBUG] Successfully matched {matched_count} out of {len(merged_df)} rows")
         
         # Debug: Check the actual values being assigned
+                    pass
         total_assigned_quantity = 0
         total_assigned_unit_price = 0
         total_assigned_total_price = 0
@@ -4295,30 +4334,30 @@ Review the rows below and adjust validity as needed."""
             if 'quantity' in new_col:
                 col_sum = pd.to_numeric(merged_df[new_col], errors='coerce').fillna(0).sum()
                 total_assigned_quantity += col_sum
-                print(f"[DEBUG] Total {new_col}: {col_sum}")
+                # print(f"[DEBUG] Total {new_col}: {col_sum}")
             elif 'unit_price' in new_col:
                 col_sum = pd.to_numeric(merged_df[new_col], errors='coerce').fillna(0).sum()
                 total_assigned_unit_price += col_sum
-                print(f"[DEBUG] Total {new_col}: {col_sum}")
+                # print(f"[DEBUG] Total {new_col}: {col_sum}")
             elif 'total_price' in new_col:
                 col_sum = pd.to_numeric(merged_df[new_col], errors='coerce').fillna(0).sum()
                 total_assigned_total_price += col_sum
-                print(f"[DEBUG] Total {new_col}: {col_sum}")
+                # print(f"[DEBUG] Total {new_col}: {col_sum}")
             elif 'manhours' in new_col:
                 col_sum = pd.to_numeric(merged_df[new_col], errors='coerce').fillna(0).sum()
                 total_assigned_manhours += col_sum
-                print(f"[DEBUG] Total {new_col}: {col_sum}")
+                # print(f"[DEBUG] Total {new_col}: {col_sum}")
             elif 'wage' in new_col:
                 col_sum = pd.to_numeric(merged_df[new_col], errors='coerce').fillna(0).sum()
                 total_assigned_wage += col_sum
-                print(f"[DEBUG] Total {new_col}: {col_sum}")
+                # print(f"[DEBUG] Total {new_col}: {col_sum}")
         
-        print(f"[DEBUG] Total assigned - Quantity: {total_assigned_quantity}, Unit Price: {total_assigned_unit_price}, Total Price: {total_assigned_total_price}, Manhours: {total_assigned_manhours}, Wage: {total_assigned_wage}")
+        # print(f"[DEBUG] Total assigned - Quantity: {total_assigned_quantity}, Unit Price: {total_assigned_unit_price}, Total Price: {total_assigned_total_price}, Manhours: {total_assigned_manhours}, Wage: {total_assigned_wage}")
         
         # Handle any new rows that don't exist in master (shouldn't happen in comparison mode, but just in case)
         unmatched_keys = set(new_offer_mapping.keys()) - set(merged_df[key_column])
         if unmatched_keys:
-            print(f"[DEBUG] Found {len(unmatched_keys)} unmatched keys from new dataset, adding them to the master set.")
+            # print(f"[DEBUG] Found {len(unmatched_keys)} unmatched keys from new dataset, adding them to the master set.")
             
             # Create a list to hold the new rows
             rows_to_add = []
@@ -4358,7 +4397,7 @@ Review the rows below and adjust validity as needed."""
             if rows_to_add:
                 unmatched_df = pd.DataFrame(rows_to_add)
                 merged_df = pd.concat([merged_df, unmatched_df], ignore_index=True)
-                print(f"[DEBUG] Added {len(unmatched_df)} new rows to the comparison.")
+                # print(f"[DEBUG] Added {len(unmatched_df)} new rows to the comparison.")
         
         # Remove the temporary key columns
         columns_to_drop = ['_key', '_unique_key']
@@ -4405,56 +4444,61 @@ Review the rows below and adjust validity as needed."""
         if unit_backup is not None and 'unit' in merged_df.columns:
             # Check if unit column was corrupted during merge
             unit_values_after = merged_df['unit'].value_counts()
-            print(f"[DEBUG] Unit column after merge - unique values: {unit_values_after.to_dict()}")
+            # print(f"[DEBUG] Unit column after merge - unique values: {unit_values_after.to_dict()}")
             
             # If unit column is mostly empty but we have backup, restore it
             empty_count = (merged_df['unit'] == '').sum() + merged_df['unit'].isna().sum()
             total_count = len(merged_df)
             
             if empty_count > total_count * 0.5:  # If more than 50% empty, restore from backup
-                print(f"[DEBUG] Unit column corrupted ({empty_count}/{total_count} empty), restoring from backup")
+                # print(f"[DEBUG] Unit column corrupted ({empty_count}/{total_count} empty), restoring from backup")
                 merged_df['unit'] = unit_backup
                 unit_values_restored = merged_df['unit'].value_counts()
-                print(f"[DEBUG] Unit column restored - unique values: {unit_values_restored.to_dict()}")
+                # print(f"[DEBUG] Unit column restored - unique values: {unit_values_restored.to_dict()}")
             else:
-                print(f"[DEBUG] Unit column preserved correctly ({empty_count}/{total_count} empty)")
+                # print(f"[DEBUG] Unit column preserved correctly ({empty_count}/{total_count} empty)")
         
         # Final debug of unit column
+                pass
         if 'unit' in merged_df.columns:
             final_unit_values = merged_df['unit'].value_counts()
-            print(f"[DEBUG] FINAL unit column values: {final_unit_values.to_dict()}")
+            # print(f"[DEBUG] FINAL unit column values: {final_unit_values.to_dict()}")
         else:
-            print(f"[DEBUG] FINAL: Unit column missing from merged DataFrame!")
+            # print(f"[DEBUG] FINAL: Unit column missing from merged DataFrame!")
         
         # Debug: Check if unit column still exists and has values after reordering
+            pass
         if 'unit' in merged_df.columns:
             unit_values_after = merged_df['unit'].value_counts()
-            print(f"[DEBUG] Unit column after merge - unique values: {unit_values_after.to_dict()}")
+            # print(f"[DEBUG] Unit column after merge - unique values: {unit_values_after.to_dict()}")
             
             # Check for invalid unit values that suggest data corruption
             invalid_units = merged_df[merged_df['unit'].isin(['Quantity', 'quantity', 'Description', 'description', 'Code', 'code'])]
             if len(invalid_units) > 0:
-                print(f"[DEBUG] ⚠️  CRITICAL: Found {len(invalid_units)} rows with INVALID unit values!")
-                print(f"[DEBUG] Sample invalid unit rows:")
+                # print(f"[DEBUG] ⚠️  CRITICAL: Found {len(invalid_units)} rows with INVALID unit values!")
+                # print(f"[DEBUG] Sample invalid unit rows:")
                 for idx, row in invalid_units.head(3).iterrows():
-                    print(f"[DEBUG]   Row {idx}: unit='{row['unit']}', code='{row.get('code', 'N/A')}', description='{row.get('description', 'N/A')[:50]}...'")
+                    # print(f"[DEBUG]   Row {idx}: unit='{row['unit']}', code='{row.get('code', 'N/A')}', description='{row.get('description', 'N/A')[:50]}...'")
                     
             # Check if any unit values are empty when they shouldn't be
+                    pass
             empty_units = (merged_df['unit'] == '') | (merged_df['unit'].isna())
             if empty_units.any():
-                print(f"[DEBUG] WARNING: Found {empty_units.sum()} empty unit values after merge!")
+                # print(f"[DEBUG] WARNING: Found {empty_units.sum()} empty unit values after merge!")
+                pass
         else:
-            print(f"[DEBUG] CRITICAL: Unit column missing after column reordering!")
+            # print(f"[DEBUG] CRITICAL: Unit column missing after column reordering!")
         
         # Skip duplicate removal - we already handled duplicates properly during key generation
         # Removing duplicates here would corrupt the data since identical rows in comparison
         # scenarios (like comparing the same file twice) would be incorrectly removed
-        print(f"[DEBUG] Skipping duplicate removal to preserve data integrity")
+        # print(f"[DEBUG] Skipping duplicate removal to preserve data integrity")
         
         # Verify the merge worked correctly
-        print(f"[DEBUG] Final merged dataset has {len(merged_df)} rows and columns: {merged_df.columns.tolist()}")
+        # print(f"[DEBUG] Final merged dataset has {len(merged_df)} rows and columns: {merged_df.columns.tolist()}")
         
         # Check that the new offer columns have reasonable values
+            pass
         for new_col in new_columns.values():
             if new_col in merged_df.columns:
                 non_zero_count = (merged_df[new_col] != 0).sum()
@@ -4462,34 +4506,36 @@ Review the rows below and adjust validity as needed."""
                 try:
                     numeric_col = pd.to_numeric(merged_df[new_col], errors='coerce').fillna(0)
                     total_sum = numeric_col.sum()
-                    print(f"[DEBUG] Column {new_col}: {non_zero_count} non-zero values, sum = {total_sum}")
+                    # print(f"[DEBUG] Column {new_col}: {non_zero_count} non-zero values, sum = {total_sum}")
                 except Exception as e:
-                    print(f"[DEBUG] Column {new_col}: {non_zero_count} non-zero values, sum calculation failed: {e}")
+                    # print(f"[DEBUG] Column {new_col}: {non_zero_count} non-zero values, sum calculation failed: {e}")
                     # Fix the column to be numeric
                     merged_df[new_col] = pd.to_numeric(merged_df[new_col], errors='coerce').fillna(0)
         
         # ROW ORDER PRESERVATION: Sort by original order to maintain first file's row sequence
         if '_original_order' in merged_df.columns:
-            print(f"[DEBUG] Row order preservation: Sorting final DataFrame by original order")
+            # print(f"[DEBUG] Row order preservation: Sorting final DataFrame by original order")
             merged_df = merged_df.sort_values('_original_order').reset_index(drop=True)
             # Remove the temporary ordering column
             merged_df = merged_df.drop(columns=['_original_order'])
-            print(f"[DEBUG] Row order preservation: Final DataFrame sorted and cleaned")
+            # print(f"[DEBUG] Row order preservation: Final DataFrame sorted and cleaned")
         elif 'Position' in merged_df.columns:
             # Fallback: sort by Position field to maintain Excel row order
             try:
-                print(f"[DEBUG] Row order preservation: Sorting by Position field as fallback")
+                # print(f"[DEBUG] Row order preservation: Sorting by Position field as fallback")
                 merged_df['_row_num'] = merged_df['Position'].str.extract(r'_(\d+)$')[0].astype(int)
                 merged_df = merged_df.sort_values('_row_num').reset_index(drop=True)
                 merged_df = merged_df.drop(columns=['_row_num'])
-                print(f"[DEBUG] Row order preservation: Final DataFrame sorted by Position field")
+                # print(f"[DEBUG] Row order preservation: Final DataFrame sorted by Position field")
             except Exception as e:
-                print(f"[DEBUG] Row order preservation: Could not sort by Position field: {e}")
+                # print(f"[DEBUG] Row order preservation: Could not sort by Position field: {e}")
+                pass
         else:
-            print(f"[DEBUG] Row order preservation: No ordering fields found, preserving current order")
+            # print(f"[DEBUG] Row order preservation: No ordering fields found, preserving current order")
         
         # Sample of merged data for verification
-        print(f"[DEBUG] Sample of merged data:")
+        # print(f"[DEBUG] Sample of merged data:")
+            pass
         print(merged_df.head(3).to_string())
         
         return merged_df
@@ -4497,14 +4543,15 @@ Review the rows below and adjust validity as needed."""
     def _on_confirm_mapped_file_review(self, file_mapping):
         """Handle confirmation of row review for mapped file"""
         try:
-            print(f"[DEBUG] _on_confirm_mapped_file_review called")
-            print(f"[DEBUG] Has saved_mapping: {hasattr(self, 'saved_mapping')}")
+            # print(f"[DEBUG] _on_confirm_mapped_file_review called")
+            # print(f"[DEBUG] Has saved_mapping: {hasattr(self, 'saved_mapping')}")
             if hasattr(self, 'saved_mapping'):
-                print(f"[DEBUG] Saved mapping keys: {list(self.saved_mapping.keys())}")
+                # print(f"[DEBUG] Saved mapping keys: {list(self.saved_mapping.keys())}")
             
             # Check if we have saved categories from the mapping
+                pass
             if hasattr(self, 'saved_mapping') and 'final_dataframe' in self.saved_mapping:
-                print("[DEBUG] Found saved categories in mapping - applying directly without categorization")
+                # print("[DEBUG] Found saved categories in mapping - applying directly without categorization")
                 
                 # Get the saved categorized DataFrame
                 saved_df = self.saved_mapping['final_dataframe'].copy()
@@ -4551,7 +4598,7 @@ Review the rows below and adjust validity as needed."""
                         current_df.rename(columns={'description': 'Description'}, inplace=True)
                     
                     # Apply saved categories to current data by matching descriptions
-                    print(f"[DEBUG] Applying saved categories to {len(current_df)} rows")
+                    # print(f"[DEBUG] Applying saved categories to {len(current_df)} rows")
                     
                     # Create category mapping from saved DataFrame
                     if 'Description' in saved_df.columns and 'category' in saved_df.columns:
@@ -4562,7 +4609,7 @@ Review the rows below and adjust validity as needed."""
                             if desc and category:
                                 category_mapping[desc] = category
                         
-                        print(f"[DEBUG] Created category mapping with {len(category_mapping)} entries")
+                        # print(f"[DEBUG] Created category mapping with {len(category_mapping)} entries")
                         
                         # Apply categories to current DataFrame (categories are already in pretty format)
                         current_df['category'] = current_df['Description'].apply(
@@ -4571,7 +4618,7 @@ Review the rows below and adjust validity as needed."""
                         
                         # Count successful matches
                         matched_count = (current_df['category'] != '').sum()
-                        print(f"[DEBUG] Successfully matched {matched_count} out of {len(current_df)} rows")
+                        # print(f"[DEBUG] Successfully matched {matched_count} out of {len(current_df)} rows")
                         
                         # Store the categorized DataFrame
                         file_mapping.dataframe = current_df
@@ -4591,12 +4638,14 @@ Review the rows below and adjust validity as needed."""
                         messagebox.showinfo("Categories Applied", success_msg)
                         return
                     else:
-                        print("[DEBUG] Saved DataFrame missing required columns for category mapping")
+                        # print("[DEBUG] Saved DataFrame missing required columns for category mapping")
+                        pass
                 else:
-                    print("[DEBUG] No valid rows found for category application")
+                    # print("[DEBUG] No valid rows found for category application")
             
             # Fallback to normal categorization if no saved categories found
-            print("[DEBUG] No saved categories found - proceeding with normal categorization")
+            # print("[DEBUG] No saved categories found - proceeding with normal categorization")
+                    pass
             self._update_status("Row review confirmed. Starting categorization process...")
             
             # Build DataFrame for categorization (same as normal workflow)
@@ -4641,7 +4690,7 @@ Review the rows below and adjust validity as needed."""
                     df.rename(columns={'description': 'Description'}, inplace=True)
                 
                 file_mapping.dataframe = df
-                print(f"[DEBUG] Built DataFrame for categorization: {df.shape}")
+                # print(f"[DEBUG] Built DataFrame for categorization: {df.shape}")
                 
                 # Start categorization
                 self._start_categorization(file_mapping)
@@ -4649,7 +4698,7 @@ Review the rows below and adjust validity as needed."""
                 messagebox.showerror("Error", "No valid rows found for categorization")
                 
         except Exception as e:
-            print(f"[DEBUG] Error in mapped file review confirmation: {e}")
+            # print(f"[DEBUG] Error in mapped file review confirmation: {e}")
             import traceback
             traceback.print_exc()
             messagebox.showerror("Error", f"Failed to continue with categorization: {str(e)}")
