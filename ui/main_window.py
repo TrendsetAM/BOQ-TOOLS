@@ -4052,6 +4052,10 @@ Review the rows below and adjust validity as needed."""
         master_df_copy = master_df.copy()
         new_df_copy = new_df.copy()
         
+        # ROW ORDER PRESERVATION: Store original order from master DataFrame
+        master_df_copy['_original_order'] = range(len(master_df_copy))
+        print(f"[DEBUG] Row order preservation: Stored original order for {len(master_df_copy)} rows")
+        
         # Reset indices to ensure clean merging
         master_df_copy = master_df_copy.reset_index(drop=True)
         new_df_copy = new_df_copy.reset_index(drop=True)
@@ -4127,19 +4131,38 @@ Review the rows below and adjust validity as needed."""
             
             # Use a robust method to create unique keys using groupby and cumcount
             def create_unique_keys_with_position(df):
-                # Ensure the DataFrame is sorted to have a consistent order for cumcount
-                # IMPORTANT: Sorting by the key itself ensures that the position is deterministic
-                df_sorted = df.sort_values(by=['_key']).reset_index(drop=True)
+                # ROW ORDER PRESERVATION: Do NOT sort by key - preserve original order
+                # Instead, use Position field or original order to maintain Excel row sequence
+                df_with_pos = df.copy()
                 
                 # Create a positional counter within each group of duplicate keys
-                df_sorted['_pos'] = df_sorted.groupby('_key').cumcount()
+                df_with_pos['_pos'] = df_with_pos.groupby('_key').cumcount()
                 
                 # Create the unique key by combining the base key and the position
-                df_sorted['_unique_key'] = df_sorted['_key'] + '|POS_' + df_sorted['_pos'].astype(str)
+                df_with_pos['_unique_key'] = df_with_pos['_key'] + '|POS_' + df_with_pos['_pos'].astype(str)
+                
+                # ROW ORDER PRESERVATION: Sort by Position field to maintain Excel row order
+                if 'Position' in df_with_pos.columns:
+                    # Extract row number from Position field (format: sheet_name_row_number)
+                    try:
+                        df_with_pos['_row_num'] = df_with_pos['Position'].str.extract(r'_(\d+)$')[0].astype(int)
+                        df_with_pos = df_with_pos.sort_values('_row_num').reset_index(drop=True)
+                        df_with_pos = df_with_pos.drop(columns=['_row_num'])
+                        print(f"[DEBUG] Row order preservation: Sorted by Position field to maintain Excel row order")
+                    except Exception as e:
+                        print(f"[DEBUG] Row order preservation: Could not sort by Position field: {e}")
+                        # Fallback: preserve original order by not sorting
+                        pass
+                elif '_original_order' in df_with_pos.columns:
+                    # Fallback: sort by original order
+                    df_with_pos = df_with_pos.sort_values('_original_order').reset_index(drop=True)
+                    print(f"[DEBUG] Row order preservation: Sorted by original order")
+                else:
+                    print(f"[DEBUG] Row order preservation: No Position or original order field found, preserving current order")
                 
                 # Drop the temporary position column
-                df_sorted = df_sorted.drop(columns=['_pos'])
-                return df_sorted
+                df_with_pos = df_with_pos.drop(columns=['_pos'])
+                return df_with_pos
 
             # Apply the function to both DataFrames
             master_df_copy = create_unique_keys_with_position(master_df_copy)
@@ -4444,6 +4467,26 @@ Review the rows below and adjust validity as needed."""
                     print(f"[DEBUG] Column {new_col}: {non_zero_count} non-zero values, sum calculation failed: {e}")
                     # Fix the column to be numeric
                     merged_df[new_col] = pd.to_numeric(merged_df[new_col], errors='coerce').fillna(0)
+        
+        # ROW ORDER PRESERVATION: Sort by original order to maintain first file's row sequence
+        if '_original_order' in merged_df.columns:
+            print(f"[DEBUG] Row order preservation: Sorting final DataFrame by original order")
+            merged_df = merged_df.sort_values('_original_order').reset_index(drop=True)
+            # Remove the temporary ordering column
+            merged_df = merged_df.drop(columns=['_original_order'])
+            print(f"[DEBUG] Row order preservation: Final DataFrame sorted and cleaned")
+        elif 'Position' in merged_df.columns:
+            # Fallback: sort by Position field to maintain Excel row order
+            try:
+                print(f"[DEBUG] Row order preservation: Sorting by Position field as fallback")
+                merged_df['_row_num'] = merged_df['Position'].str.extract(r'_(\d+)$')[0].astype(int)
+                merged_df = merged_df.sort_values('_row_num').reset_index(drop=True)
+                merged_df = merged_df.drop(columns=['_row_num'])
+                print(f"[DEBUG] Row order preservation: Final DataFrame sorted by Position field")
+            except Exception as e:
+                print(f"[DEBUG] Row order preservation: Could not sort by Position field: {e}")
+        else:
+            print(f"[DEBUG] Row order preservation: No ordering fields found, preserving current order")
         
         # Sample of merged data for verification
         print(f"[DEBUG] Sample of merged data:")
