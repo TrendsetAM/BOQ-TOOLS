@@ -60,6 +60,7 @@ class RowClassificationInfo:
     section_title: Optional[str]
     validation_errors: List[str]
     reasoning: List[str]
+    position: Optional[str] = None  # Format: [sheet_name]_[excel_row_number]
     row_data: Optional[List[str]] = None
 
 
@@ -526,6 +527,7 @@ class MappingGenerator:
                     section_title=row_info.section_title,
                     validation_errors=row_info.validation_errors,
                     reasoning=row_info.reasoning,
+                    position=row_info.position,
                     row_data=getattr(row_info, 'row_data', None)
                 )
                 row_classifications.append(row_class)
@@ -541,6 +543,7 @@ class MappingGenerator:
                     section_title=row_info.get('section_title'),
                     validation_errors=row_info.get('validation_errors', []),
                     reasoning=row_info.get('reasoning', []),
+                    position=row_info.get('position', f"{sheet_name}_{row_info.get('row_index', 0) + 1}"),
                     row_data=row_info.get('row_data', None)
                 )
                 row_classifications.append(row_class)

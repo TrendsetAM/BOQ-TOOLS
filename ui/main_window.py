@@ -943,7 +943,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                                 print(f"[DEBUG] Row {i}: {sheet_data[i]}")
                 
                 # Perform row classification
-                row_classification_result = row_classifier.classify_rows(sheet_data, column_mapping_dict)
+                row_classification_result = row_classifier.classify_rows(sheet_data, column_mapping_dict, sheet.sheet_name)
                 
                 # Update the sheet's row classifications
                 sheet.row_classifications = []
@@ -957,7 +957,8 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                         hierarchical_level=row_class.hierarchical_level,
                         section_title=row_class.section_title,
                         validation_errors=row_class.validation_errors,
-                        reasoning=row_class.reasoning
+                        reasoning=row_class.reasoning,
+                        position=row_class.position
                     )
                     sheet.row_classifications.append(row_info)
                 
@@ -1310,6 +1311,8 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     # Build dict for DataFrame
                     row_dict = {col_headers[i]: row_data[i] if i < len(row_data) else '' for i in range(len(col_headers))}
                     row_dict['Source_Sheet'] = sheet.sheet_name
+                    # Preserve position information for future row matching
+                    row_dict['Position'] = getattr(rc, 'position', None)
                     rows.append(row_dict)
             logger.info(f"Categorization: Processed {sheet_count} BOQ sheets, {len(rows)} valid rows for DataFrame.")
             if rows:
@@ -1511,6 +1514,10 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                             if col in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']:
                                 val = parse_number(val)
                             row_dict[col] = val
+                    
+                    # Preserve position information for future row matching (not displayed but stored)
+                    row_dict['position'] = getattr(rc, 'position', None)
+                    
                     rows.append(row_dict)
         # Build DataFrame
         if rows:
@@ -2381,6 +2388,8 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     
                     # Store the loaded data in the tab
                     if mapping_data:
+                        # Validate and fix position data integrity
+                        self._validate_position_data_integrity(mapping_data)
                         tab.stored_mapping_data = mapping_data
                         print(f"[DEBUG] Stored mapping data with {len(mapping_data.get('sheets', []))} sheets")
                     
@@ -2502,6 +2511,9 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             if not isinstance(mapping_data, dict) or 'sheets' not in mapping_data:
                 messagebox.showerror("Error", "Invalid mapping file format")
                 return
+            
+            # Validate and fix position data integrity
+            self._validate_position_data_integrity(mapping_data)
                 
             self.saved_mapping = mapping_data
             print(f"[DEBUG] Loaded mapping with {len(mapping_data['sheets'])} sheets")
@@ -3593,6 +3605,7 @@ Review the rows below and adjust validity as needed."""
                 
                 # Add sheet name with consistent column name
                 row_dict['sheet'] = sheet.sheet_name
+                row_dict['Position'] = getattr(rc, 'position', None)
                 rows.append(row_dict)
         
         if rows:
@@ -4099,6 +4112,7 @@ Review the rows below and adjust validity as needed."""
                         row_dict = {col_headers[i]: row_data[i] if i < len(row_data) else '' 
                                   for i in range(len(col_headers))}
                         row_dict['Source_Sheet'] = sheet.sheet_name
+                        row_dict['Position'] = getattr(rc, 'position', None)
                         rows.append(row_dict)
                 
                 if rows:
@@ -4188,6 +4202,7 @@ Review the rows below and adjust validity as needed."""
                     row_dict = {col_headers[i]: row_data[i] if i < len(row_data) else '' 
                               for i in range(len(col_headers))}
                     row_dict['Source_Sheet'] = sheet.sheet_name
+                    row_dict['Position'] = getattr(rc, 'position', None)
                     rows.append(row_dict)
             
             if rows:
@@ -4208,3 +4223,130 @@ Review the rows below and adjust validity as needed."""
             import traceback
             traceback.print_exc()
             messagebox.showerror("Error", f"Failed to continue with categorization: {str(e)}")
+
+    def _validate_position_data_integrity(self, mapping_data):
+        """
+        Validate that position data is present and properly formatted in mapping data
+        
+        Args:
+            mapping_data: Dictionary containing mapping information
+            
+        Returns:
+            bool: True if position data is valid, False otherwise
+        """
+        if not mapping_data or 'sheets' not in mapping_data:
+            return True  # No data to validate
+        
+        for sheet in mapping_data['sheets']:
+            sheet_name = sheet.get('sheet_name', 'Unknown')
+            row_classifications = sheet.get('row_classifications', [])
+            
+            for i, rc in enumerate(row_classifications):
+                # Check if position data exists
+                if 'position' not in rc:
+                    logger.warning(f"Row classification {i} in sheet '{sheet_name}' missing position data")
+                    # Generate position if missing (backward compatibility)
+                    rc['position'] = f"{sheet_name}_{i + 1}"
+                    continue
+                
+                # Validate position format
+                position = rc['position']
+                if position is None:
+                    logger.warning(f"Row classification {i} in sheet '{sheet_name}' has None position")
+                    rc['position'] = f"{sheet_name}_{i + 1}"
+                    continue
+                
+                # Validate position format (should be sheet_name_row_number)
+                if not isinstance(position, str) or '_' not in position:
+                    logger.warning(f"Row classification {i} in sheet '{sheet_name}' has invalid position format: '{position}'")
+                    rc['position'] = f"{sheet_name}_{i + 1}"
+                    continue
+        
+        return True
+
+    def _load_analysis(self):
+        """Handle loading a previously saved analysis"""
+        file_path = filedialog.askopenfilename(
+            title="Load Analysis",
+            filetypes=[("Pickle files", "*.pkl"), ("All files", "*.*")]
+        )
+        if file_path:
+            try:
+                with open(file_path, 'rb') as f:
+                    loaded_data = pickle.load(f)
+                
+                print(f"[DEBUG] Loaded data type: {type(loaded_data)}")
+                
+                # Handle both old format (just DataFrame) and new format (dictionary)
+                if isinstance(loaded_data, dict):
+                    df = loaded_data.get('dataframe')
+                    self.current_offer_name = loaded_data.get('offer_name')
+                    mapping_data = loaded_data.get('mapping_data')
+                    comparison_offers = loaded_data.get('comparison_offers')
+                    is_comparison = loaded_data.get('is_comparison', False)
+                    analysis_type = loaded_data.get('analysis_type', 'unknown')
+                    
+                    print(f"[DEBUG] Enhanced format - DataFrame shape: {df.shape if df is not None else 'None'}")
+                    print(f"[DEBUG] Offer name: {self.current_offer_name}")
+                    print(f"[DEBUG] Has mapping data: {mapping_data is not None}")
+                    print(f"[DEBUG] Comparison offers: {comparison_offers}")
+                    print(f"[DEBUG] Is comparison: {is_comparison}")
+                else:
+                    # Legacy format - just DataFrame
+                    df = loaded_data
+                    self.current_offer_name = None
+                    mapping_data = None
+                    comparison_offers = None
+                    is_comparison = False
+                    analysis_type = 'legacy'
+                    print(f"[DEBUG] Legacy format - DataFrame shape: {df.shape if df is not None else 'None'}")
+                
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    print(f"[DEBUG] DataFrame columns: {df.columns.tolist()}")
+                    print(f"[DEBUG] DataFrame first few rows:")
+                    print(df.head().to_string())
+                    
+                    # Create a new tab for the loaded analysis
+                    filename = os.path.basename(file_path)
+                    tab_name = f"Loaded: {filename}"
+                    if analysis_type == 'comparison':
+                        tab_name = f"Comparison: {filename}"
+                    
+                    tab = ttk.Frame(self.notebook)
+                    self.notebook.add(tab, text=tab_name)
+                    self.notebook.select(tab)
+                    
+                    # Store the loaded data in the tab
+                    if mapping_data:
+                        tab.stored_mapping_data = mapping_data
+                        print(f"[DEBUG] Stored mapping data with {len(mapping_data.get('sheets', []))} sheets")
+                    
+                    if comparison_offers:
+                        tab.comparison_offers = comparison_offers
+                        print(f"[DEBUG] Stored comparison offers: {comparison_offers}")
+                    
+                    # Show the data in the grid
+                    self._show_final_categorized_data(tab, df, None)
+                    
+                    # Update status with detailed information
+                    details = [f"DataFrame: {df.shape[0]} rows, {df.shape[1]} columns"]
+                    if mapping_data:
+                        details.append(f"Mapping: {len(mapping_data.get('sheets', []))} sheets")
+                    if comparison_offers:
+                        details.append(f"Comparison: {len(comparison_offers)} offers")
+                    
+                    status_msg = f"Analysis loaded - " + ", ".join(details)
+                    self._update_status(status_msg)
+                    
+                elif isinstance(df, pd.DataFrame) and df.empty:
+                    messagebox.showerror("Error", "The loaded analysis contains an empty DataFrame")
+                    print("[DEBUG] DataFrame is empty")
+                else:
+                    messagebox.showerror("Error", "Invalid analysis file format - no DataFrame found")
+                    print(f"[DEBUG] Invalid format - df type: {type(df)}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load analysis: {str(e)}")
+                logger.error(f"Failed to load analysis from {file_path}: {e}", exc_info=True)
+                print(f"[DEBUG] Exception loading analysis: {e}")
+                import traceback
+                traceback.print_exc()

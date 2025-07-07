@@ -35,6 +35,7 @@ class RowClassification:
     validation_errors: List[str]
     hierarchical_level: Optional[int]
     section_title: Optional[str]
+    position: Optional[str] = None  # Format: [sheet_name]_[excel_row_number]
     row_data: Optional[List[str]] = None
 
 
@@ -137,13 +138,15 @@ class RowClassifier:
         ]
     
     def classify_rows(self, sheet_data: List[List[str]], 
-                     column_mapping: Dict[int, ColumnType]) -> ClassificationResult:
+                     column_mapping: Dict[int, ColumnType],
+                     sheet_name: str = "Sheet1") -> ClassificationResult:
         """
         Classify all rows in a sheet
         
         Args:
             sheet_data: Sheet data as list of rows
             column_mapping: Dictionary mapping column index to ColumnType
+            sheet_name: Name of the sheet (for position generation)
             
         Returns:
             ClassificationResult with all row classifications
@@ -154,11 +157,14 @@ class RowClassifier:
         
         for row_index, row_data in enumerate(sheet_data):
             try:
-                classification = self._classify_single_row(row_index, row_data, column_mapping)
+                classification = self._classify_single_row(row_index, row_data, column_mapping, sheet_name)
                 classifications.append(classification)
             except Exception as e:
                 logger.warning(f"Error classifying row {row_index}: {e}")
                 # Create fallback classification
+                # Convert 0-based row_index to 1-based Excel row number
+                excel_row_number = row_index + 1
+                position = generate_row_position(sheet_name, excel_row_number)
                 classification = RowClassification(
                     row_index=row_index,
                     row_type=RowType.BLANK_SEPARATOR,
@@ -168,6 +174,7 @@ class RowClassifier:
                     validation_errors=[],
                     hierarchical_level=None,
                     section_title=None,
+                    position=position,
                     row_data=None
                 )
                 classifications.append(classification)
@@ -188,7 +195,7 @@ class RowClassifier:
         return result
     
     def _classify_single_row(self, row_index: int, row_data: List[str], 
-                           column_mapping: Dict[int, ColumnType]) -> RowClassification:
+                           column_mapping: Dict[int, ColumnType], sheet_name: str) -> RowClassification:
         """Classify a single row using simple validation rules"""
         # Calculate completeness score
         completeness_score = self.calculate_completeness_score(row_data, column_mapping)
@@ -210,6 +217,11 @@ class RowClassifier:
         if row_type == RowType.PRIMARY_LINE_ITEM:
             validation_errors = self.validate_line_item(row_data, column_mapping)
         
+        # Generate position for this row
+        # Convert 0-based row_index to 1-based Excel row number
+        excel_row_number = row_index + 1
+        position = generate_row_position(sheet_name, excel_row_number)
+        
         return RowClassification(
             row_index=row_index,
             row_type=row_type,
@@ -219,6 +231,7 @@ class RowClassifier:
             validation_errors=validation_errors,
             hierarchical_level=hierarchical_level,
             section_title=section_title,
+            position=position,
             row_data=row_data
         )
     
@@ -612,13 +625,15 @@ class RowClassifier:
 
 # Convenience function for quick row classification
 def classify_rows_quick(sheet_data: List[List[str]], 
-                       column_mapping: Dict[int, str]) -> Dict[int, str]:
+                       column_mapping: Dict[int, str],
+                       sheet_name: str = "Sheet1") -> Dict[int, str]:
     """
     Quick row classification
     
     Args:
         sheet_data: Sheet data as list of rows
         column_mapping: Dictionary mapping column index to column type string
+        sheet_name: Name of the sheet (for position generation)
         
     Returns:
         Dictionary mapping row index to row type
@@ -632,7 +647,23 @@ def classify_rows_quick(sheet_data: List[List[str]],
             logger.warning(f"Unknown column type: {col_type_str}")
     
     classifier = RowClassifier()
-    result = classifier.classify_rows(sheet_data, enum_mapping)
+    result = classifier.classify_rows(sheet_data, enum_mapping, sheet_name)
     
     return {classification.row_index: classification.row_type.value 
-            for classification in result.classifications} 
+            for classification in result.classifications}
+
+
+def generate_row_position(sheet_name: str, excel_row_number: int) -> str:
+    """
+    Generate a unique position identifier for a row
+    
+    Args:
+        sheet_name: Name of the Excel sheet
+        excel_row_number: Actual Excel row number (1-based)
+        
+    Returns:
+        Position string in format [sheet_name]_[excel_row_number]
+    """
+    # Clean sheet name to avoid issues with special characters
+    clean_sheet_name = re.sub(r'[^\w\-_\.]', '_', sheet_name)
+    return f"{clean_sheet_name}_{excel_row_number}" 

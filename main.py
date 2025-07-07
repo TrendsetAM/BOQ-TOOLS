@@ -267,7 +267,7 @@ class BOQApplicationController:
             }
             
             row_classifications = {
-                name: self.row_classifier.classify_rows(data, column_mappings_dict.get(name, {}))
+                name: self.row_classifier.classify_rows(data, column_mappings_dict.get(name, {}), name)
                 for name, data in sheet_data.items()
             }
             if progress_callback: progress_callback(70, "Rows classified")
