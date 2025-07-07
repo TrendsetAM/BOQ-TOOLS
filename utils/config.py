@@ -444,20 +444,38 @@ def validate_and_log_config() -> bool:
 
 def get_user_config_path(filename: str) -> str:
     app_name = "BOQ-TOOLS"
-    if user_config_dir:
+    
+    # Check if running as standalone executable with custom config dir
+    if 'BOQ_TOOLS_CONFIG_DIR' in os.environ:
+        config_dir = os.environ['BOQ_TOOLS_CONFIG_DIR']
+    elif 'BOQ_TOOLS_APP_DIR' in os.environ:
+        config_dir = os.path.join(os.environ['BOQ_TOOLS_APP_DIR'], 'config')
+    elif user_config_dir:
         config_dir = user_config_dir(app_name)
     else:
         if os.name == 'nt':
             config_dir = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), app_name)
         else:
             config_dir = os.path.join(os.path.expanduser('~/.config'), app_name)
+    
     os.makedirs(config_dir, exist_ok=True)
     return os.path.join(config_dir, filename)
 
 
-def ensure_default_config(filename: str, default_path: str, default_data: dict = None):
+def ensure_default_config(filename: str, default_path: str, default_data: Optional[dict] = None):
     user_path = get_user_config_path(filename)
     if not os.path.exists(user_path):
+        # Check if running as executable and look for bundled config
+        if 'BOQ_TOOLS_BUNDLE_DIR' in os.environ:
+            bundle_config_path = os.path.join(os.environ['BOQ_TOOLS_BUNDLE_DIR'], 'config', filename)
+            if os.path.exists(bundle_config_path):
+                with open(bundle_config_path, 'r', encoding='utf-8') as fsrc:
+                    data = fsrc.read()
+                with open(user_path, 'w', encoding='utf-8') as fdst:
+                    fdst.write(data)
+                return user_path
+        
+        # Try the provided default path
         if os.path.exists(default_path):
             with open(default_path, 'r', encoding='utf-8') as fsrc:
                 data = fsrc.read()

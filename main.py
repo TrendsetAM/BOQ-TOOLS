@@ -722,12 +722,18 @@ def main():
     
     try:
         # Determine mode and run
+        # Check if running as executable (PyInstaller sets sys.frozen)
+        is_executable = getattr(sys, 'frozen', False)
+        
         if args.gui:
             app.run_gui()
         elif args.file or args.batch:
             app.run_cli(args)
+        elif is_executable:
+            # When running as executable, default to GUI mode
+            app.run_gui()
         else:
-            # Interactive CLI mode
+            # Interactive CLI mode (only when running as Python script)
             app.run_cli()
             
     except KeyboardInterrupt:
