@@ -21,6 +21,156 @@ import re
 # Get a logger for this module
 logger = logging.getLogger(__name__)
 
+# Custom exceptions for validation failures
+class ValidationError(Exception):
+    """Custom exception for validation failures"""
+    def __init__(self, message, validation_result=None):
+        super().__init__(message)
+        self.validation_result = validation_result
+
+class PositionValidationError(ValidationError):
+    """Specific exception for position-description validation failures"""
+    pass
+
+def _format_validation_error_message(validation_result, context=""):
+    """
+    Standardized error message formatting for position-description validation failures
+    
+    Args:
+        validation_result: Validation result dictionary with errors and summary
+        context: Additional context string (e.g., "Use Mapping", "Compare Full")
+        
+    Returns:
+        str: Formatted error message for user display
+    """
+    if not validation_result or validation_result.get('is_valid', True):
+        return "No validation errors found."
+    
+    # Base error message
+    title = f"{context} - Structure Validation Failed" if context else "Structure Validation Failed"
+    
+    # Summary
+    summary = validation_result.get('summary', 'Validation failed with unknown errors.')
+    
+    # Error details (limit to first 5 errors for readability)
+    errors = validation_result.get('errors', [])
+    error_details = "\n".join(errors[:5])
+    if len(errors) > 5:
+        error_details += f"\n... and {len(errors) - 5} more errors"
+    
+    # Mismatched positions for additional context
+    mismatched_positions = validation_result.get('mismatched_positions', [])
+    position_count = len(mismatched_positions)
+    
+    # Build comprehensive error message
+    if context == "Use Mapping":
+        action_guidance = (
+            "This means the current file has a different structure than the saved mapping.\n"
+            "You cannot apply this mapping to the current file.\n\n"
+            "Possible solutions:\n"
+            "• Use a file with the same structure as the original\n"
+            "• Create a new mapping for this file structure\n"
+            "• Verify you selected the correct mapping file"
+        )
+    elif context == "Compare Full":
+        action_guidance = (
+            "This means the comparison file has a different structure than the master BOQ.\n"
+            "You cannot compare BOQs with different structures.\n\n"
+            "Possible solutions:\n"
+            "• Use a comparison file with the same structure\n"
+            "• Create separate analyses for files with different structures\n"
+            "• Verify you selected the correct comparison file"
+        )
+    else:
+        action_guidance = (
+            "The files have different structures and cannot be processed together.\n\n"
+            "Please verify that you are using compatible files."
+        )
+    
+    formatted_message = (
+        f"{summary}\n\n"
+        f"Details ({position_count} mismatches found):\n{error_details}\n\n"
+        f"{action_guidance}"
+    )
+    
+    return formatted_message
+
+def _log_validation_failure(validation_result, context="", operation="validation"):
+    """
+    Standardized logging for validation failures
+    
+    Args:
+        validation_result: Validation result dictionary
+        context: Operation context (e.g., "Use Mapping", "Compare Full")
+        operation: Type of operation being performed
+    """
+    if not validation_result:
+        logger.error(f"{context} {operation}: No validation result provided")
+        return
+    
+    if validation_result.get('is_valid', True):
+        logger.info(f"{context} {operation}: Validation passed successfully")
+        return
+    
+    # Log summary
+    summary = validation_result.get('summary', 'Unknown validation failure')
+    logger.error(f"{context} {operation} failed: {summary}")
+    
+    # Log detailed errors
+    errors = validation_result.get('errors', [])
+    logger.error(f"{context} {operation}: Found {len(errors)} validation errors:")
+    for i, error in enumerate(errors[:10], 1):  # Log first 10 errors
+        logger.error(f"  {i}. {error}")
+    
+    if len(errors) > 10:
+        logger.error(f"  ... and {len(errors) - 10} more errors")
+    
+    # Log mismatched positions summary
+    mismatched_positions = validation_result.get('mismatched_positions', [])
+    if mismatched_positions:
+        logger.debug(f"{context} {operation}: Mismatched positions details:")
+        for position_info in mismatched_positions[:5]:  # Log first 5 for debugging
+            if 'expected_description' in position_info:
+                logger.debug(f"  Position {position_info.get('position', 'unknown')}: "
+                           f"expected '{position_info.get('expected_description', '')}', "
+                           f"got '{position_info.get('actual_description', '')}'")
+            else:
+                logger.debug(f"  Missing position {position_info.get('position', 'unknown')}: "
+                           f"expected '{position_info.get('expected_description', '')}'")
+
+def _handle_validation_failure(validation_result, context="", operation="validation", show_dialog=True):
+    """
+    Standardized validation failure handling with logging and user notification
+    
+    Args:
+        validation_result: Validation result dictionary
+        context: Operation context for error messages
+        operation: Type of operation being performed
+        show_dialog: Whether to show error dialog to user
+        
+    Returns:
+        bool: False (indicating failure)
+        
+    Raises:
+        PositionValidationError: Always raises this exception to terminate processing
+    """
+    # Log the failure
+    _log_validation_failure(validation_result, context, operation)
+    
+    # Format user message
+    error_message = _format_validation_error_message(validation_result, context)
+    
+    # Show dialog if requested
+    if show_dialog:
+        dialog_title = f"{context} - Structure Validation Failed" if context else "Structure Validation Failed"
+        messagebox.showerror(dialog_title, error_message)
+    
+    # Log termination
+    logger.warning(f"{context} {operation}: Process terminated due to validation failure")
+    
+    # Raise exception to terminate processing
+    raise PositionValidationError(error_message, validation_result)
+
 # Optional imports
 try:
     from ttkthemes import ThemedTk
@@ -2658,6 +2808,20 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 
                 print(f"[DEBUG] Sheet '{sheet_name}': Structure validated and mappings applied")
             
+            # ENHANCED VALIDATION: Position-description validation for the entire file
+            logger.info("Performing position-description validation for Use Mapping workflow...")
+            position_validation = self._validate_position_description_match(file_mapping, mapping_data)
+            
+            if not position_validation['is_valid']:
+                loading_widget.destroy()
+                try:
+                    _handle_validation_failure(position_validation, "Use Mapping", "position-description validation")
+                except PositionValidationError:
+                    # Process terminated due to validation failure
+                    return
+            
+            logger.info(f"Use Mapping position-description validation passed: {position_validation['summary']}")
+            
             # Store the file mapping and remove loading widget
             self.file_mapping = file_mapping
             self.column_mapper = file_mapping.column_mapper if hasattr(file_mapping, 'column_mapper') else None
@@ -3463,6 +3627,19 @@ Review the rows below and adjust validity as needed."""
         try:
             print(f"[DEBUG] Applying master mapping and merging for offer: {new_offer_name}")
             
+            # ENHANCED VALIDATION: Position-description validation before applying mappings
+            logger.info("Performing position-description validation for Compare Full workflow...")
+            position_validation = self._validate_position_description_match(file_mapping, master_mapping)
+            
+            if not position_validation['is_valid']:
+                try:
+                    _handle_validation_failure(position_validation, "Compare Full", "position-description validation")
+                except PositionValidationError:
+                    # Process terminated due to validation failure
+                    return
+            
+            logger.info(f"Compare Full position-description validation passed: {position_validation['summary']}")
+            
             # Apply the master mapping to the new file (reuse existing logic)
             # This is similar to _apply_saved_mappings but without the UI parts
             for sheet in file_mapping.sheets:
@@ -4244,109 +4421,201 @@ Review the rows below and adjust validity as needed."""
             for i, rc in enumerate(row_classifications):
                 # Check if position data exists
                 if 'position' not in rc:
-                    logger.warning(f"Row classification {i} in sheet '{sheet_name}' missing position data")
-                    # Generate position if missing (backward compatibility)
+                    print(f"    Missing position data for row {i} in sheet {sheet_name}")
+                    # Generate position if missing
                     rc['position'] = f"{sheet_name}_{i + 1}"
                     continue
                 
-                # Validate position format
                 position = rc['position']
-                if position is None:
-                    logger.warning(f"Row classification {i} in sheet '{sheet_name}' has None position")
-                    rc['position'] = f"{sheet_name}_{i + 1}"
-                    continue
                 
                 # Validate position format (should be sheet_name_row_number)
                 if not isinstance(position, str) or '_' not in position:
-                    logger.warning(f"Row classification {i} in sheet '{sheet_name}' has invalid position format: '{position}'")
+                    print(f"    Fixed invalid position format for row {i}: '{position}'")
                     rc['position'] = f"{sheet_name}_{i + 1}"
                     continue
+                
+                # Additional validation: check if it follows the expected pattern
+                parts = position.split('_')
+                if len(parts) < 2 or not parts[-1].isdigit():
+                    print(f"    Fixed invalid position format for row {i}: '{position}'")
+                    rc['position'] = f"{sheet_name}_{i + 1}"
         
         return True
 
-    def _load_analysis(self):
-        """Handle loading a previously saved analysis"""
-        file_path = filedialog.askopenfilename(
-            title="Load Analysis",
-            filetypes=[("Pickle files", "*.pkl"), ("All files", "*.*")]
-        )
-        if file_path:
-            try:
-                with open(file_path, 'rb') as f:
-                    loaded_data = pickle.load(f)
+    def _validate_position_description_match(self, current_file_mapping, saved_mapping_data):
+        """
+        Validate that position-description pairs match exactly between current file and saved mapping
+        
+        Args:
+            current_file_mapping: Current file mapping object
+            saved_mapping_data: Saved mapping data dictionary
+            
+        Returns:
+            dict: Validation result with detailed information
+                {
+                    'is_valid': bool,
+                    'errors': list of error messages,
+                    'mismatched_positions': list of position details,
+                    'summary': summary string
+                }
+        """
+        validation_result = {
+            'is_valid': True,
+            'errors': [],
+            'mismatched_positions': [],
+            'summary': ''
+        }
+        
+        logger.debug("Starting position-description validation")
+        
+        try:
+            # Get saved mapping data
+            saved_sheets = saved_mapping_data.get('sheets', [])
+            saved_position_descriptions = {}
+            
+            # Extract position-description pairs from saved mapping
+            for saved_sheet in saved_sheets:
+                sheet_name = saved_sheet.get('sheet_name', '')
+                row_classifications = saved_sheet.get('row_classifications', [])
                 
-                print(f"[DEBUG] Loaded data type: {type(loaded_data)}")
+                for rc in row_classifications:
+                    if isinstance(rc, dict):
+                        position = rc.get('position', None)
+                        row_data = rc.get('row_data', [])
+                        
+                        # Get description (usually first column)
+                        description = ''
+                        if row_data and len(row_data) > 0:
+                            description = str(row_data[0]).strip()
+                        
+                        if position and description:
+                            saved_position_descriptions[position] = {
+                                'description': description,
+                                'sheet_name': sheet_name,
+                                'row_data': row_data
+                            }
+            
+            logger.debug(f"Found {len(saved_position_descriptions)} position-description pairs in saved mapping")
+            
+            # Extract position-description pairs from current file
+            current_position_descriptions = {}
+            
+            for sheet in getattr(current_file_mapping, 'sheets', []):
+                sheet_name = sheet.sheet_name
                 
-                # Handle both old format (just DataFrame) and new format (dictionary)
-                if isinstance(loaded_data, dict):
-                    df = loaded_data.get('dataframe')
-                    self.current_offer_name = loaded_data.get('offer_name')
-                    mapping_data = loaded_data.get('mapping_data')
-                    comparison_offers = loaded_data.get('comparison_offers')
-                    is_comparison = loaded_data.get('is_comparison', False)
-                    analysis_type = loaded_data.get('analysis_type', 'unknown')
-                    
-                    print(f"[DEBUG] Enhanced format - DataFrame shape: {df.shape if df is not None else 'None'}")
-                    print(f"[DEBUG] Offer name: {self.current_offer_name}")
-                    print(f"[DEBUG] Has mapping data: {mapping_data is not None}")
-                    print(f"[DEBUG] Comparison offers: {comparison_offers}")
-                    print(f"[DEBUG] Is comparison: {is_comparison}")
+                if hasattr(sheet, 'row_classifications'):
+                    for rc in sheet.row_classifications:
+                        position = getattr(rc, 'position', None)
+                        row_data = getattr(rc, 'row_data', None)
+                        
+                        # Get row data if not available
+                        if row_data is None and hasattr(sheet, 'sheet_data'):
+                            try:
+                                row_data = sheet.sheet_data[rc.row_index]
+                            except Exception:
+                                row_data = []
+                        
+                        if row_data is None:
+                            row_data = []
+                        
+                        # Get description (usually first column)
+                        description = ''
+                        if row_data and len(row_data) > 0:
+                            description = str(row_data[0]).strip()
+                        
+                        if position and description:
+                            current_position_descriptions[position] = {
+                                'description': description,
+                                'sheet_name': sheet_name,
+                                'row_data': row_data
+                            }
+            
+            logger.debug(f"Found {len(current_position_descriptions)} position-description pairs in current file")
+            
+            # Compare position-description pairs
+            mismatched_count = 0
+            missing_positions = []
+            description_mismatches = []
+            
+            # Check that all saved positions exist in current file
+            for saved_position, saved_data in saved_position_descriptions.items():
+                if saved_position not in current_position_descriptions:
+                    missing_positions.append({
+                        'position': saved_position,
+                        'expected_description': saved_data['description'],
+                        'sheet_name': saved_data['sheet_name']
+                    })
+                    mismatched_count += 1
                 else:
-                    # Legacy format - just DataFrame
-                    df = loaded_data
-                    self.current_offer_name = None
-                    mapping_data = None
-                    comparison_offers = None
-                    is_comparison = False
-                    analysis_type = 'legacy'
-                    print(f"[DEBUG] Legacy format - DataFrame shape: {df.shape if df is not None else 'None'}")
-                
-                if isinstance(df, pd.DataFrame) and not df.empty:
-                    print(f"[DEBUG] DataFrame columns: {df.columns.tolist()}")
-                    print(f"[DEBUG] DataFrame first few rows:")
-                    print(df.head().to_string())
+                    # Check if descriptions match
+                    current_data = current_position_descriptions[saved_position]
+                    saved_desc = saved_data['description']
+                    current_desc = current_data['description']
                     
-                    # Create a new tab for the loaded analysis
-                    filename = os.path.basename(file_path)
-                    tab_name = f"Loaded: {filename}"
-                    if analysis_type == 'comparison':
-                        tab_name = f"Comparison: {filename}"
-                    
-                    tab = ttk.Frame(self.notebook)
-                    self.notebook.add(tab, text=tab_name)
-                    self.notebook.select(tab)
-                    
-                    # Store the loaded data in the tab
-                    if mapping_data:
-                        tab.stored_mapping_data = mapping_data
-                        print(f"[DEBUG] Stored mapping data with {len(mapping_data.get('sheets', []))} sheets")
-                    
-                    if comparison_offers:
-                        tab.comparison_offers = comparison_offers
-                        print(f"[DEBUG] Stored comparison offers: {comparison_offers}")
-                    
-                    # Show the data in the grid
-                    self._show_final_categorized_data(tab, df, None)
-                    
-                    # Update status with detailed information
-                    details = [f"DataFrame: {df.shape[0]} rows, {df.shape[1]} columns"]
-                    if mapping_data:
-                        details.append(f"Mapping: {len(mapping_data.get('sheets', []))} sheets")
-                    if comparison_offers:
-                        details.append(f"Comparison: {len(comparison_offers)} offers")
-                    
-                    status_msg = f"Analysis loaded - " + ", ".join(details)
-                    self._update_status(status_msg)
-                    
-                elif isinstance(df, pd.DataFrame) and df.empty:
-                    messagebox.showerror("Error", "The loaded analysis contains an empty DataFrame")
-                    print("[DEBUG] DataFrame is empty")
-                else:
-                    messagebox.showerror("Error", "Invalid analysis file format - no DataFrame found")
-                    print(f"[DEBUG] Invalid format - df type: {type(df)}")
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to load analysis: {str(e)}")
-                logger.error(f"Failed to load analysis from {file_path}: {e}", exc_info=True)
-                print(f"[DEBUG] Exception loading analysis: {e}")
-                import traceback
-                traceback.print_exc()
+                    if saved_desc != current_desc:
+                        description_mismatches.append({
+                            'position': saved_position,
+                            'sheet_name': saved_data['sheet_name'],
+                            'expected_description': saved_desc,
+                            'actual_description': current_desc
+                        })
+                        mismatched_count += 1
+            
+            # Check for extra positions in current file (not in saved mapping)
+            extra_positions = []
+            for current_position in current_position_descriptions:
+                if current_position not in saved_position_descriptions:
+                    current_data = current_position_descriptions[current_position]
+                    extra_positions.append({
+                        'position': current_position,
+                        'description': current_data['description'],
+                        'sheet_name': current_data['sheet_name']
+                    })
+            
+            # Log detailed validation results
+            logger.debug(f"Validation analysis: {len(missing_positions)} missing positions, "
+                        f"{len(description_mismatches)} description mismatches, "
+                        f"{len(extra_positions)} extra positions")
+            
+            # Generate validation result
+            if missing_positions:
+                validation_result['is_valid'] = False
+                logger.warning(f"Found {len(missing_positions)} missing positions")
+                for missing in missing_positions:
+                    error_msg = f"Missing position {missing['position']} in sheet '{missing['sheet_name']}' - expected description: '{missing['expected_description']}'"
+                    validation_result['errors'].append(error_msg)
+                    validation_result['mismatched_positions'].append(missing)
+                    logger.debug(f"Missing position details: {missing}")
+            
+            if description_mismatches:
+                validation_result['is_valid'] = False
+                logger.warning(f"Found {len(description_mismatches)} description mismatches")
+                for mismatch in description_mismatches:
+                    error_msg = f"Description mismatch at position {mismatch['position']} in sheet '{mismatch['sheet_name']}' - expected: '{mismatch['expected_description']}', actual: '{mismatch['actual_description']}'"
+                    validation_result['errors'].append(error_msg)
+                    validation_result['mismatched_positions'].append(mismatch)
+                    logger.debug(f"Description mismatch details: {mismatch}")
+            
+            if extra_positions:
+                # Extra positions are not necessarily an error, but we'll log them
+                logger.info(f"Found {len(extra_positions)} extra positions in current file (not in saved mapping)")
+                for extra in extra_positions:
+                    warning_msg = f"Extra position {extra['position']} in sheet '{extra['sheet_name']}' with description: '{extra['description']}'"
+                    logger.debug(warning_msg)
+            
+            # Generate summary
+            if validation_result['is_valid']:
+                validation_result['summary'] = f"Position-description validation passed. {len(saved_position_descriptions)} positions matched successfully."
+                logger.info(validation_result['summary'])
+            else:
+                validation_result['summary'] = f"Position-description validation failed. {mismatched_count} mismatches found: {len(missing_positions)} missing positions, {len(description_mismatches)} description mismatches."
+                logger.error(validation_result['summary'])
+            
+            return validation_result
+            
+        except Exception as e:
+            validation_result['is_valid'] = False
+            validation_result['errors'].append(f"Error during position-description validation: {str(e)}")
+            validation_result['summary'] = f"Validation failed due to error: {str(e)}"
+            logger.error(f"Position-description validation error: {e}", exc_info=True)
+            return validation_result
