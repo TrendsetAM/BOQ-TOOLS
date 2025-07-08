@@ -2090,18 +2090,30 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                         return  # Ignore 'Offer' column
                     category_pretty = summary_columns[col_num]
                     
+                    # Get the current full DataFrame - always use tab.final_dataframe as primary source
+                    current_df = getattr(tab, 'final_dataframe', None)
+                    if current_df is None:
+                        # Fallback to display_df only if tab.final_dataframe doesn't exist
+                        current_df = display_df
+                    
+                    # Get the current display columns - dynamically from the actual DataFrame
+                    current_display_columns = list(current_df.columns)
+                    
                     # Toggle filter: if already filtered to this, remove; else filter
                     if getattr(tab, '_active_category_filter', None) == category_pretty:
                         tab._active_category_filter = None
-                        filtered_df = tab.final_dataframe if hasattr(tab, 'final_dataframe') else display_df
+                        filtered_df = current_df
                     else:
                         tab._active_category_filter = category_pretty
-                        df_full = tab.final_dataframe if hasattr(tab, 'final_dataframe') else display_df
                         # Filter by pretty category directly - no conversion needed
-                        filtered_df = df_full[df_full['category'] == category_pretty]
+                        if 'category' in current_df.columns:
+                            filtered_df = current_df[current_df['category'] == category_pretty]
+                        else:
+                            # If no category column, show empty result
+                            filtered_df = current_df.iloc[0:0]  # Empty DataFrame with same structure
                     
-                    # Repopulate the main grid with the filtered DataFrame
-                    self._populate_final_data_treeview(tab.final_data_tree, filtered_df, final_display_columns)
+                    # Repopulate the main grid with the filtered DataFrame using current columns
+                    self._populate_final_data_treeview(tab.final_data_tree, filtered_df, current_display_columns)
                     # Update the reference so further edits work on the filtered view
                     tab._filtered_dataframe = filtered_df
                 
@@ -2732,6 +2744,9 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 tab.final_dataframe = master_df
                 tab.master_offer_name = master_offer_name
                 tab.comparison_offers = [master_offer_name]
+                
+                # Reset summary tree to ensure it gets rebuilt with new structure
+                tab.summary_tree = None
                 
                 # Ensure the mapping data is stored in the tab for future comparisons
                 if not hasattr(tab, 'stored_mapping_data'):
@@ -3497,6 +3512,9 @@ Review the rows below and adjust validity as needed."""
             
             # Repopulate the treeview
             self._populate_final_data_treeview(tree, comparison_df, new_columns)
+            
+            # Reset summary tree so it gets rebuilt with the new DataFrame structure
+            tab.summary_tree = None
             
             # Remove any existing resize bindings to avoid conflicts
             try:
