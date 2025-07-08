@@ -781,7 +781,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         # Dialog to edit mapped type
         dialog = tk.Toplevel(self.root)
         dialog.title(f"Edit Column: {column_name}")
-        dialog.geometry("500x500")
+        dialog.geometry("500x650")
         dialog.transient(self.root)
         dialog.grab_set()
         
