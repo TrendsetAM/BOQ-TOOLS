@@ -911,7 +911,17 @@ class ColumnMapper:
         
         for col_idx, original_header in enumerate(headers):
             if not original_header or not str(original_header).strip():
-                # Skip empty headers
+                # Create mapping for empty headers as IGNORE to maintain column index consistency
+                mapping = ColumnMapping(
+                    column_index=col_idx,
+                    original_header=original_header or "",
+                    normalized_header="",
+                    mapped_type=ColumnType.IGNORE,
+                    confidence=0.0,
+                    alternatives=[(ColumnType.IGNORE, 0.0)],
+                    reasoning=["Empty header - mapped to ignore"]
+                )
+                all_mappings.append(mapping)
                 continue
                 
             # Try canonical mapping only
@@ -1009,6 +1019,8 @@ class ColumnMapper:
         
         for col_idx, original_header in enumerate(headers):
             if not original_header or not str(original_header).strip():
+                # Include empty headers in alternatives as IGNORE only
+                alternatives[col_idx] = [(ColumnType.IGNORE, 0.0)]
                 continue
             
             # Check if there's a canonical match
@@ -1076,7 +1088,80 @@ class ColumnMapper:
                 suggestions=["No headers found"]
             )
         
-        # Map columns to types
+        # CONSISTENCY FIX: Use the same enhancement logic as manual selection
+        # This ensures auto-detection and manual selection produce identical headers
+        logger.info(f"Applying consistent enhancement logic to auto-detected header row {header_info.row_index}")
+        
+        # Use the forced header processing method to get consistent enhancement
+        return self.process_sheet_mapping_with_forced_header(sheet_data, header_info.row_index)
+    
+    def process_sheet_mapping_with_forced_header(self, sheet_data: List[List[str]], header_row_index: int) -> MappingResult:
+        """
+        Complete sheet mapping process with user-specified header row
+        
+        Args:
+            sheet_data: Sheet data as list of rows
+            header_row_index: 0-based index of the header row (user-specified)
+            
+        Returns:
+            MappingResult with complete mapping information
+        """
+        logger.info(f"Processing sheet mapping with forced header row {header_row_index} for {len(sheet_data)} rows")
+        
+        # Validate header row index
+        if header_row_index < 0 or header_row_index >= len(sheet_data):
+            logger.error(f"Invalid header row index {header_row_index} for sheet with {len(sheet_data)} rows")
+            return MappingResult(
+                header_row=HeaderRowInfo(
+                    row_index=header_row_index,
+                    confidence=0.0,
+                    method=HeaderDetectionMethod.KEYWORD_MATCH,
+                    reasoning=[f"Invalid header row index {header_row_index}"],
+                    headers=[],
+                    is_merged=False
+                ),
+                mappings=[],
+                overall_confidence=0.0,
+                unmapped_columns=[],
+                suggestions=[f"Invalid header row index {header_row_index}"]
+            )
+        
+        # Get headers from specified row
+        headers = sheet_data[header_row_index]
+        
+        # Create header info with manual method
+        header_info = HeaderRowInfo(
+            row_index=header_row_index,
+            confidence=1.0,  # User specified = 100% confidence
+            method=HeaderDetectionMethod.KEYWORD_MATCH,  # Use existing enum value
+            reasoning=["User manually specified header row"],
+            headers=headers,
+            is_merged=False
+        )
+        
+        if not headers or not any(str(h).strip() for h in headers):
+            logger.warning(f"Header row {header_row_index} appears to be empty or invalid")
+            return MappingResult(
+                header_row=header_info,
+                mappings=[],
+                overall_confidence=0.0,
+                unmapped_columns=list(range(len(headers))),
+                suggestions=["Selected header row appears to be empty"]
+            )
+        
+        # Apply sub-header processing similar to find_header_row method
+        # Check if there are parent headers above it
+        if header_info.row_index > 0:
+            enhanced_header = self._enhance_header_with_parent_row(header_info, sheet_data)
+            if enhanced_header:
+                header_info = enhanced_header
+        
+        # Check if the header row itself has merged cells and subheaders below it
+        enhanced_header = self._enhance_header_with_subheader_row(header_info, sheet_data)
+        if enhanced_header:
+            header_info = enhanced_header
+        
+        # Map columns to types using the potentially enhanced headers
         mappings = self.map_columns_to_types(header_info.headers)
         
         # Calculate overall confidence
@@ -1097,7 +1182,7 @@ class ColumnMapper:
             suggestions=suggestions
         )
         
-        logger.info(f"Mapping completed: {len(mappings)} columns mapped, "
+        logger.info(f"Forced header mapping completed: {len(mappings)} columns mapped, "
                    f"confidence: {overall_confidence:.2f}")
         
         return result

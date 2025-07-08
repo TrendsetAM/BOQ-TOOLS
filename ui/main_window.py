@@ -655,7 +655,8 @@ Processing Status: {file_mapping.processing_summary.successful_sheets} successfu
         """Populate an individual sheet tab with its data and column mappings."""
         # Configure sheet frame grid
         sheet_frame.grid_rowconfigure(0, weight=0)  # Summary
-        sheet_frame.grid_rowconfigure(1, weight=1)  # Column mappings table
+        sheet_frame.grid_rowconfigure(1, weight=0)  # Header row control
+        sheet_frame.grid_rowconfigure(2, weight=1)  # Column mappings table
         sheet_frame.grid_columnconfigure(0, weight=1)
         
         # Sheet summary
@@ -671,9 +672,41 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         summary_label = ttk.Label(summary_frame, text=summary_text)
         summary_label.grid(row=0, column=0, padx=10, pady=5, sticky=tk.W)
         
+        # Header Row Control
+        header_control_frame = ttk.Frame(sheet_frame)
+        header_control_frame.grid(row=1, column=0, sticky=tk.EW, padx=5, pady=5)
+        
+        # Get current header row (convert from 0-based to 1-based for display)
+        current_header_row = getattr(sheet, 'header_row_index', 0) + 1
+        header_row_var = tk.IntVar(value=current_header_row)
+        
+        # Get sheet data length for validation (use a reasonable default)
+        # We'll load the file only when the user actually clicks the +/- buttons
+        sheet_data_length = 50  # Reasonable default for most Excel files
+        
+        # Header row control widgets
+        ttk.Label(header_control_frame, text="Header Row:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        decrease_btn = ttk.Button(header_control_frame, text="−", width=3,
+                                 command=lambda: self._on_header_row_decrease(sheet, header_row_var, entry_widget, 
+                                                                             decrease_btn, increase_btn))
+        decrease_btn.pack(side=tk.LEFT, padx=(0, 2))
+        
+        entry_widget = ttk.Entry(header_control_frame, textvariable=header_row_var, width=4, 
+                                justify=tk.CENTER, state='readonly')
+        entry_widget.pack(side=tk.LEFT, padx=(0, 2))
+        
+        increase_btn = ttk.Button(header_control_frame, text="+", width=3,
+                                 command=lambda: self._on_header_row_increase(sheet, header_row_var, entry_widget,
+                                                                             decrease_btn, increase_btn))
+        increase_btn.pack(side=tk.LEFT)
+        
+        # Update button states based on current row
+        self._update_header_row_buttons_simple(current_header_row, decrease_btn, increase_btn)
+        
         # Column mappings table
         mappings_frame = ttk.LabelFrame(sheet_frame, text="Column Mappings (Double-click to edit) - Required columns are highlighted")
-        mappings_frame.grid(row=1, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        mappings_frame.grid(row=2, column=0, sticky=tk.NSEW, padx=5, pady=5)
         mappings_frame.grid_rowconfigure(0, weight=1)
         mappings_frame.grid_columnconfigure(0, weight=1)
         
@@ -747,6 +780,261 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         
         # Bind double-click to edit
         tree.bind('<Double-1>', lambda e, t=tree, s=sheet: self._edit_column_mapping(t, s))
+    
+    def _update_header_row_buttons(self, current_row, decrease_btn, increase_btn, max_rows):
+        """Update the state of header row buttons based on current row"""
+        # Disable decrease button if at minimum (row 1)
+        if current_row <= 1:
+            decrease_btn.config(state='disabled')
+        else:
+            decrease_btn.config(state='normal')
+        
+        # Disable increase button if at maximum
+        if current_row >= max_rows:
+            increase_btn.config(state='disabled')
+        else:
+            increase_btn.config(state='normal')
+    
+    def _update_header_row_buttons_simple(self, current_row, decrease_btn, increase_btn):
+        """Update the state of header row buttons based on current row (simple version)"""
+        # Disable decrease button if at minimum (row 1)
+        if current_row <= 1:
+            decrease_btn.config(state='disabled')
+        else:
+            decrease_btn.config(state='normal')
+        
+        # Increase button is always enabled (validation happens in reprocess method)
+        increase_btn.config(state='normal')
+    
+    def _on_header_row_decrease(self, sheet, header_row_var, entry_widget, decrease_btn, increase_btn):
+        """Decrease header row number and immediately refresh"""
+        current_row = header_row_var.get()
+        if current_row > 1:  # Minimum row 1
+            new_row = current_row - 1
+            header_row_var.set(new_row)
+            
+            # Update entry widget
+            entry_widget.config(state='normal')
+            entry_widget.delete(0, tk.END)
+            entry_widget.insert(0, str(new_row))
+            entry_widget.config(state='readonly')
+            
+            # Immediately reprocess with new header row (validation happens inside)
+            success = self._reprocess_sheet_with_header_row(sheet, new_row - 1)  # Convert to 0-based
+            
+            # Update button states based on success and new row
+            if success:
+                self._update_header_row_buttons_simple(new_row, decrease_btn, increase_btn)
+            else:
+                # Revert on failure
+                header_row_var.set(current_row)
+                entry_widget.config(state='normal')
+                entry_widget.delete(0, tk.END)
+                entry_widget.insert(0, str(current_row))
+                entry_widget.config(state='readonly')
+    
+    def _on_header_row_increase(self, sheet, header_row_var, entry_widget, decrease_btn, increase_btn):
+        """Increase header row number and immediately refresh"""
+        current_row = header_row_var.get()
+        new_row = current_row + 1
+        header_row_var.set(new_row)
+        
+        # Update entry widget
+        entry_widget.config(state='normal')
+        entry_widget.delete(0, tk.END)
+        entry_widget.insert(0, str(new_row))
+        entry_widget.config(state='readonly')
+        
+        # Immediately reprocess with new header row (validation happens inside)
+        success = self._reprocess_sheet_with_header_row(sheet, new_row - 1)  # Convert to 0-based
+        
+        # Update button states based on success and new row
+        if success:
+            self._update_header_row_buttons_simple(new_row, decrease_btn, increase_btn)
+        else:
+            # Revert on failure
+            header_row_var.set(current_row)
+            entry_widget.config(state='normal')
+            entry_widget.delete(0, tk.END)
+            entry_widget.insert(0, str(current_row))
+            entry_widget.config(state='readonly')
+    
+    def _reprocess_sheet_with_header_row(self, sheet, new_header_row_index):
+        """Reprocess sheet with new header row and update UI"""
+        try:
+            # Get the current file path from the file mapping
+            if not hasattr(self, 'file_mapping') or not self.file_mapping:
+                messagebox.showerror("Error", "No file mapping available")
+                return False
+            
+            # Get the file path from the metadata
+            file_path = Path(self.file_mapping.metadata.file_path)
+            if not file_path.exists():
+                messagebox.showerror("Error", f"Original file not found: {file_path}")
+                return False
+            
+            # Reload the file temporarily to get sheet data
+            try:
+                from core.file_processor import ExcelProcessor
+                temp_processor = ExcelProcessor()
+                temp_processor.load_file(file_path)
+                
+                # Get sheet data for the specific sheet
+                sheet_data = temp_processor.get_sheet_data(sheet.sheet_name)
+                
+                if not sheet_data:
+                    messagebox.showerror("Error", "No sheet data available for reprocessing")
+                    return False
+                
+                # Validate the new header row index
+                if new_header_row_index < 0 or new_header_row_index >= len(sheet_data):
+                    messagebox.showerror("Error", f"Invalid header row {new_header_row_index + 1}. Sheet has {len(sheet_data)} rows.")
+                    return False
+                
+            except Exception as e:
+                logger.error(f"Failed to reload file and get sheet data: {e}")
+                messagebox.showerror("Error", f"Failed to reload file: {str(e)}")
+                return False
+            
+            # Use the column mapper to reprocess with forced header row
+            if not self.column_mapper:
+                messagebox.showerror("Error", "Column mapper not available")
+                return False
+            
+            # Process with forced header row
+            mapping_result = self.column_mapper.process_sheet_mapping_with_forced_header(
+                sheet_data, new_header_row_index
+            )
+            
+            # Update sheet object with new mapping results
+            sheet.header_row_index = new_header_row_index
+            sheet.confidence = mapping_result.overall_confidence
+            
+            # Convert mappings to the format expected by the sheet
+            new_column_mappings = []
+            for mapping in mapping_result.mappings:
+                # Create a simple object with the required attributes
+                col_mapping = type('ColumnMapping', (), {})()
+                col_mapping.column_index = mapping.column_index
+                col_mapping.original_header = mapping.original_header
+                col_mapping.mapped_type = mapping.mapped_type.value
+                col_mapping.confidence = mapping.confidence
+                col_mapping.user_edited = True  # Mark as user-edited since user manually changed header row
+                col_mapping.reasoning = mapping.reasoning
+                new_column_mappings.append(col_mapping)
+            
+            sheet.column_mappings = new_column_mappings
+            
+            # CRITICAL FIX: Update the cached sheet data in the controller to reflect the new header row
+            # This prevents data corruption during row classification
+            if hasattr(self, 'controller') and self.controller:
+                # Find the file key by matching the file mapping
+                file_key = None
+                for key, file_data in self.controller.current_files.items():
+                    if file_data.get('file_mapping') == self.file_mapping:
+                        file_key = key
+                        break
+                
+                if file_key and hasattr(self.controller, 'current_files') and file_key in self.controller.current_files:
+                    processor_results = self.controller.current_files[file_key].get('processor_results', {})
+                    original_sheet_data = processor_results.get('sheet_data', {})
+                    
+                    # Update the cached sheet data with the new header row information
+                    if sheet.sheet_name in original_sheet_data:
+                        # Store the new header row index as metadata for this sheet
+                        # This will be used during row classification to skip the correct header row
+                        if 'header_row_indices' not in processor_results:
+                            processor_results['header_row_indices'] = {}
+                        processor_results['header_row_indices'][sheet.sheet_name] = new_header_row_index
+                        
+                        print(f"[DEBUG] Updated cached header row index for sheet '{sheet.sheet_name}' to {new_header_row_index}")
+            
+            # CRITICAL FIX: Set the sheet.sheet_data to the FULL original data
+            # The row classifications contain indices that reference the original data structure
+            # We should NOT remove the header row from sheet.sheet_data because the row indices
+            # in the classifications are adjusted to account for the header row position
+            sheet.sheet_data = sheet_data
+            print(f"[DEBUG] Set sheet.sheet_data for '{sheet.sheet_name}' with full original data")
+            print(f"[DEBUG] Data length: {len(sheet_data)}")
+            print(f"[DEBUG] Header row index: {new_header_row_index}")
+            if new_header_row_index < len(sheet_data):
+                print(f"[DEBUG] Header row content: {sheet_data[new_header_row_index]}")
+            if len(sheet_data) > 0:
+                print(f"[DEBUG] First row of sheet_data: {sheet_data[0]}")
+            if len(sheet_data) > 1:
+                print(f"[DEBUG] Second row of sheet_data: {sheet_data[1]}")
+            
+            # Refresh the UI for this sheet
+            self._refresh_single_sheet_tab(sheet)
+            
+            # Update status
+            self._update_status(f"Header row updated to row {new_header_row_index + 1} for sheet '{sheet.sheet_name}'")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error reprocessing sheet with header row {new_header_row_index}: {e}")
+            messagebox.showerror("Error", f"Failed to reprocess sheet: {str(e)}")
+            return False
+    
+    def _refresh_single_sheet_tab(self, sheet):
+        """Refresh the UI for a single sheet tab"""
+        try:
+            # Find the sheet tab in the notebook
+            if not hasattr(self, 'file_mapping') or not self.file_mapping:
+                return
+            
+            # Get the sheet treeview
+            tree = self.sheet_treeviews.get(sheet.sheet_name)
+            if not tree:
+                return
+            
+            # Clear existing items
+            for item in tree.get_children():
+                tree.delete(item)
+            
+            # Required types (base required + successfully mapped new columns)
+            if self.column_mapper and hasattr(self.column_mapper, 'config'):
+                base_required_types = {col_type.value for col_type in self.column_mapper.config.get_required_columns()}
+            else:
+                base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+            
+            # Add new columns as "required" if they are successfully mapped (confidence > 0)
+            required_types = base_required_types.copy()
+            if hasattr(sheet, 'column_mappings'):
+                for mapping in sheet.column_mappings:
+                    mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                    confidence = getattr(mapping, 'confidence', 0)
+                    # Treat scope, manhours, wage as required if successfully mapped
+                    if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                        required_types.add(mapped_type)
+            
+            # Repopulate treeview with updated column mappings
+            if hasattr(sheet, 'column_mappings'):
+                for mapping in sheet.column_mappings:
+                    confidence = getattr(mapping, 'confidence', 0)
+                    mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                    required = mapped_type in required_types
+                    original_header = getattr(mapping, 'original_header', 'Unknown')
+                    
+                    # Determine if this mapping was user-edited
+                    actions = "Manual Header" if getattr(mapping, 'user_edited', False) else "Auto-detected"
+                    
+                    tags = []
+                    if required:
+                        tags.append('required')
+                    
+                    tree.insert("", tk.END, values=(
+                        original_header,
+                        mapped_type,
+                        f"{confidence:.1%}",
+                        "Yes" if required else "No",
+                        actions
+                    ), tags=tags)
+            
+        except Exception as e:
+            logger.error(f"Error refreshing sheet tab: {e}")
+            # Don't show error dialog as this is a background refresh
 
     def _edit_column_mapping(self, tree, sheet):
         selection = tree.selection()
@@ -1046,33 +1334,50 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     # Skip if we don't have the original data
                     continue
                 
+                # CRITICAL FIX: Check if header row was manually changed and adjust sheet data accordingly
+                header_row_index = 0  # Default header row index
+                if hasattr(self, 'controller') and self.controller:
+                    # Find the file key by matching the file mapping
+                    file_key = None
+                    for key, file_data in self.controller.current_files.items():
+                        if file_data.get('file_mapping') == self.file_mapping:
+                            file_key = key
+                            break
+                    
+                    if file_key and hasattr(self.controller, 'current_files') and file_key in self.controller.current_files:
+                        processor_results = self.controller.current_files[file_key].get('processor_results', {})
+                        header_row_indices = processor_results.get('header_row_indices', {})
+                        
+                        # Use the manually set header row index if available
+                        if sheet.sheet_name in header_row_indices:
+                            header_row_index = header_row_indices[sheet.sheet_name]
+                            print(f"[DEBUG] Using manually set header row index {header_row_index} for sheet '{sheet.sheet_name}'")
+                        elif hasattr(sheet, 'header_row_index'):
+                            header_row_index = sheet.header_row_index
+                
+                # Remove the header row from sheet data before classification to prevent confusion
+                # The row classifier should only classify data rows, not header rows
+                if header_row_index < len(sheet_data):
+                    # Create a copy of sheet data without the header row
+                    data_rows = sheet_data[:header_row_index] + sheet_data[header_row_index + 1:]
+                    print(f"[DEBUG] Removed header row {header_row_index} from sheet '{sheet.sheet_name}' data for classification")
+                else:
+                    data_rows = sheet_data
+                
                 # Convert column mappings to the format expected by row classifier
-                # Use the original column mapping from the main processing pipeline
+                # Use the current column mappings from the sheet (which reflect any manual changes)
                 column_mapping_dict = {}
                 
-                # Get the original column mapping from the processor results
-                if hasattr(self, 'file_mapping') and hasattr(self.file_mapping, 'column_mapper'):
-                    # Use the column mapper's original mapping for this sheet
-                    sheet_name = sheet.sheet_name
-                    if hasattr(self.file_mapping.column_mapper, 'process_sheet_mapping'):
-                        # Get the original mapping result for this sheet
-                        sheet_data = original_sheet_data.get(sheet_name, [])
-                        if sheet_data:
-                            mapping_result = self.file_mapping.column_mapper.process_sheet_mapping(sheet_data)
-                            # Use the original 0-based column mapping
-                            for mapping in mapping_result.mappings:
-                                column_mapping_dict[mapping.column_index] = mapping.mapped_type
-                else:
-                    # Fallback: use the sheet's column mappings with 0-based conversion
-                    for col_mapping in sheet.column_mappings:
-                        try:
-                            # Convert string column type to ColumnType enum
-                            col_type = ColumnType(col_mapping.mapped_type)
-                            # Fix: Use 0-based indices for row classifier (subtract 1 from column_index)
-                            column_mapping_dict[col_mapping.column_index - 1] = col_type
-                        except ValueError:
-                            # Skip unknown column types
-                            continue
+                # Use the sheet's current column mappings
+                for col_mapping in sheet.column_mappings:
+                    try:
+                        # Convert string column type to ColumnType enum
+                        col_type = ColumnType(col_mapping.mapped_type)
+                        # Use the column index as-is (it's already 0-based from the mapping result)
+                        column_mapping_dict[col_mapping.column_index] = col_type
+                    except ValueError:
+                        # Skip unknown column types
+                        continue
                 
                 # DEBUG: Log the column mapping and first few rows to diagnose indexing
                 # Only debug the "Miscellaneous" sheet where Bank Guarantee is located
@@ -1100,15 +1405,24 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                                 # print(f"[DEBUG] Row {i}: {sheet_data[i]}")
                                 pass
                 
-                # Perform row classification
-                row_classification_result = row_classifier.classify_rows(sheet_data, column_mapping_dict, sheet.sheet_name)
+                # Perform row classification using the data rows (without header row)
+                row_classification_result = row_classifier.classify_rows(data_rows, column_mapping_dict, sheet.sheet_name)
                 
                 # Update the sheet's row classifications
                 sheet.row_classifications = []
                 for row_class in row_classification_result.classifications:
                     from core.mapping_generator import RowClassificationInfo
+                    # CRITICAL FIX: Adjust row index to account for removed header row
+                    # The row classifier processed data WITHOUT the header row, so its indices
+                    # are already shifted down. We need to shift them back up to match the original data.
+                    adjusted_row_index = row_class.row_index
+                    if row_class.row_index >= header_row_index:
+                        adjusted_row_index = row_class.row_index + 1
+                    
+                    print(f"[DEBUG] Row classification: original_index={row_class.row_index}, header_row={header_row_index}, adjusted_index={adjusted_row_index}")
+                    
                     row_info = RowClassificationInfo(
-                        row_index=row_class.row_index,
+                        row_index=adjusted_row_index,
                         row_type=row_class.row_type.value,
                         confidence=row_class.confidence,
                         completeness_score=row_class.completeness_score,
@@ -1121,7 +1435,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     sheet.row_classifications.append(row_info)
                 
                 # Update sheet statistics
-                sheet.row_count = len(sheet_data)
+                sheet.row_count = len(data_rows)  # Use data rows count (excluding header)
                 sheet.overall_confidence = row_classification_result.overall_quality_score
                 
                 # Update processing status based on row classification quality
@@ -1557,6 +1871,25 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
                 sheet_name = sheet.sheet_name
                 validity_dict = self.row_validity.get(sheet_name, {})
+                # DEBUG: Log sheet data structure
+                print(f"[DEBUG] Processing sheet: {sheet.sheet_name}")
+                if hasattr(sheet, 'sheet_data'):
+                    print(f"[DEBUG] Sheet data length: {len(sheet.sheet_data)}")
+                    if len(sheet.sheet_data) > 0:
+                        print(f"[DEBUG] First row of sheet data: {sheet.sheet_data[0]}")
+                    if len(sheet.sheet_data) > 1:
+                        print(f"[DEBUG] Second row of sheet data: {sheet.sheet_data[1]}")
+                else:
+                    print(f"[DEBUG] No sheet_data attribute found for {sheet.sheet_name}")
+                
+                # DEBUG: Log column mappings
+                print(f"[DEBUG] Column mappings for {sheet.sheet_name}:")
+                for i, cm in enumerate(sheet.column_mappings):
+                    print(f"[DEBUG]   {i}: {cm.column_index} -> {cm.original_header} -> {cm.mapped_type}")
+                
+                # DEBUG: Log col_headers array
+                print(f"[DEBUG] col_headers array: {col_headers}")
+                
                 # For each row classification, get the row data
                 for rc in getattr(sheet, 'row_classifications', []):
                     # Only include valid rows
@@ -1566,12 +1899,44 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     if row_data is None and hasattr(sheet, 'sheet_data'):
                         try:
                             row_data = sheet.sheet_data[rc.row_index]
-                        except Exception:
+                            print(f"[DEBUG] Row {rc.row_index}: extracted data = {row_data}")
+                        except Exception as e:
+                            print(f"[DEBUG] Row {rc.row_index}: extraction failed = {e}")
                             row_data = None
                     if row_data is None:
                         row_data = []
+                        print(f"[DEBUG] Row {rc.row_index}: using empty data")
+                    
                     # Build dict for DataFrame
-                    row_dict = {col_headers[i]: row_data[i] if i < len(row_data) else '' for i in range(len(col_headers))}
+                    row_dict = {}
+                    for cm in sheet.column_mappings:
+                        mapped_type = getattr(cm, 'mapped_type', None)
+                        if not mapped_type:
+                            continue
+                        idx = cm.column_index
+                        row_dict[mapped_type] = row_data[idx] if idx < len(row_data) else ''
+                    # Ensure all expected columns are present
+                    for mt in col_headers:
+                        if mt not in row_dict:
+                            row_dict[mt] = ''
+                    
+                    # DEBUG: Log specific column values and check for data swapping
+                    if 'description' in row_dict:
+                        desc_val = row_dict['description']
+                        print(f"[DEBUG] Row {rc.row_index}: description = '{desc_val}'")
+                        # Check if description looks like a code
+                        if isinstance(desc_val, str) and len(desc_val) < 30 and ('.' in desc_val or '/' in desc_val):
+                            print(f"[DEBUG] ⚠️  Row {rc.row_index}: DESCRIPTION LOOKS LIKE CODE: '{desc_val}'")
+                    if 'code' in row_dict:
+                        code_val = row_dict['code']
+                        print(f"[DEBUG] Row {rc.row_index}: code = '{code_val}'")
+                        # Check if code looks like a description
+                        if isinstance(code_val, str) and len(code_val) > 30:
+                            print(f"[DEBUG] ⚠️  Row {rc.row_index}: CODE LOOKS LIKE DESCRIPTION: '{code_val[:50]}...'")
+                    
+                    # DEBUG: Log the full row_dict to see all values
+                    print(f"[DEBUG] Row {rc.row_index}: Full row_dict = {row_dict}")
+                    
                     row_dict['Source_Sheet'] = sheet.sheet_name
                     # Preserve position information for future row matching
                     row_dict['Position'] = getattr(rc, 'position', None)
@@ -1585,6 +1950,20 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 logger.info(f"Categorization: DataFrame columns: {list(df.columns)}")
                 logger.info(f"Categorization: First 3 rows: {df.head(3).to_dict(orient='records')}")
                 logger.info(f"Categorization: First 10 Description values: {df['Description'].head(10).tolist() if 'Description' in df.columns else 'No Description column'}")
+                
+                # DEBUG: Additional logging for categorization DataFrame
+                print(f"[DEBUG] CATEGORIZATION DataFrame created with {len(df)} rows")
+                print(f"[DEBUG] CATEGORIZATION DataFrame columns: {list(df.columns)}")
+                if 'Description' in df.columns:
+                    print(f"[DEBUG] CATEGORIZATION First 5 Description values: {df['Description'].head(5).tolist()}")
+                    # Check if descriptions look like codes
+                    desc_sample = df['Description'].head(10).tolist()
+                    code_like_count = sum(1 for desc in desc_sample if isinstance(desc, str) and len(desc) < 20 and '.' in desc)
+                    print(f"[DEBUG] CATEGORIZATION {code_like_count}/{len(desc_sample)} descriptions look like codes")
+                if 'code' in df.columns:
+                    print(f"[DEBUG] CATEGORIZATION First 5 code values: {df['code'].head(5).tolist()}")
+                print(f"[DEBUG] CATEGORIZATION First 3 complete rows:")
+                print(df.head(3).to_string())
             else:
                 df = None
                 logger.warning("Categorization: No valid rows found for DataFrame.")
@@ -2931,6 +3310,31 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 
                 # print(f"[DEBUG] Validating structure for sheet: {sheet_name}")
                 
+                # Auto-align header text when column count and mapped types match but header strings differ.
+                try:
+                    saved_cm_list = saved_sheet.get('column_mappings', [])
+                    if saved_cm_list and len(saved_cm_list) == len(getattr(sheet, 'column_mappings', [])):
+                        headers_differ = False
+                        mapped_types_match = True
+                        for cur_cm, saved_cm in zip(sheet.column_mappings, saved_cm_list):
+                            saved_mtype = saved_cm.get('mapped_type') if isinstance(saved_cm, dict) else getattr(saved_cm, 'mapped_type', None)
+                            if saved_mtype != getattr(cur_cm, 'mapped_type', None):
+                                mapped_types_match = False
+                                break
+                            saved_header = saved_cm.get('original_header') if isinstance(saved_cm, dict) else getattr(saved_cm, 'original_header', '')
+                            if saved_header and saved_header.strip() != getattr(cur_cm, 'original_header', '').strip():
+                                headers_differ = True
+
+                        if mapped_types_match and headers_differ:
+                            for cur_cm, saved_cm in zip(sheet.column_mappings, saved_cm_list):
+                                saved_header = saved_cm.get('original_header') if isinstance(saved_cm, dict) else getattr(saved_cm, 'original_header', '')
+                                cur_cm.original_header = saved_header
+                            # print(f"[DEBUG] Auto-aligned headers for sheet: {sheet_name}")
+                except Exception:
+                    pass
+                
+
+                
                 # Strict validation: columns must match exactly
                 if not self._validate_exact_column_structure(sheet, saved_sheet):
                     error_msg = (
@@ -2997,40 +3401,27 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             loading_widget.destroy()
 
     def _validate_exact_column_structure(self, sheet, saved_sheet):
-        """Validate that the column structure matches exactly"""
+        """Validate that the column structure matches exactly (original headers and order)."""
         try:
-            # Get current column headers
-            current_headers = []
-            if hasattr(sheet, 'column_mappings'):
-                current_headers = [getattr(cm, 'original_header', '') for cm in sheet.column_mappings]
-            
-            # Get saved column headers
-            saved_mappings = saved_sheet.get('column_mappings', [])
+            # Current original headers extracted from ColumnMappings
+            current_headers = [getattr(cm, 'original_header', '') for cm in getattr(sheet, 'column_mappings', [])]
+
+            # Saved original headers extracted from saved mapping data
             saved_headers = []
-            for saved_mapping in saved_mappings:
+            for saved_mapping in saved_sheet.get('column_mappings', []):
                 if isinstance(saved_mapping, dict):
-                    header = saved_mapping.get('original_header', '')
-                    saved_headers.append(header)
-            
-            # print(f"[DEBUG] Current headers ({len(current_headers)}): {current_headers}")
-            # print(f"[DEBUG] Saved headers ({len(saved_headers)}): {saved_headers}")
-            
-            # Must have same number of columns
+                    saved_headers.append(saved_mapping.get('original_header', ''))
+
+            # Must have identical length and identical header strings in order
             if len(current_headers) != len(saved_headers):
-                # print(f"[DEBUG] Column count mismatch: {len(current_headers)} vs {len(saved_headers)}")
                 return False
-            
-            # Headers must match exactly (case-sensitive)
-            for i, (current, saved) in enumerate(zip(current_headers, saved_headers)):
-                if current.strip() != saved.strip():
-                    # print(f"[DEBUG] Header mismatch at position {i}: '{current}' vs '{saved}'")
+
+            for cur, saved in zip(current_headers, saved_headers):
+                if cur.strip() != saved.strip():
                     return False
-            
-            # print("[DEBUG] Column structure validation passed")
+
             return True
-            
-        except Exception as e:
-            # print(f"[DEBUG] Error validating column structure: {e}")
+        except Exception:
             return False
 
     def _validate_exact_row_structure(self, sheet, saved_sheet):
@@ -3154,24 +3545,34 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 self.row_validity = {}
             self.row_validity[sheet_name] = {}
             
-            # Apply saved validity to corresponding rows
-            if hasattr(sheet, 'row_classifications') and len(sheet.row_classifications) == len(saved_classifications):
-                for i, (current_rc, saved_rc) in enumerate(zip(sheet.row_classifications, saved_classifications)):
-                    if isinstance(saved_rc, dict):
-                        saved_row_type = saved_rc.get('row_type', '')
-                        is_valid = saved_row_type in ['primary_line_item', 'PRIMARY_LINE_ITEM']
-                        
-                        row_index = getattr(current_rc, 'row_index', i)
-                        self.row_validity[sheet_name][row_index] = is_valid
-                        
-                        # print(f"[DEBUG] Row {row_index}: {'Valid' if is_valid else 'Invalid'} (from saved mapping)")
+            # Create a mapping of row_index to validity from saved data
+            saved_validity_map = {}
+            for saved_rc in saved_classifications:
+                if isinstance(saved_rc, dict):
+                    saved_row_type = saved_rc.get('row_type', '')
+                    is_valid = saved_row_type in ['primary_line_item', 'PRIMARY_LINE_ITEM']
+                    row_index = saved_rc.get('row_index', -1)
+                    if row_index >= 0:
+                        saved_validity_map[row_index] = is_valid
             
-            # print(f"[DEBUG] Applied exact row classifications for {len(self.row_validity[sheet_name])} rows")
+            # Apply saved validity to corresponding rows by matching row_index
+            if hasattr(sheet, 'row_classifications'):
+                for current_rc in sheet.row_classifications:
+                    row_index = getattr(current_rc, 'row_index', -1)
+                    if row_index >= 0 and row_index in saved_validity_map:
+                        self.row_validity[sheet_name][row_index] = saved_validity_map[row_index]
+                    else:
+                        # Default to False for rows not found in saved mapping
+                        self.row_validity[sheet_name][row_index] = False
             
+            print(f"[DEBUG] Applied row validity for {len(self.row_validity[sheet_name])} rows in sheet '{sheet_name}'")
+            valid_count = sum(1 for v in self.row_validity[sheet_name].values() if v)
+            print(f"[DEBUG] {valid_count} rows are valid, {len(self.row_validity[sheet_name]) - valid_count} rows are invalid")
+             
         except Exception as e:
-            # print(f"[DEBUG] Error applying row classifications: {e}")
-
+            # Log error but don't fail the entire process
             pass
+
     def _show_mapped_file_review(self, tab, file_mapping, mapping_data):
         """Show the file with applied mappings in Row Review mode"""
         try:
@@ -3749,6 +4150,7 @@ Review the rows below and adjust validity as needed."""
                     sheet_info = {
                         'sheet_name': getattr(sheet, 'sheet_name', None),
                         'sheet_type': getattr(sheet, 'sheet_type', None),
+                        'header_row_index': getattr(sheet, 'header_row_index', None),
                         'column_mappings': [],
                         'row_classifications': [],
                     }
@@ -3918,146 +4320,54 @@ Review the rows below and adjust validity as needed."""
             messagebox.showerror("Error", f"Failed to merge comparison data: {str(e)}")
     
     def _build_dataframe_from_mapping(self, file_mapping, master_mapping):
-        """Build a DataFrame from file mapping using the same logic as the master"""
+        """Build a DataFrame from the provided file mapping using column_index from each mapping."""
         import pandas as pd
-        
+
         rows = []
-        
-        # Process sheets in consistent order (sorted by name)
-        sheets = sorted(getattr(file_mapping, 'sheets', []), key=lambda s: s.sheet_name)
-        
-        for sheet in sheets:
+        for sheet in getattr(file_mapping, 'sheets', []):
             if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
                 continue
-                
-            # CRITICAL FIX: Use column mapping positions to extract data correctly
-            column_mappings = getattr(sheet, 'column_mappings', [])
-            sheet_name = sheet.sheet_name
-            
-            # Create mapping from column position to mapped type
-            col_position_to_type = {}
-            for cm in column_mappings:
-                if hasattr(cm, 'column_index') and hasattr(cm, 'mapped_type'):
-                    col_position_to_type[cm.column_index] = cm.mapped_type
-            
-            # Debug: Check column mapping structure
-            # print(f"[DEBUG] Sheet {sheet_name} column position mapping: {col_position_to_type}")
-            unit_position = None
-            for pos, mapped_type in col_position_to_type.items():
-                if mapped_type == 'unit':
-                    unit_position = pos
-                    # print(f"[DEBUG] Unit column found at Excel position {pos}")
-                    break
-            if unit_position is None:
-                # print(f"[DEBUG] WARNING: Unit column not found in mappings for sheet {sheet_name}!")
-            
-            # Get row classifications and sort them by row_index to maintain consistent order
-                pass
-            row_classifications = sorted(getattr(sheet, 'row_classifications', []), key=lambda rc: rc.row_index)
-            
-            # Use the same validity logic as the original processing
-            # Check if we have saved validity data, otherwise use the sheet's current validity
+
+            col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
+
+            # Determine valid rows (fallback to include all if no saved validity info)
             validity_dict = {}
-            if 'row_validity' in master_mapping and sheet_name in master_mapping['row_validity']:
-                validity_dict = master_mapping['row_validity'][sheet_name]
-            else:
-                # Fall back to current validity from row classifications
-                validity_dict = {rc.row_index: rc.row_type.name == 'BOQ_ITEM' for rc in row_classifications}
-            
-            for rc in row_classifications:
-                # Only include valid rows (same logic as master)
-                if not validity_dict.get(rc.row_index, False):
+            for rc in getattr(sheet, 'row_classifications', []):
+                rt = getattr(rc, 'row_type', None)
+                if isinstance(rt, str):
+                    is_boq = rt.upper() in ['BOQ_ITEM', 'PRIMARY_LINE_ITEM']
+                else:
+                    is_boq = getattr(rt, 'name', '').upper() in ['BOQ_ITEM', 'PRIMARY_LINE_ITEM']
+                validity_dict[rc.row_index] = is_boq
+
+            for rc in getattr(sheet, 'row_classifications', []):
+                if not validity_dict.get(rc.row_index, True):
                     continue
-                    
+
                 row_data = getattr(rc, 'row_data', None)
                 if row_data is None and hasattr(sheet, 'sheet_data'):
                     try:
                         row_data = sheet.sheet_data[rc.row_index]
                     except Exception:
-                        row_data = None
-                
+                        row_data = []
+
                 if row_data is None:
                     row_data = []
-                
-                # Build dict for DataFrame using CORRECT column positions
+
                 row_dict = {}
-                for col_position, mapped_type in col_position_to_type.items():
-                    value = row_data[col_position] if col_position < len(row_data) else ''
-                    # Handle empty values consistently with original logic
-                    if mapped_type in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']:
-                        # For numeric columns, preserve empty strings as empty strings (not convert to 0)
-                        # This ensures consistent behavior with saved mappings
-                        if value == '' or value is None or (isinstance(value, str) and value.strip() == ''):
-                            value = ''
-                    # Debug unit column specifically - CRITICAL DEBUGGING
-                    if mapped_type == 'unit':
-                        # print(f"[DEBUG] ⚠️  Unit extraction for row {rc.row_index}:")
-                        # print(f"[DEBUG]   Position: {col_position}")
-                        # print(f"[DEBUG]   Row data length: {len(row_data)}")
-                        # print(f"[DEBUG]   Raw value: '{value}' (type: {type(value)})")
-                        # print(f"[DEBUG]   Full row data: {row_data}")
-                        # Check if this looks like a valid unit value
-                        if value in ['Quantity', 'quantity', 'Description', 'description', 'Code', 'code']:
-                            # print(f"[DEBUG] ❌ INVALID UNIT VALUE DETECTED: '{value}' - This suggests column mapping is wrong!")
-                            pass
-                    row_dict[mapped_type] = value
-                
-                # Add sheet name with consistent column name
+                for cm in sheet.column_mappings:
+                    mt = cm.mapped_type
+                    idx = cm.column_index
+                    row_dict[mt] = row_data[idx] if idx < len(row_data) else ''
+
+                for mt in col_headers:
+                    row_dict.setdefault(mt, '')
+
                 row_dict['sheet'] = sheet.sheet_name
                 row_dict['Position'] = getattr(rc, 'position', None)
                 rows.append(row_dict)
-        
-        if rows:
-            df = pd.DataFrame(rows)
-            
-            # Ensure consistent column naming - always use lowercase for internal consistency
-            column_mappings = {
-                'Description': 'description',
-                'Code': 'code',
-                'Unit': 'unit',
-                'Quantity': 'quantity',
-                'Unit_Price': 'unit_price',
-                'Total_Price': 'total_price',
-                'Source_Sheet': 'sheet'
-            }
-            
-            # Apply column name standardization
-            for old_name, new_name in column_mappings.items():
-                if old_name in df.columns and new_name not in df.columns:
-                    df.rename(columns={old_name: new_name}, inplace=True)
-            
-            # Ensure we have all required columns (including new ones)
-            required_columns = ['sheet', 'code', 'description', 'unit', 'quantity', 'unit_price', 'total_price', 'scope', 'manhours', 'wage']
-            for col in required_columns:
-                if col not in df.columns:
-                    df[col] = ''
-            
-            # Preserve the original row order from the file processing
-            # Do NOT sort to maintain the exact order from the Excel file
-            df = df.reset_index(drop=True)
-            
-            # Debug: Check unit column values
-            if 'unit' in df.columns:
-                unit_values = df['unit'].value_counts()
-                empty_units = df['unit'].isna().sum() + (df['unit'] == '').sum()
-                # print(f"[DEBUG] _build_dataframe_from_mapping FINAL unit check:")
-                # print(f"[DEBUG]   Unit values: {unit_values.to_dict()}")
-                # print(f"[DEBUG]   Empty units: {empty_units}/{len(df)}")
-                if empty_units == len(df):
-                    # print(f"[DEBUG] ❌ CRITICAL: ALL UNIT VALUES ARE EMPTY in _build_dataframe_from_mapping!")
-                    pass
-                else:
-                    # print(f"[DEBUG] ✅ Unit values exist in _build_dataframe_from_mapping")
-                    pass
-            else:
-                # print(f"[DEBUG] ❌ CRITICAL: Unit column MISSING in _build_dataframe_from_mapping!")
-            
-            # print(f"[DEBUG] Built DataFrame with {len(df)} rows and columns: {df.columns.tolist()}")
-                pass
-            return df
-        else:
-            # Return empty DataFrame with consistent structure (including new columns)
-            return pd.DataFrame(columns=['sheet', 'code', 'description', 'unit', 'quantity', 'unit_price', 'total_price', 'scope', 'manhours', 'wage'])
+
+        return pd.DataFrame(rows) if rows else pd.DataFrame()
     
     def _apply_categories_from_mapping(self, df, master_mapping):
         """Apply categories from master mapping to the new DataFrame"""
@@ -4559,167 +4869,66 @@ Review the rows below and adjust validity as needed."""
         return merged_df
 
     def _on_confirm_mapped_file_review(self, file_mapping):
-        """Handle confirmation of row review for mapped file"""
-        try:
-            # print(f"[DEBUG] _on_confirm_mapped_file_review called")
-            # print(f"[DEBUG] Has saved_mapping: {hasattr(self, 'saved_mapping')}")
-            if hasattr(self, 'saved_mapping'):
-                # print(f"[DEBUG] Saved mapping keys: {list(self.saved_mapping.keys())}")
-            
-            # Check if we have saved categories from the mapping
-                pass
-            if hasattr(self, 'saved_mapping') and 'final_dataframe' in self.saved_mapping:
-                # print("[DEBUG] Found saved categories in mapping - applying directly without categorization")
-                
-                # Get the saved categorized DataFrame
-                saved_df = self.saved_mapping['final_dataframe'].copy()
-                
-                # Build the current DataFrame structure (without categories)
-                import pandas as pd
-                rows = []
-                sheet_count = 0
-                
-                for sheet in getattr(file_mapping, 'sheets', []):
-                    if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
-                        continue
-                        
-                    sheet_count += 1
-                    col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
-                    sheet_name = sheet.sheet_name
-                    validity_dict = self.row_validity.get(sheet_name, {})
-                    
-                    for rc in getattr(sheet, 'row_classifications', []):
-                        # Only include valid rows
-                        if not validity_dict.get(rc.row_index, False):
-                            continue
-                            
-                        row_data = getattr(rc, 'row_data', None)
-                        if row_data is None and hasattr(sheet, 'sheet_data'):
-                            try:
-                                row_data = sheet.sheet_data[rc.row_index]
-                            except Exception:
-                                row_data = None
-                        
-                        if row_data is None:
-                            row_data = []
-                        
-                        # Build dict for DataFrame
-                        row_dict = {col_headers[i]: row_data[i] if i < len(row_data) else '' 
-                                  for i in range(len(col_headers))}
-                        row_dict['Source_Sheet'] = sheet.sheet_name
-                        row_dict['Position'] = getattr(rc, 'position', None)
-                        rows.append(row_dict)
-                
-                if rows:
-                    current_df = pd.DataFrame(rows)
-                    if 'description' in current_df.columns and 'Description' not in current_df.columns:
-                        current_df.rename(columns={'description': 'Description'}, inplace=True)
-                    
-                    # Apply saved categories to current data by matching descriptions
-                    # print(f"[DEBUG] Applying saved categories to {len(current_df)} rows")
-                    
-                    # Create category mapping from saved DataFrame
-                    if 'Description' in saved_df.columns and 'category' in saved_df.columns:
-                        category_mapping = {}
-                        for _, row in saved_df.iterrows():
-                            desc = str(row['Description']).strip().lower()
-                            category = str(row['category']).strip()
-                            if desc and category:
-                                category_mapping[desc] = category
-                        
-                        # print(f"[DEBUG] Created category mapping with {len(category_mapping)} entries")
-                        
-                        # Apply categories to current DataFrame (categories are already in pretty format)
-                        current_df['category'] = current_df['Description'].apply(
-                            lambda x: category_mapping.get(str(x).strip().lower(), '')
-                        )
-                        
-                        # Count successful matches
-                        matched_count = (current_df['category'] != '').sum()
-                        # print(f"[DEBUG] Successfully matched {matched_count} out of {len(current_df)} rows")
-                        
-                        # Store the categorized DataFrame
-                        file_mapping.dataframe = current_df
-                        file_mapping.categorized_dataframe = current_df
-                        
-                        # Show final categorized data directly (skip categorization dialog)
-                        current_tab = file_mapping.tab
-                        self._show_final_categorized_data(current_tab, current_df, None)
-                        
-                        self._update_status(f"Applied saved categories to {matched_count} rows - categorization complete")
-                        
-                        success_msg = (
-                            f"Categories applied successfully from saved mapping!\n\n"
-                            f"Matched {matched_count} out of {len(current_df)} rows.\n"
-                            f"Categorization completed without manual review."
-                        )
-                        messagebox.showinfo("Categories Applied", success_msg)
-                        return
-                    else:
-                        # print("[DEBUG] Saved DataFrame missing required columns for category mapping")
-                        pass
-                else:
-                    # print("[DEBUG] No valid rows found for category application")
-            
-            # Fallback to normal categorization if no saved categories found
-            # print("[DEBUG] No saved categories found - proceeding with normal categorization")
-                    pass
-            self._update_status("Row review confirmed. Starting categorization process...")
-            
-            # Build DataFrame for categorization (same as normal workflow)
-            import pandas as pd
-            rows = []
-            sheet_count = 0
-            
-            for sheet in getattr(file_mapping, 'sheets', []):
-                if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
+        """Simplified confirmation handler for mapped-file row review, mirroring the normal workflow."""
+        self._update_status("Row review confirmed. Starting categorization process...")
+
+        import pandas as pd
+        rows = []
+
+        for sheet in getattr(file_mapping, 'sheets', []):
+            if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
+                continue
+
+            # Build list of mapped column types in order
+            col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
+            validity_dict = self.row_validity.get(sheet.sheet_name, {})
+
+            for rc in getattr(sheet, 'row_classifications', []):
+                # Include only rows marked as valid/BOQ items
+                if not validity_dict.get(rc.row_index, True):
                     continue
-                    
-                sheet_count += 1
-                col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
-                sheet_name = sheet.sheet_name
-                validity_dict = self.row_validity.get(sheet_name, {})
-                
-                for rc in getattr(sheet, 'row_classifications', []):
-                    # Only include valid rows
-                    if not validity_dict.get(rc.row_index, False):
-                        continue
-                        
-                    row_data = getattr(rc, 'row_data', None)
-                    if row_data is None and hasattr(sheet, 'sheet_data'):
-                        try:
-                            row_data = sheet.sheet_data[rc.row_index]
-                        except Exception:
-                            row_data = None
-                    
-                    if row_data is None:
+
+                row_data = getattr(rc, 'row_data', None)
+                if row_data is None and hasattr(sheet, 'sheet_data'):
+                    try:
+                        row_data = sheet.sheet_data[rc.row_index]
+                    except Exception:
                         row_data = []
-                    
-                    # Build dict for DataFrame
-                    row_dict = {col_headers[i]: row_data[i] if i < len(row_data) else '' 
-                              for i in range(len(col_headers))}
-                    row_dict['Source_Sheet'] = sheet.sheet_name
-                    row_dict['Position'] = getattr(rc, 'position', None)
-                    rows.append(row_dict)
-            
-            if rows:
-                df = pd.DataFrame(rows)
-                if 'description' in df.columns and 'Description' not in df.columns:
-                    df.rename(columns={'description': 'Description'}, inplace=True)
-                
-                file_mapping.dataframe = df
-                # print(f"[DEBUG] Built DataFrame for categorization: {df.shape}")
-                
-                # Start categorization
-                self._start_categorization(file_mapping)
-            else:
-                messagebox.showerror("Error", "No valid rows found for categorization")
-                
-        except Exception as e:
-            # print(f"[DEBUG] Error in mapped file review confirmation: {e}")
-            import traceback
-            traceback.print_exc()
-            messagebox.showerror("Error", f"Failed to continue with categorization: {str(e)}")
+
+                if row_data is None:
+                    row_data = []
+
+                # Build a dict using the *column_index* information from each ColumnMapping
+                row_dict = {}
+                for cm in sheet.column_mappings:
+                    mapped_type = cm.mapped_type
+                    idx = cm.column_index
+                    row_dict[mapped_type] = row_data[idx] if idx < len(row_data) else ''
+
+                # Ensure any missing mapped types are present (empty string)
+                for mt in col_headers:
+                    row_dict.setdefault(mt, '')
+
+                row_dict['Source_Sheet'] = sheet.sheet_name
+                row_dict['Position'] = getattr(rc, 'position', None)
+                rows.append(row_dict)
+
+        # Convert to DataFrame
+        if rows:
+            df = pd.DataFrame(rows)
+            if 'description' in df.columns and 'Description' not in df.columns:
+                df.rename(columns={'description': 'Description'}, inplace=True)
+        else:
+            df = pd.DataFrame()
+
+        file_mapping.dataframe = df
+
+        if df.empty or 'Description' not in df.columns:
+            messagebox.showerror("Categorization Error", "No valid data found for categorization.")
+            return
+
+        # Proceed to categorization dialog
+        self._start_categorization(file_mapping)
 
     def _validate_position_data_integrity(self, mapping_data):
         """
@@ -4833,7 +5042,7 @@ Review the rows below and adjust validity as needed."""
                             try:
                                 row_data = sheet.sheet_data[rc.row_index]
                             except Exception:
-                                row_data = []
+                                row_data = None
                         
                         if row_data is None:
                             row_data = []
