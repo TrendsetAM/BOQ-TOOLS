@@ -7,9 +7,7 @@
     "item",
     "activity",
     "task",
-    "DESCRIPTION ITEM",
-    "DESCRIPTION",
-    "ITEM DESCRIPTION"
+    "DESCRIPTION ITEM"
   ],
   "quantity": [
     "quantity",
@@ -19,8 +17,7 @@
     "number",
     "count",
     "nos",
-    "Quantity",
-    "QUANTITY"
+    "Quantity"
   ],
   "unit_price": [
     "unit price",
@@ -30,8 +27,7 @@
     "rate",
     "unit rate",
     "price per unit",
-    "Unit Price",
-    "UNIT\nPRICE"
+    "Unit Price"
   ],
   "total_price": [
     "total price",
@@ -42,9 +38,7 @@
     "sum",
     "cost",
     "value",
-    "Total Price",
-    "TOTAL \nPRICE",
-    "TOTAL PRICE"
+    "Total Price"
   ],
   "unit": [
     "unit",
@@ -53,8 +47,7 @@
     "unit of measure",
     "units",
     "measurement",
-    "Unit of measure",
-    "UNIT\n(SI)"
+    "Unit of measure"
   ],
   "code": [
     "code",
@@ -65,8 +58,7 @@
     "item number",
     "boq code",
     "schedule no",
-    "Code",
-    "CODE"
+    "Code"
   ],
   "scope": [
     "scope",
@@ -78,15 +70,13 @@
     "manhours",
     "man hours",
     "labour ore/u.m.",
-    "labor ore/u.m.",
-    "Labour ORE/U.M."
+    "labor ore/u.m."
   ],
   "wage": [
     "euro/hour",
     "wage",
     "hourly rate",
     "labour euro/hour",
-    "labor euro/hour",
-    "Labour EURO/Hour"
+    "labor euro/hour"
   ]
 }

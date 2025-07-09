@@ -130,6 +130,69 @@ class ExecutableBuilder:
             logger.warning(f"Failed to create icon: {e}")
             return False
     
+    def copy_user_dictionaries(self):
+        """Copy user dictionaries to local config folder for bundling"""
+        logger.info("Copying user dictionaries to local config folder...")
+        
+        try:
+            # Add project root to Python path temporarily to import utils
+            sys.path.insert(0, str(self.project_root))
+            
+            # Import the config utility
+            from utils.config import get_user_config_path
+            
+            # Files to copy from user directory to local config
+            config_files = [
+                "category_dictionary.json",
+                "canonical_mappings.json", 
+                "boq_settings.json"
+            ]
+            
+            local_config_dir = self.project_root / 'config'
+            copied_files = []
+            
+            for filename in config_files:
+                try:
+                    # Get user config file path
+                    user_file_path = Path(get_user_config_path(filename))
+                    local_file_path = local_config_dir / filename
+                    
+                    # Copy if user file exists
+                    if user_file_path.exists():
+                        # Backup existing local file if it exists
+                        if local_file_path.exists():
+                            backup_path = local_file_path.with_suffix(f'.backup_{filename}')
+                            shutil.copy2(local_file_path, backup_path)
+                            logger.info(f"Backed up existing {filename} to {backup_path.name}")
+                        
+                        # Copy user file to local config
+                        shutil.copy2(user_file_path, local_file_path)
+                        copied_files.append(filename)
+                        logger.info(f"Copied user {filename} from {user_file_path}")
+                    else:
+                        logger.warning(f"User config file not found: {user_file_path}")
+                        
+                except Exception as e:
+                    logger.warning(f"Failed to copy {filename}: {e}")
+            
+            if copied_files:
+                logger.info(f"Successfully copied {len(copied_files)} user config files: {', '.join(copied_files)}")
+            else:
+                logger.warning("No user config files were copied")
+                
+            return True
+            
+        except ImportError as e:
+            logger.error(f"Failed to import utils.config: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error copying user dictionaries: {e}")
+            return False
+        finally:
+            # Remove project root from Python path
+            if str(self.project_root) in sys.path:
+                sys.path.remove(str(self.project_root))
+    
     def run_pyinstaller(self, debug: bool = False):
         """Run PyInstaller to create the executable"""
         logger.info("Running PyInstaller...")
@@ -259,6 +322,10 @@ Filename: "{{app}}\\BOQ-Tools.exe"; Description: "{{cm:LaunchProgram,BOQ Tools}}
         
         # Create icon
         self.create_icon()
+
+        # Copy user dictionaries to local config for bundling
+        if not self.copy_user_dictionaries():
+            logger.warning("Failed to copy user dictionaries, proceeding with existing config files")
         
         # Run PyInstaller
         if not self.run_pyinstaller(debug):
