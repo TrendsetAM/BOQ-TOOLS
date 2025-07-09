@@ -1,6 +1,7 @@
 pandas>=2.0.0
 openpyxl>=3.1.0
 xlrd>=2.0.0
+xlsxwriter>=3.1.0
 PyInstaller>=5.13.0
 pathlib2>=2.3.7; python_version < "3.4"
 tkinterdnd2>=0.3.0
