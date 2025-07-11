@@ -27,7 +27,6 @@ class HeaderDetectionMethod(Enum):
     KEYWORD_MATCH = "keyword_match"
     DATA_TYPE_PATTERN = "data_type_pattern"
     POSITIONAL_LOGIC = "positional_logic"
-    MERGED_CELLS = "merged_cells"
 
 
 @dataclass
@@ -77,7 +76,7 @@ class ColumnMapper:
         'unit': ["unit", "uom", "measure", "unit of measure", "units", "measurement"],
         'code': ["code", "item code", "ref code", "reference code", "item no", "item number", "boq code", "schedule no"],
         'scope': ["scope"],
-        'manhours': ["ore/u.m.", "ore", "manhours", "man hours", "labour ore/u.m.", "labor ore/u.m."],
+        'manhours': ["manhours", "man hours", "labour ore/u.m.", "labor ore/u.m."],
         'wage': ["euro/hour", "wage", "hourly rate", "labour euro/hour", "labor euro/hour"]
     }
     
@@ -227,6 +226,8 @@ class ColumnMapper:
         """Get current canonical mappings"""
         return self.CANONICAL_HEADER_MAP.copy()
     
+
+    
     def find_header_row(self, sheet_data: List[List[str]]) -> HeaderRowInfo:
         """
         Find the header row in sheet data
@@ -251,8 +252,7 @@ class ColumnMapper:
             methods = [
                 self._detect_by_keywords,
                 self._detect_by_data_patterns,
-                self._detect_by_positional_logic,
-                self._detect_by_merged_cells
+                self._detect_by_positional_logic
             ]
             for method in methods:
                 try:
@@ -341,6 +341,8 @@ class ColumnMapper:
     def _enhance_header_with_parent_row(self, header_info: HeaderRowInfo, sheet_data: List[List[str]]) -> Optional[HeaderRowInfo]:
         """
         Check if there's a parent row above the header row that contains merged cells
+        Enhanced with logic from former Method 4 for better hierarchical detection
+        Only applies enhancement if current headers are not already well-recognized
         
         Args:
             header_info: The detected header row info
@@ -356,14 +358,21 @@ class ColumnMapper:
         if row_index == 0:
             return None
         
+
+        
         parent_row = sheet_data[row_index - 1]  # This could be the parent header row
         
-        # Check if parent row has empty cells that could indicate merged cells
-        empty_cells = sum(1 for cell in parent_row if not cell or not str(cell).strip())
+        # Enhanced detection logic (migrated from Method 4)
+        enhancement_confidence = 0.0
+        enhancement_reasoning = []
         
-        if empty_cells == 0:
-            # No empty cells in parent row, no merged structure
-            return None
+        # Check for merged cell indicators (empty cells between content)
+        empty_cells = sum(1 for cell in parent_row if not cell or not str(cell).strip())
+        total_cells = len(parent_row)
+        
+        if empty_cells > 0 and empty_cells < total_cells:
+            enhancement_confidence = 0.2
+            enhancement_reasoning.append(f"Potential merged cells: {empty_cells}/{total_cells} empty cells")
         
         # Check if parent row has some content (indicating it's a header row)
         parent_content = sum(1 for cell in parent_row if cell and str(cell).strip())
@@ -372,20 +381,59 @@ class ColumnMapper:
             # No content in parent row
             return None
         
-        # Create enhanced headers with merged cell logic
-        enhanced_headers = self._create_selective_hierarchical_headers(parent_row, current_row)
+        # Enhanced parent-subheader relationship detection (from Method 4)
+        parent_non_empty = [i for i, cell in enumerate(parent_row) if cell and str(cell).strip()]
+        current_non_empty = [i for i, cell in enumerate(current_row) if cell and str(cell).strip()]
+        
+        # Look for patterns where parent row has fewer cells that might span multiple columns
+        if len(parent_non_empty) > 0 and len(current_non_empty) > len(parent_non_empty):
+            # Check if parent row cells could be parent headers
+            for i, cell in enumerate(parent_row):
+                if cell and str(cell).strip():
+                    cell_lower = str(cell).strip().lower()
+                    # Look for common parent header terms
+                    if any(term in cell_lower for term in ['labour', 'labor', 'material', 'equipment', 'cost', 'price', 'analysis']):
+                        enhancement_confidence = max(enhancement_confidence, 0.4)
+                        enhancement_reasoning.append(f"Potential parent header '{cell}' with subheaders below")
+            
+            # Enhanced detection for labor-related hierarchical headers (from Method 4)
+            combined_headers = self._create_hierarchical_headers(parent_row, current_row)
+            labor_matches = 0
+            for combined_header in combined_headers:
+                if combined_header:
+                    combined_lower = combined_header.lower()
+                    if any(term in combined_lower for term in ['ore/u.m.', 'euro/hour', 'manhours', 'wage']):
+                        labor_matches += 1
+            
+            if labor_matches > 0:
+                # Boost confidence significantly for labor hierarchical headers
+                enhancement_confidence = max(enhancement_confidence, 0.9)
+                enhancement_reasoning.append(f"Found {labor_matches} labor-related hierarchical headers")
+                
+                # Use the enhanced headers
+                enhanced_headers = combined_headers
+            else:
+                # Use selective hierarchical headers
+                enhanced_headers = self._create_selective_hierarchical_headers(parent_row, current_row)
+        else:
+            # Use selective hierarchical headers
+            enhanced_headers = self._create_selective_hierarchical_headers(parent_row, current_row)
         
         # Check if we actually created any hierarchical headers
         has_hierarchical = any(' ' in header for header in enhanced_headers if header)
         
-        if has_hierarchical:
+        if has_hierarchical or enhancement_confidence >= 0.25:
+            # Boost the original confidence with enhancement confidence
+            boosted_confidence = min(1.0, header_info.confidence + (enhancement_confidence * 0.3))
+            
             # Add reasoning about the enhancement
             enhanced_reasoning = header_info.reasoning.copy()
+            enhanced_reasoning.extend(enhancement_reasoning)
             enhanced_reasoning.append("Enhanced with hierarchical headers from parent row merged cells")
             
             return HeaderRowInfo(
                 row_index=header_info.row_index,
-                confidence=header_info.confidence,
+                confidence=boosted_confidence,
                 method=header_info.method,
                 reasoning=enhanced_reasoning,
                 headers=enhanced_headers,
@@ -397,6 +445,8 @@ class ColumnMapper:
     def _enhance_header_with_subheader_row(self, header_info: HeaderRowInfo, sheet_data: List[List[str]]) -> Optional[HeaderRowInfo]:
         """
         Check if the header row itself has merged cells and subheaders below it
+        Enhanced with logic from former Method 4 for better hierarchical detection
+        Only applies enhancement if current headers are not already well-recognized
         
         Args:
             header_info: The detected header row info
@@ -412,14 +462,21 @@ class ColumnMapper:
         if row_index >= len(sheet_data) - 1:
             return None
         
+
+        
         subheader_row = sheet_data[row_index + 1]  # This could be the subheader row
         
-        # Check if current row has empty cells that could indicate merged cells
-        empty_cells = sum(1 for cell in current_row if not cell or not str(cell).strip())
+        # Enhanced detection logic (migrated from Method 4)
+        enhancement_confidence = 0.0
+        enhancement_reasoning = []
         
-        if empty_cells == 0:
-            # No empty cells in current row, no merged structure
-            return None
+        # Check for merged cell indicators (empty cells between content)
+        empty_cells = sum(1 for cell in current_row if not cell or not str(cell).strip())
+        total_cells = len(current_row)
+        
+        if empty_cells > 0 and empty_cells < total_cells:
+            enhancement_confidence = 0.2
+            enhancement_reasoning.append(f"Potential merged cells: {empty_cells}/{total_cells} empty cells")
         
         # Check if current row has some content (indicating it's a header row)
         current_content = sum(1 for cell in current_row if cell and str(cell).strip())
@@ -435,20 +492,59 @@ class ColumnMapper:
             # No content in subheader row
             return None
         
-        # Create enhanced headers with merged cell logic
-        enhanced_headers = self._create_selective_hierarchical_headers(current_row, subheader_row)
+        # Enhanced parent-subheader relationship detection (from Method 4)
+        current_non_empty = [i for i, cell in enumerate(current_row) if cell and str(cell).strip()]
+        next_non_empty = [i for i, cell in enumerate(subheader_row) if cell and str(cell).strip()]
+        
+        # Look for patterns where current row has fewer cells that might span multiple columns
+        if len(current_non_empty) > 0 and len(next_non_empty) > len(current_non_empty):
+            # Check if current row cells could be parent headers
+            for i, cell in enumerate(current_row):
+                if cell and str(cell).strip():
+                    cell_lower = str(cell).strip().lower()
+                    # Look for common parent header terms
+                    if any(term in cell_lower for term in ['labour', 'labor', 'material', 'equipment', 'cost', 'price', 'analysis']):
+                        enhancement_confidence = max(enhancement_confidence, 0.4)
+                        enhancement_reasoning.append(f"Potential parent header '{cell}' with subheaders below")
+            
+            # Enhanced detection for labor-related hierarchical headers (from Method 4)
+            combined_headers = self._create_hierarchical_headers(current_row, subheader_row)
+            labor_matches = 0
+            for combined_header in combined_headers:
+                if combined_header:
+                    combined_lower = combined_header.lower()
+                    if any(term in combined_lower for term in ['ore/u.m.', 'euro/hour', 'manhours', 'wage']):
+                        labor_matches += 1
+            
+            if labor_matches > 0:
+                # Boost confidence significantly for labor hierarchical headers
+                enhancement_confidence = max(enhancement_confidence, 0.9)
+                enhancement_reasoning.append(f"Found {labor_matches} labor-related hierarchical headers")
+                
+                # Use the enhanced headers
+                enhanced_headers = combined_headers
+            else:
+                # Use selective hierarchical headers
+                enhanced_headers = self._create_selective_hierarchical_headers(current_row, subheader_row)
+        else:
+            # Use selective hierarchical headers
+            enhanced_headers = self._create_selective_hierarchical_headers(current_row, subheader_row)
         
         # Check if we actually created any hierarchical headers
         has_hierarchical = any(' ' in header for header in enhanced_headers if header)
         
-        if has_hierarchical:
+        if has_hierarchical or enhancement_confidence >= 0.25:
+            # Boost the original confidence with enhancement confidence
+            boosted_confidence = min(1.0, header_info.confidence + (enhancement_confidence * 0.3))
+            
             # Add reasoning about the enhancement
             enhanced_reasoning = header_info.reasoning.copy()
+            enhanced_reasoning.extend(enhancement_reasoning)
             enhanced_reasoning.append("Enhanced with hierarchical headers from subheader row merged cells")
             
             return HeaderRowInfo(
                 row_index=header_info.row_index,  # Keep the same row index
-                confidence=header_info.confidence,
+                confidence=boosted_confidence,
                 method=header_info.method,
                 reasoning=enhanced_reasoning,
                 headers=enhanced_headers,
@@ -460,6 +556,7 @@ class ColumnMapper:
     def _create_selective_hierarchical_headers(self, parent_row: List[str], subheader_row: List[str]) -> List[str]:
         """
         Create hierarchical headers only for merged cell sections, keep original headers for others
+        Enhanced to preserve individual well-recognized headers even during enhancement
         
         Args:
             parent_row: Parent header row (may have empty cells indicating merged cells)
@@ -479,6 +576,30 @@ class ColumnMapper:
         parent_spans = self._identify_parent_spans(parent_row, subheader_row)
         
         for i, subheader in enumerate(subheader_row):
+            # Check if the subheader is already a well-recognized keyword
+            subheader_recognized = False
+            if subheader and str(subheader).strip():
+                subheader_lower = str(subheader).strip().lower()
+                for column_type, keywords in self.CANONICAL_HEADER_MAP.items():
+                    for keyword in keywords:
+                        if keyword.lower() == subheader_lower:
+                            subheader_recognized = True
+                            break
+                    if subheader_recognized:
+                        break
+            
+            # Check if the parent header is already a well-recognized keyword
+            parent_recognized = False
+            if i < len(parent_row) and parent_row[i] and str(parent_row[i]).strip():
+                parent_lower = str(parent_row[i]).strip().lower()
+                for column_type, keywords in self.CANONICAL_HEADER_MAP.items():
+                    for keyword in keywords:
+                        if keyword.lower() == parent_lower:
+                            parent_recognized = True
+                            break
+                    if parent_recognized:
+                        break
+            
             # Check if this column is part of a merged cell span
             parent_header = ""
             is_in_span = False
@@ -489,9 +610,15 @@ class ColumnMapper:
                     is_in_span = True
                     break
             
-            # Create header based on whether it's in a merged span
-            if is_in_span and subheader and str(subheader).strip():
-                # This is part of a merged cell span, create hierarchical header
+            # SMART HEADER SELECTION: Preserve recognized headers
+            if subheader_recognized:
+                # Subheader is recognized - use it as-is, don't enhance
+                enhanced_header = str(subheader).strip()
+            elif parent_recognized and not is_in_span:
+                # Parent header is recognized and not in merged span - use it as-is
+                enhanced_header = str(parent_row[i]).strip()
+            elif is_in_span and subheader and str(subheader).strip():
+                # This is part of a merged cell span and subheader is not recognized, create hierarchical header
                 subheader_str = str(subheader).strip()
                 enhanced_header = f"{parent_header} {subheader_str}"
             elif not is_in_span and parent_row[i] and str(parent_row[i]).strip():
@@ -513,7 +640,7 @@ class ColumnMapper:
     
     def _detect_by_keywords(self, row: List[str], row_index: int, 
                            sheet_data: List[List[str]]) -> Optional[HeaderRowInfo]:
-        """Detect header row by keyword matching using canonical mappings dictionary"""
+        """Detect header row by exact keyword matching using canonical mappings dictionary"""
         if not row:
             return None
         
@@ -531,7 +658,8 @@ class ColumnMapper:
             # Check against canonical mappings dictionary (learned keywords)
             for column_type, keywords in self.CANONICAL_HEADER_MAP.items():
                 for keyword in keywords:
-                    if keyword.lower() in cell_lower:
+                    # Changed from substring matching to exact matching
+                    if keyword.lower() == cell_lower:
                         # Get weight from config for this column type
                         col_type_enum = None
                         for ct in self.config.get_all_column_types():
@@ -547,7 +675,7 @@ class ColumnMapper:
                         
                         score += weight
                         keyword_count += 1
-                        matches.append(f"'{cell}' matches {column_type}")
+                        matches.append(f"'{cell}' exactly matches {column_type}")
         
         # Improved scoring algorithm that prioritizes multiple keyword matches
         if keyword_count > 0:
@@ -567,9 +695,9 @@ class ColumnMapper:
             score = max(0.0, min(score, 1.0))
         
         if score > 0.3:  # Threshold for keyword detection
-            reasoning = [f"Keyword matches: {', '.join(matches[:3])}"]
+            reasoning = [f"Exact keyword matches: {', '.join(matches[:3])}"]
             if keyword_count > 3:
-                reasoning.append(f"Multiple keyword matches: {keyword_count} keywords found")
+                reasoning.append(f"Multiple exact keyword matches: {keyword_count} keywords found")
             
             return HeaderRowInfo(
                 row_index=row_index,
@@ -684,78 +812,7 @@ class ColumnMapper:
         
         return None
     
-    def _detect_by_merged_cells(self, row: List[str], row_index: int,
-                               sheet_data: List[List[str]]) -> Optional[HeaderRowInfo]:
-        """Detect header row by looking for merged cells patterns and hierarchical headers"""
-        if not row:
-            return None
-        
-        reasoning = []
-        confidence = 0.0
-        
-        # Check for merged cell indicators (empty cells between content)
-        empty_cells = sum(1 for cell in row if not cell or not str(cell).strip())
-        total_cells = len(row)
-        
-        if empty_cells > 0 and empty_cells < total_cells:
-            confidence = 0.2
-            reasoning.append(f"Potential merged cells: {empty_cells}/{total_cells} empty cells")
-        
-        # Look for hierarchical header patterns
-        if row_index + 1 < len(sheet_data):
-            next_row = sheet_data[row_index + 1]
-            
-            # Check for parent-subheader relationship
-            current_non_empty = [i for i, cell in enumerate(row) if cell and str(cell).strip()]
-            next_non_empty = [i for i, cell in enumerate(next_row) if cell and str(cell).strip()]
-            
-            # Look for patterns where current row has fewer cells that might span multiple columns
-            if len(current_non_empty) > 0 and len(next_non_empty) > len(current_non_empty):
-                # Check if current row cells could be parent headers
-                for i, cell in enumerate(row):
-                    if cell and str(cell).strip():
-                        cell_lower = str(cell).strip().lower()
-                        # Look for common parent header terms
-                        if any(term in cell_lower for term in ['labour', 'labor', 'material', 'equipment', 'cost', 'price', 'analysis']):
-                            confidence = max(confidence, 0.4)
-                            reasoning.append(f"Potential parent header '{cell}' with subheaders below")
-                
-                # Enhanced detection for labor-related hierarchical headers
-                combined_headers = self._create_hierarchical_headers(row, next_row)
-                labor_matches = 0
-                for combined_header in combined_headers:
-                    if combined_header:
-                        combined_lower = combined_header.lower()
-                        if any(term in combined_lower for term in ['ore/u.m.', 'euro/hour', 'manhours', 'wage']):
-                            labor_matches += 1
-                
-                if labor_matches > 0:
-                    confidence = max(confidence, 0.98)  # Higher confidence than keyword matching for labor hierarchical headers
-                    reasoning.append(f"Found {labor_matches} labor-related hierarchical headers")
-                
-                # If we detected hierarchical structure, return the subheader row as the actual header
-                if confidence >= 0.4:
-                    return HeaderRowInfo(
-                        row_index=row_index + 1,  # Use the subheader row as the actual header row
-                        confidence=confidence,
-                        method=HeaderDetectionMethod.MERGED_CELLS,
-                        reasoning=reasoning,
-                        headers=combined_headers,
-                        is_merged=True
-                    )
-        
-        # Standard merged cell detection
-        if confidence >= 0.25:
-            return HeaderRowInfo(
-                row_index=row_index,
-                confidence=confidence,
-                method=HeaderDetectionMethod.MERGED_CELLS,
-                reasoning=reasoning,
-                headers=row,
-                is_merged=True
-            )
-        
-        return None
+
     
     def _create_hierarchical_headers(self, parent_row: List[str], subheader_row: List[str]) -> List[str]:
         """
@@ -899,18 +956,13 @@ class ColumnMapper:
         return re.sub(r'[^a-z0-9]', '', header.strip().lower())
 
     def _canonical_type_for_header(self, header):
-        norm = self._normalize_header(header)
+        # Use exact matching instead of normalized matching
+        header_lower = header.strip().lower()
         for canonical, variants in self.CANONICAL_HEADER_MAP.items():
             for variant in variants:
-                if norm == self._normalize_header(variant):
+                if header_lower == variant.lower():
                     return canonical
-        # Fuzzy match fallback
-        all_variants = [v for vals in self.CANONICAL_HEADER_MAP.values() for v in vals]
-        close = difflib.get_close_matches(header.strip().lower(), all_variants, n=1, cutoff=0.85)
-        if close:
-            for canonical, variants in self.CANONICAL_HEADER_MAP.items():
-                if close[0] in variants:
-                    return canonical
+        # Remove fuzzy match fallback to enforce exact matching only
         return None
 
     def map_columns_to_types(self, headers: List[str]) -> List[ColumnMapping]:

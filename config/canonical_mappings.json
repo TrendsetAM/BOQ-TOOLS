@@ -4,7 +4,6 @@
     "desc",
     "item description",
     "work description",
-    "item",
     "activity",
     "task",
     "DESCRIPTION ITEM",
@@ -73,8 +72,6 @@
     "SCOPE"
   ],
   "manhours": [
-    "ore/u.m.",
-    "ore",
     "manhours",
     "man hours",
     "labour ore/u.m.",
@@ -82,7 +79,6 @@
     "Labour ORE/U.M."
   ],
   "wage": [
-    "euro/hour",
     "wage",
     "hourly rate",
     "labour euro/hour",
