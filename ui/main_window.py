@@ -596,10 +596,9 @@ class MainWindow:
         
         # Configure tab_frame's grid layout
         tab_frame.grid_rowconfigure(0, weight=0)  # For export_frame
-        tab_frame.grid_rowconfigure(1, weight=0)  # For global_summary
-        tab_frame.grid_rowconfigure(2, weight=1)  # For sheet_notebook (main content, expands vertically)
-        tab_frame.grid_rowconfigure(3, weight=0)  # For confirm_col_btn
-        tab_frame.grid_rowconfigure(4, weight=1)  # For row_review_container (expands vertically)
+        tab_frame.grid_rowconfigure(1, weight=1)  # For sheet_notebook (main content, expands vertically)
+        tab_frame.grid_rowconfigure(2, weight=0)  # For confirm_col_btn
+        tab_frame.grid_rowconfigure(3, weight=1)  # For row_review_container (expands vertically)
         tab_frame.grid_columnconfigure(0, weight=1)  # Only one column, expands horizontally
 
         # Add export button at the top
@@ -610,21 +609,9 @@ class MainWindow:
         export_btn = ttk.Button(export_frame, text="Export Data", command=self.export_file)
         export_btn.grid(row=0, column=1, padx=5)
 
-        # Add global summary
-        global_summary = ttk.LabelFrame(tab_frame, text="File Summary")
-        global_summary.grid(row=1, column=0, sticky=tk.EW, padx=5, pady=5)
-        
-        global_text = f"""Total Sheets: {len(file_mapping.sheets)}
-Global Confidence: {file_mapping.global_confidence:.1%}
-Export Ready: {'Yes' if file_mapping.export_ready else 'No'}
-Processing Status: {file_mapping.processing_summary.successful_sheets} successful, {file_mapping.processing_summary.partial_sheets} partial"""
-        
-        summary_label = ttk.Label(global_summary, text=global_text)
-        summary_label.grid(row=0, column=0, padx=10, pady=5, sticky=tk.W)
-
         # Create sheet notebook for individual sheet tabs
         sheet_notebook = ttk.Notebook(tab_frame)
-        sheet_notebook.grid(row=2, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        sheet_notebook.grid(row=1, column=0, sticky=tk.NSEW, padx=5, pady=5)
         
         # Populate each sheet as a tab in the sheet_notebook
         for sheet in file_mapping.sheets:
@@ -634,7 +621,7 @@ Processing Status: {file_mapping.processing_summary.successful_sheets} successfu
         
         # Add confirmation button for column mappings
         confirm_frame = ttk.Frame(tab_frame)
-        confirm_frame.grid(row=3, column=0, sticky=tk.EW, padx=5, pady=5)
+        confirm_frame.grid(row=2, column=0, sticky=tk.EW, padx=5, pady=5)
         confirm_frame.grid_columnconfigure(0, weight=1)
         confirm_btn = ttk.Button(confirm_frame, text="Confirm Column Mappings", command=self._save_all_mappings_for_all_sheets)
         confirm_btn.grid(row=0, column=0, sticky=tk.EW, padx=5, pady=5)
@@ -654,27 +641,13 @@ Processing Status: {file_mapping.processing_summary.successful_sheets} successfu
     def _populate_sheet_tab(self, sheet_frame, sheet):
         """Populate an individual sheet tab with its data and column mappings."""
         # Configure sheet frame grid
-        sheet_frame.grid_rowconfigure(0, weight=0)  # Summary
-        sheet_frame.grid_rowconfigure(1, weight=0)  # Header row control
-        sheet_frame.grid_rowconfigure(2, weight=1)  # Column mappings table
+        sheet_frame.grid_rowconfigure(0, weight=0)  # Header row control
+        sheet_frame.grid_rowconfigure(1, weight=1)  # Column mappings table
         sheet_frame.grid_columnconfigure(0, weight=1)
-        
-        # Sheet summary
-        summary_frame = ttk.LabelFrame(sheet_frame, text="Sheet Summary")
-        summary_frame.grid(row=0, column=0, sticky=tk.EW, padx=5, pady=5)
-        
-        summary_text = f"""Processing Status: {getattr(sheet, 'processing_status', 'Unknown')}
-Confidence: {getattr(sheet, 'confidence', 0):.1%}
-Data Rows: {getattr(sheet, 'data_rows', 0)}
-Columns: {len(getattr(sheet, 'column_mappings', []))}
-Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
-        
-        summary_label = ttk.Label(summary_frame, text=summary_text)
-        summary_label.grid(row=0, column=0, padx=10, pady=5, sticky=tk.W)
         
         # Header Row Control
         header_control_frame = ttk.Frame(sheet_frame)
-        header_control_frame.grid(row=1, column=0, sticky=tk.EW, padx=5, pady=5)
+        header_control_frame.grid(row=0, column=0, sticky=tk.EW, padx=5, pady=5)
         
         # Get current header row (convert from 0-based to 1-based for display)
         current_header_row = getattr(sheet, 'header_row_index', 0) + 1
@@ -706,7 +679,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         
         # Column mappings table
         mappings_frame = ttk.LabelFrame(sheet_frame, text="Column Mappings (Double-click to edit) - Required columns are highlighted")
-        mappings_frame.grid(row=2, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        mappings_frame.grid(row=1, column=0, sticky=tk.NSEW, padx=5, pady=5)
         mappings_frame.grid_rowconfigure(0, weight=1)
         mappings_frame.grid_columnconfigure(0, weight=1)
         
@@ -2217,7 +2190,11 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             tab.grid_rowconfigure(0, weight=0)
             tab.grid_rowconfigure(1, weight=1)
             tab.grid_columnconfigure(0, weight=1)
-            main_frame.grid_rowconfigure(1, weight=1)
+            main_frame.grid_rowconfigure(0, weight=0)  # Title
+            main_frame.grid_rowconfigure(1, weight=0)  # Instructions
+            main_frame.grid_rowconfigure(2, weight=1)  # Data grid (expandable)
+            main_frame.grid_rowconfigure(3, weight=0)  # Summary frame
+            main_frame.grid_rowconfigure(4, weight=0)  # Button frame (always visible)
             main_frame.grid_columnconfigure(0, weight=1)
             # Title and instructions
             title_label = ttk.Label(main_frame, text="Final Categorized Data", font=("TkDefaultFont", 14, "bold"))
@@ -2499,18 +2476,24 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 summary_tree.bind('<Double-1>', on_summary_double_click)
                 # --- END CATEGORY FILTERING FEATURE ---
             # --- END SUMMARY GRID PLACEHOLDER ---
-            # Button frame at the bottom
+            # Button frame at the bottom - always visible
             button_frame = ttk.Frame(main_frame)
-            button_frame.grid(row=4, column=0, pady=(10, 0))
-            summarize_button = ttk.Button(button_frame, text="Summarize", command=show_summary_grid)
+            button_frame.grid(row=4, column=0, sticky=tk.EW, pady=(10, 0))
+            button_frame.grid_columnconfigure(0, weight=1)  # Allow buttons to expand
+            
+            # Create a centered button container
+            button_container = ttk.Frame(button_frame)
+            button_container.grid(row=0, column=0)
+            
+            summarize_button = ttk.Button(button_container, text="Summarize", command=show_summary_grid)
             summarize_button.pack(side=tk.LEFT, padx=(0, 5))
-            save_analysis_button = ttk.Button(button_frame, text="Save Analysis", command=lambda: self._save_analysis(tab))
+            save_analysis_button = ttk.Button(button_container, text="Save Analysis", command=lambda: self._save_analysis(tab))
             save_analysis_button.pack(side=tk.LEFT, padx=(0, 5))
-            save_mappings_button = ttk.Button(button_frame, text="Save Mappings", command=lambda: self._save_mappings(tab))
+            save_mappings_button = ttk.Button(button_container, text="Save Mappings", command=lambda: self._save_mappings(tab))
             save_mappings_button.pack(side=tk.LEFT, padx=(0, 5))
-            compare_full_button = ttk.Button(button_frame, text="Compare Full", command=lambda: self._compare_full(tab))
+            compare_full_button = ttk.Button(button_container, text="Compare Full", command=lambda: self._compare_full(tab))
             compare_full_button.pack(side=tk.LEFT, padx=(0, 5))
-            export_button = ttk.Button(button_frame, text="Export Data", 
+            export_button = ttk.Button(button_container, text="Export Data", 
                                       command=lambda: self._export_final_data(tab.final_dataframe, tab))
             export_button.pack(side=tk.LEFT, padx=(0, 5))
             
