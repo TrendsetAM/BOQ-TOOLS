@@ -295,6 +295,9 @@ class MainWindow:
         self.tab_id_to_file_mapping = {}
         # Offer name for summary grid
         self.current_offer_name = None
+        # Store comprehensive offer information
+        self.current_offer_info = None
+        self.previous_offer_info = None  # For subsequent BOQs in comparison
         # Create widgets
         self._create_main_widgets()
         self._setup_drag_and_drop()
@@ -453,12 +456,12 @@ class MainWindow:
             self._update_status("No data to export.")
 
     def open_file(self):
-        # Prompt for offer name/label before opening file dialog
-        offer_name = self._prompt_offer_name()
-        if offer_name is None:
-            self._update_status("File open cancelled (no offer name provided).")
+        # Prompt for comprehensive offer information before opening file dialog
+        offer_info = self._prompt_offer_info(is_first_boq=True)
+        if offer_info is None:
+            self._update_status("File open cancelled (no offer information provided).")
             return
-        self.current_offer_name = offer_name
+        
         filetypes = [("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
         filenames = filedialog.askopenfilenames(title="Open Excel File", filetypes=filetypes)
         for file in filenames:
@@ -595,23 +598,14 @@ class MainWindow:
         tab_frame.grid(row=0, column=0, sticky=tk.NSEW)
         
         # Configure tab_frame's grid layout
-        tab_frame.grid_rowconfigure(0, weight=0)  # For export_frame
-        tab_frame.grid_rowconfigure(1, weight=1)  # For sheet_notebook (main content, expands vertically)
-        tab_frame.grid_rowconfigure(2, weight=0)  # For confirm_col_btn
-        tab_frame.grid_rowconfigure(3, weight=1)  # For row_review_container (expands vertically)
+        tab_frame.grid_rowconfigure(0, weight=1)  # For sheet_notebook (main content, expands vertically)
+        tab_frame.grid_rowconfigure(1, weight=0)  # For confirm_col_btn
+        tab_frame.grid_rowconfigure(2, weight=1)  # For row_review_container (expands vertically)
         tab_frame.grid_columnconfigure(0, weight=1)  # Only one column, expands horizontally
-
-        # Add export button at the top
-        export_frame = ttk.Frame(tab_frame)
-        export_frame.grid(row=0, column=0, sticky=tk.EW, padx=5, pady=5)
-        export_frame.grid_columnconfigure(0, weight=1)  # Allow expansion
-        
-        export_btn = ttk.Button(export_frame, text="Export Data", command=self.export_file)
-        export_btn.grid(row=0, column=1, padx=5)
 
         # Create sheet notebook for individual sheet tabs
         sheet_notebook = ttk.Notebook(tab_frame)
-        sheet_notebook.grid(row=1, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        sheet_notebook.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
         
         # Populate each sheet as a tab in the sheet_notebook
         for sheet in file_mapping.sheets:
@@ -621,7 +615,7 @@ class MainWindow:
         
         # Add confirmation button for column mappings
         confirm_frame = ttk.Frame(tab_frame)
-        confirm_frame.grid(row=2, column=0, sticky=tk.EW, padx=5, pady=5)
+        confirm_frame.grid(row=1, column=0, sticky=tk.EW, padx=5, pady=5)
         confirm_frame.grid_columnconfigure(0, weight=1)
         confirm_btn = ttk.Button(confirm_frame, text="Confirm Column Mappings", command=self._save_all_mappings_for_all_sheets)
         confirm_btn.grid(row=0, column=0, sticky=tk.EW, padx=5, pady=5)
@@ -2878,13 +2872,59 @@ class MainWindow:
         """Start the main application loop."""
         self.root.mainloop()
 
+    def _prompt_offer_info(self, is_first_boq: bool = True):
+        """
+        Prompt for comprehensive offer information
+        
+        Args:
+            is_first_boq: True if this is the first BOQ being loaded, False for subsequent BOQs
+            
+        Returns:
+            Dictionary with offer information or None if cancelled
+        """
+        try:
+            from ui.offer_info_dialog import show_offer_info_dialog
+            
+            # Determine if this is the first BOQ or subsequent
+            previous_info = self.previous_offer_info if not is_first_boq else None
+            
+            # Show the dialog
+            offer_info = show_offer_info_dialog(self.root, is_first_boq, previous_info)
+            
+            if offer_info:
+                # Store the offer information
+                self.current_offer_info = offer_info
+                self.current_offer_name = offer_info['supplier_name']  # Use supplier name as the offer name
+                
+                # Store as previous info for subsequent BOQs (only if this is the first BOQ)
+                if is_first_boq:
+                    self.previous_offer_info = offer_info.copy()
+                
+                return offer_info
+            
+            return None
+            
+        except ImportError:
+            # Fallback to simple dialog if new dialog is not available
+            import tkinter.simpledialog
+            offer_name = tkinter.simpledialog.askstring("Offer Name", "Enter a name or label for this offer:", parent=self.root)
+            if offer_name is not None and offer_name.strip() != "":
+                simple_info = {
+                    'supplier_name': offer_name.strip(),
+                    'project_name': '',
+                    'project_size': '',
+                    'date': '2025-07-11',
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
+                self.current_offer_info = simple_info
+                self.current_offer_name = offer_name.strip()
+                return simple_info
+            return None
+    
     def _prompt_offer_name(self):
-        # Simple dialog to prompt for offer name/label
-        import tkinter.simpledialog
-        offer_name = tkinter.simpledialog.askstring("Offer Name", "Enter a name or label for this offer:", parent=self.root)
-        if offer_name is not None and offer_name.strip() != "":
-            return offer_name.strip()
-        return None
+        """Legacy method for backward compatibility"""
+        offer_info = self._prompt_offer_info(is_first_boq=True)
+        return offer_info['supplier_name'] if offer_info else None
 
     def _save_analysis(self, tab):
         """Save the current analysis including DataFrame and mapping information as a pickle file."""
@@ -3117,11 +3157,13 @@ class MainWindow:
                 # Update the display
                 self._update_comparison_display(tab, master_df)
             
-            # Prompt for new offer name
-            new_offer_name = self._prompt_offer_name()
-            if new_offer_name is None:
-                self._update_status("Comparison cancelled (no offer name provided).")
+            # Prompt for new offer information (subsequent BOQ)
+            new_offer_info = self._prompt_offer_info(is_first_boq=False)
+            if new_offer_info is None:
+                self._update_status("Comparison cancelled (no offer information provided).")
                 return
+            
+            new_offer_name = new_offer_info['supplier_name']
             
             # Check for duplicate offer names
             existing_offers = getattr(tab, 'comparison_offers', [])
@@ -3195,12 +3237,11 @@ class MainWindow:
                 pass
             self._update_status("Mapping loaded. Please select a BOQ file to analyze.")
             
-            # Prompt for offer name
-            offer_name = self._prompt_offer_name()
-            if offer_name is None:
-                self._update_status("Analysis cancelled (no offer name provided).")
+            # Prompt for offer information
+            offer_info = self._prompt_offer_info(is_first_boq=True)
+            if offer_info is None:
+                self._update_status("Analysis cancelled (no offer information provided).")
                 return
-            self.current_offer_name = offer_name
             
             # Select BOQ file
             filetypes = [("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
