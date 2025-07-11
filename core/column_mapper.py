@@ -81,12 +81,12 @@ class ColumnMapper:
         'wage': ["euro/hour", "wage", "hourly rate", "labour euro/hour", "labor euro/hour"]
     }
     
-    def __init__(self, max_header_rows: int = 10):
+    def __init__(self, max_header_rows: int = 20):
         """
         Initialize the column mapper
         
         Args:
-            max_header_rows: Maximum number of rows to check for headers
+            max_header_rows: Maximum number of rows to check for headers (default: 20)
         """
         self.config = get_config()
         self.max_header_rows = max_header_rows
@@ -513,7 +513,7 @@ class ColumnMapper:
     
     def _detect_by_keywords(self, row: List[str], row_index: int, 
                            sheet_data: List[List[str]]) -> Optional[HeaderRowInfo]:
-        """Detect header row by keyword matching"""
+        """Detect header row by keyword matching using canonical mappings dictionary"""
         if not row:
             return None
         
@@ -528,15 +528,26 @@ class ColumnMapper:
             
             cell_lower = str(cell).lower().strip()
             
-            # Check against all column type keywords
-            for col_type in self.config.get_all_column_types():
-                mapping = self.config.get_column_mapping(col_type)
-                if mapping:
-                    for keyword in mapping.keywords:
-                        if keyword.lower() in cell_lower:
-                            score += mapping.weight
-                            keyword_count += 1
-                            matches.append(f"'{cell}' matches {col_type.value}")
+            # Check against canonical mappings dictionary (learned keywords)
+            for column_type, keywords in self.CANONICAL_HEADER_MAP.items():
+                for keyword in keywords:
+                    if keyword.lower() in cell_lower:
+                        # Get weight from config for this column type
+                        col_type_enum = None
+                        for ct in self.config.get_all_column_types():
+                            if ct.value == column_type:
+                                col_type_enum = ct
+                                break
+                        
+                        if col_type_enum:
+                            mapping = self.config.get_column_mapping(col_type_enum)
+                            weight = mapping.weight if mapping else 1.0
+                        else:
+                            weight = 1.0  # Default weight for unknown types
+                        
+                        score += weight
+                        keyword_count += 1
+                        matches.append(f"'{cell}' matches {column_type}")
         
         # Improved scoring algorithm that prioritizes multiple keyword matches
         if keyword_count > 0:

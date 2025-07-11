@@ -144,10 +144,13 @@ class BOQApplicationController:
         """Initialize all core processing components"""
         assert self.logger is not None
         try:
+            # Get max_header_rows from user preferences
+            max_header_rows = self.settings.get("user_preferences", {}).get("processing_thresholds", {}).get("max_header_rows", 20)
+            
             # Initialize processors
             self.processor = ExcelProcessor()
             self.sheet_classifier = SheetClassifier()
-            self.column_mapper = ColumnMapper()
+            self.column_mapper = ColumnMapper(max_header_rows=max_header_rows)
             self.row_classifier = RowClassifier()
             self.validator = DataValidator()
             self.mapping_generator = MappingGenerator()
@@ -401,6 +404,12 @@ class BOQApplicationController:
         """Update application settings"""
         self.settings.update(new_settings)
         self._save_settings()
+        
+        # Update ColumnMapper with new max_header_rows setting if it changed
+        if self.column_mapper:
+            max_header_rows = self.settings.get("user_preferences", {}).get("processing_thresholds", {}).get("max_header_rows", 20)
+            self.column_mapper.max_header_rows = max_header_rows
+        
         assert self.logger is not None
         self.logger.info("Settings updated and saved")
     
