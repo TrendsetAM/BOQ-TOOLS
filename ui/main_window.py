@@ -2174,6 +2174,18 @@ class MainWindow:
                     display_df = display_df.drop('category_internal', axis=1)
                 # print(f"[DEBUG] Using loaded DataFrame directly with shape: {display_df.shape}")
             
+            # Perform post-dataset validation
+            validation_results = None
+            if hasattr(self.controller, 'validator') and self.controller.validator:
+                try:
+                    validation_results = self.controller.validator.validate_dataset_post_creation(display_df)
+                    logger.info(f"Dataset validation completed: {validation_results['summary']}")
+                    # Store validation results for use in treeview highlighting
+                    display_df._validation_results = validation_results
+                except Exception as e:
+                    logger.warning(f"Dataset validation failed: {e}")
+                    validation_results = None
+            
             # Clear the current tab content
             for widget in tab.winfo_children():
                 widget.destroy()
@@ -2226,8 +2238,33 @@ class MainWindow:
             # Set selection color to light blue and text color to black for readability
             style = ttk.Style(tree)
             style.map('Treeview', background=[('selected', '#B3E5FC')], foreground=[('selected', 'black')])
+            
+            # Configure validation failed tag for red highlighting of total price cells
+            tree.tag_configure('validation_failed', background='#FFCCCC')  # Light red background for failed rows
+            
             self._populate_final_data_treeview(tree, display_df, final_display_columns)
             self._enable_final_data_editing(tree, display_df)
+            
+            # Add validation status message if validation was performed
+            if validation_results:
+                validation_frame = ttk.Frame(tree_frame)
+                validation_frame.grid(row=2, column=0, sticky=tk.EW, pady=(5, 0))
+                
+                summary = validation_results.get('summary', {})
+                failed_count = summary.get('failed_rows', 0)
+                total_count = summary.get('total_rows', 0)
+                success_rate = summary.get('success_rate', 0.0)
+                
+                if failed_count > 0:
+                    status_text = f"⚠️ Validation: {failed_count} of {total_count} rows failed validation (Total Price ≠ Unit Price × Quantity). Failed rows are highlighted in red."
+                    status_color = 'red'
+                else:
+                    status_text = f"✅ Validation: All {total_count} rows passed validation (Total Price = Unit Price × Quantity)."
+                    status_color = 'green'
+                
+                validation_label = ttk.Label(validation_frame, text=status_text, foreground=status_color, 
+                                           font=("TkDefaultFont", 9))
+                validation_label.pack(anchor=tk.W)
             # --- SUMMARY GRID PLACEHOLDER ---
             summary_frame = ttk.Frame(main_frame)
             summary_frame.grid(row=3, column=0, sticky=tk.EW, pady=(0, 10))
@@ -2530,6 +2567,12 @@ class MainWindow:
         
         # print(f"[DEBUG] Cleared existing items, now adding {len(dataframe)} rows")
         
+        # Get validation results if available
+        validation_results = getattr(dataframe, '_validation_results', None)
+        failed_rows = set()
+        if validation_results and 'failed_rows' in validation_results:
+            failed_rows = set(validation_results['failed_rows'])
+        
         # Add data rows
         for index, row in dataframe.iterrows():
             values = []
@@ -2562,7 +2605,12 @@ class MainWindow:
                 else:
                     values.append(str(value))
             
-            tree.insert('', 'end', values=values, tags=(f'row_{index}',))
+            # Determine tags for this row
+            row_tags = [f'row_{index}']
+            if index in failed_rows:
+                row_tags.append('validation_failed')
+            
+            tree.insert('', 'end', values=values, tags=tuple(row_tags))
         
         # print(f"[DEBUG] Finished populating treeview with {len(dataframe)} rows")
     

@@ -497,4 +497,153 @@ class DataValidator:
             suggestions.append("Standardize data formats across columns")
         
         return suggestions
+
+    def validate_dataset_post_creation(self, dataframe, tolerance_percentage: float = 0.01) -> Dict[str, Any]:
+        """
+        Validate dataset after creation to ensure Total Price = Unit Price × Quantity for each row.
+        
+        Args:
+            dataframe: Pandas DataFrame with the processed BOQ data
+            tolerance_percentage: Tolerance for mathematical consistency (default 1%)
+            
+        Returns:
+            Dictionary containing:
+            - 'validation_results': List of validation results for each row
+            - 'failed_rows': List of row indices that failed validation
+            - 'summary': Summary statistics of validation results
+        """
+        import pandas as pd
+        
+        logger.info(f"Starting post-dataset validation for {len(dataframe)} rows")
+        
+        validation_results = []
+        failed_rows = []
+        
+        # Check if required columns exist
+        required_columns = ['quantity', 'unit_price', 'total_price']
+        missing_columns = [col for col in required_columns if col not in dataframe.columns]
+        
+        if missing_columns:
+            logger.warning(f"Missing required columns for validation: {missing_columns}")
+            return {
+                'validation_results': [],
+                'failed_rows': [],
+                'summary': {
+                    'total_rows': len(dataframe),
+                    'validated_rows': 0,
+                    'failed_rows': 0,
+                    'success_rate': 0.0,
+                    'error': f"Missing required columns: {missing_columns}"
+                }
+            }
+        
+        validated_rows = 0
+        
+        for index, row in dataframe.iterrows():
+            try:
+                # Extract values with proper null checks
+                quantity = self._parse_dataframe_number(row.get('quantity'))
+                unit_price = self._parse_dataframe_number(row.get('unit_price'))
+                total_price = self._parse_dataframe_number(row.get('total_price'))
+                
+                # Skip rows where any of the required values are missing or zero
+                if any(v is None or v == 0 for v in [quantity, unit_price, total_price]):
+                    validation_results.append({
+                        'row_index': index,
+                        'is_valid': None,  # Indicates skipped validation
+                        'quantity': quantity,
+                        'unit_price': unit_price,
+                        'total_price': total_price,
+                        'calculated_total': None,
+                        'difference': None,
+                        'tolerance': None,
+                        'reason': 'Missing or zero values'
+                    })
+                    continue
+                
+                # At this point, we know all values are not None and not zero
+                # Type assertion to help type checker
+                assert quantity is not None and unit_price is not None and total_price is not None
+                
+                # Calculate expected total
+                calculated_total = quantity * unit_price
+                difference = abs(calculated_total - total_price)
+                tolerance = abs(total_price * tolerance_percentage)
+                is_valid = difference <= tolerance
+                
+                validation_result = {
+                    'row_index': index,
+                    'is_valid': is_valid,
+                    'quantity': quantity,
+                    'unit_price': unit_price,
+                    'total_price': total_price,
+                    'calculated_total': calculated_total,
+                    'difference': difference,
+                    'tolerance': tolerance,
+                    'reason': 'Valid' if is_valid else f'Calculation mismatch: {calculated_total:.2f} ≠ {total_price:.2f}'
+                }
+                
+                validation_results.append(validation_result)
+                validated_rows += 1
+                
+                if not is_valid:
+                    failed_rows.append(index)
+                    logger.debug(f"Row {index} failed validation: {quantity} × {unit_price} = {calculated_total:.2f}, but total_price = {total_price:.2f}")
+                
+            except Exception as e:
+                logger.warning(f"Error validating row {index}: {e}")
+                validation_results.append({
+                    'row_index': index,
+                    'is_valid': False,
+                    'quantity': None,
+                    'unit_price': None,
+                    'total_price': None,
+                    'calculated_total': None,
+                    'difference': None,
+                    'tolerance': None,
+                    'reason': f'Validation error: {str(e)}'
+                })
+                failed_rows.append(index)
+                continue
+        
+        # Calculate summary statistics
+        success_rate = (validated_rows - len(failed_rows)) / validated_rows if validated_rows > 0 else 0.0
+        
+        summary = {
+            'total_rows': len(dataframe),
+            'validated_rows': validated_rows,
+            'failed_rows': len(failed_rows),
+            'success_rate': success_rate,
+            'tolerance_percentage': tolerance_percentage
+        }
+        
+        logger.info(f"Post-dataset validation completed: {validated_rows} rows validated, {len(failed_rows)} failed ({success_rate:.1%} success rate)")
+        
+        return {
+            'validation_results': validation_results,
+            'failed_rows': failed_rows,
+            'summary': summary
+        }
+    
+    def _parse_dataframe_number(self, value) -> Optional[float]:
+        """Parse a value from DataFrame to a number, handling pandas data types"""
+        import pandas as pd
+        
+        if pd.isna(value):
+            return None
+        
+        if isinstance(value, (int, float)):
+            return float(value)
+        
+        if isinstance(value, str):
+            if value.strip() == '':
+                return None
+            # Remove formatting and convert
+            cleaned = value.replace(',', '.').replace(' ', '').replace('\u202f', '')
+            try:
+                return float(cleaned)
+            except ValueError:
+                return None
+        
+        return None
  
