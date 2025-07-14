@@ -343,6 +343,8 @@ class MainWindow:
         file_menu.add_command(label="Open...", accelerator="Ctrl+O", command=self.open_file)
         file_menu.add_command(label="Export", accelerator="Ctrl+E", command=self.export_file)
         file_menu.add_separator()
+        file_menu.add_command(label="Clear All Files", command=self._clear_all_files)
+        file_menu.add_separator()
         file_menu.add_command(label="Exit", accelerator="Ctrl+Q", command=self.root.quit)
         menubar.add_cascade(label="File", menu=file_menu)
         # Edit
@@ -478,6 +480,15 @@ class MainWindow:
         filetypes = [("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
         filenames = filedialog.askopenfilenames(title="Open Excel File", filetypes=filetypes)
         for file in filenames:
+            # Check if there is already a file loaded in the current tab
+            current_tab_id = self.notebook.select()
+            if current_tab_id:
+                current_tab = self.notebook.nametowidget(current_tab_id)
+                # If the tab has a final_dataframe, trigger comparison logic
+                if hasattr(current_tab, 'final_dataframe') and getattr(current_tab, 'final_dataframe', None) is not None:
+                    self._compare_full(current_tab)
+                    return
+            # Otherwise, just open as new analysis
             self._open_excel_file(file)
 
     def _on_drop(self, event):
@@ -574,6 +585,8 @@ class MainWindow:
 
     def _on_processing_complete(self, tab, filepath, file_mapping, loading_widget):
         """Handle processing completion"""
+        print(f"[DEBUG] _on_processing_complete called for file: {filepath}")
+        
         # Store the file mapping and column mapper
         self.file_mapping = file_mapping
         self.column_mapper = file_mapping.column_mapper if hasattr(file_mapping, 'column_mapper') else None
@@ -581,34 +594,49 @@ class MainWindow:
         # Store offer info in the controller's current_files for summary data collection
         file_key = str(Path(filepath).resolve())
         if file_key in self.controller.current_files:
-            # Add offer info to the stored file data
             current_offer_info = getattr(self, 'current_offer_info', {})
+            current_offer_name = getattr(self, 'current_offer_name', 'Unknown')
+            
+            # Enhanced offer info creation with better fallbacks
             offer_info = {
-                'supplier_name': current_offer_info.get('supplier_name', getattr(self, 'current_offer_name', 'Unknown')),
+                'supplier_name': current_offer_info.get('supplier_name', current_offer_name),
                 'project_name': current_offer_info.get('project_name', 'Unknown'),
                 'date': current_offer_info.get('date', 'Unknown')
             }
+            
+            # Store under dynamic offer name for comparison datasets
+            offer_name = offer_info['supplier_name']
+            if 'offers' not in self.controller.current_files[file_key]:
+                self.controller.current_files[file_key]['offers'] = {}
+            self.controller.current_files[file_key]['offers'][offer_name] = offer_info
+            # For backward compatibility, also store the last offer as 'offer_info'
             self.controller.current_files[file_key]['offer_info'] = offer_info
+            print(f"[DEBUG] Stored offer info for offer_name '{offer_name}': {offer_info}")
+            print(f"[DEBUG] Current offer info state: current_offer_info={current_offer_info}, current_offer_name={current_offer_name}")
         
         # Remove loading widget and populate tab
         loading_widget.destroy()
         self._populate_file_tab(tab, file_mapping)
         
-        # Refresh the global summary grid if it exists
-        if hasattr(self, 'global_summary_frame') and self.global_summary_frame is not None:
-            self._create_new_summary_grid(self.global_summary_frame, tab)
+        # Use centralized refresh method
+        print(f"[DEBUG] Calling centralized summary grid refresh")
+        self._refresh_summary_grid_centralized()
         
         # Update status
         self._update_status(f"Processing complete: {os.path.basename(filepath)}")
 
     def _on_processing_error(self, tab, filename, loading_widget):
         """Callback for when file processing fails. Runs in the main UI thread."""
+        print(f"[DEBUG] _on_processing_error called for file: {filename}")
         loading_widget.destroy()
         # Use grid for consistency
         error_label = ttk.Label(tab, text=f"Failed to process {filename}.\nSee logs for details.", foreground="red")
         error_label.grid(row=0, column=0, pady=40, padx=100)
         self._update_status(f"Error processing {filename}")
         self.progress_var.set(0)
+        # Refresh summary grid even on error to show current state
+        print(f"[DEBUG] Calling centralized summary grid refresh after error")
+        self._refresh_summary_grid_centralized()
 
     def _populate_file_tab(self, tab, file_mapping):
         # print("[DEBUG] _populate_file_tab called for tab:", tab)
@@ -2024,8 +2052,9 @@ class MainWindow:
                     # print("[DEBUG] About to call _show_final_categorized_data...")
                     # Show the final data grid in the main window - use the actual tab widget from file_mapping
                     self._show_final_categorized_data(file_mapping.tab, final_dataframe, categorization_result)
-                    # Refresh the new summary grid after categorization
-                    self._refresh_new_summary_grid(file_mapping.tab)
+                    # Refresh the new summary grid after categorization using centralized method
+                    print(f"[DEBUG] Calling centralized summary grid refresh after categorization")
+                    self._refresh_summary_grid_centralized()
                     self._update_status("Categorization completed successfully - showing final data")
                     # print("[DEBUG] _show_final_categorized_data call completed")
                     break
@@ -2287,8 +2316,10 @@ class MainWindow:
                 self.global_summary_frame = ttk.LabelFrame(main_frame, text="BOQ Summary Overview")
                 self.global_summary_frame.grid(row=3, column=0, sticky=tk.EW, pady=(0, 10))
                 self.global_summary_frame.grid_columnconfigure(0, weight=1)
+                print(f"[DEBUG] Created new global summary frame")
             else:
                 self.global_summary_frame.grid(row=3, column=0, sticky=tk.EW, pady=(0, 10))
+                print(f"[DEBUG] Reusing existing global summary frame")
             self._create_new_summary_grid(self.global_summary_frame, tab)
 
             # --- DETAILED SUMMARY GRID (Summarize) ---
@@ -4001,8 +4032,24 @@ Review the rows below and adjust validity as needed."""
             # Repopulate the treeview
             self._populate_final_data_treeview(tree, comparison_df, new_columns)
             
+            # CRITICAL FIX: Update controller.current_files with the converted DataFrame
+            # Find the file entry in controller.current_files and update it
+            for file_key, file_data in self.controller.current_files.items():
+                if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == tab:
+                    # Update the categorized_dataframe in the file mapping
+                    file_data['file_mapping'].categorized_dataframe = comparison_df
+                    # Also update the file_data directly
+                    file_data['categorized_dataframe'] = comparison_df
+                    print(f"[DEBUG] Updated controller.current_files[{file_key}] with converted DataFrame")
+                    print(f"[DEBUG] Converted DataFrame columns: {list(comparison_df.columns)}")
+                    break
+            
             # Reset summary tree so it gets rebuilt with the new DataFrame structure
             tab.summary_tree = None
+            
+            # Refresh the summary grid after comparison
+            print(f"[DEBUG] Calling centralized summary grid refresh after comparison")
+            self._refresh_summary_grid_centralized()
             
             # Remove any existing resize bindings to avoid conflicts
             try:
@@ -4389,6 +4436,114 @@ Review the rows below and adjust validity as needed."""
             if not hasattr(master_tab, 'comparison_offers'):
                 master_tab.comparison_offers = []
             master_tab.comparison_offers.append(new_offer_name)
+            
+            # CRITICAL FIX: Update controller.current_files with the merged DataFrame
+            # Find the file entry in controller.current_files and update it
+            file_found = False
+            for file_key, file_data in self.controller.current_files.items():
+                # Try to match by tab reference first
+                if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == master_tab:
+                    file_found = True
+                    print(f"[DEBUG] Found file by tab reference: {file_key}")
+                # If tab reference is None, try to match by checking if this file has offers
+                elif hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab is None:
+                    if 'offers' in file_data and len(file_data['offers']) > 0:
+                        file_found = True
+                        print(f"[DEBUG] Found file by offers check: {list(file_data['offers'].keys())}")
+                
+                if file_found:
+                    # Update the categorized_dataframe in the file mapping
+                    file_data['file_mapping'].categorized_dataframe = merged_df
+                    # Also update the file_data directly
+                    file_data['categorized_dataframe'] = merged_df
+                    
+                    # CRITICAL FIX: Ensure the tab reference is maintained
+                    file_data['file_mapping'].tab = master_tab
+                    
+                    # CRITICAL FIX: Store offer info for the new offer in the comparison
+                    if 'offers' not in file_data:
+                        file_data['offers'] = {}
+                    
+                    # Store the new offer info
+                    new_offer_info = {
+                        'supplier_name': new_offer_name,
+                        'project_name': getattr(self, 'current_offer_info', {}).get('project_name', 'Unknown'),
+                        'date': getattr(self, 'current_offer_info', {}).get('date', 'Unknown')
+                    }
+                    file_data['offers'][new_offer_name] = new_offer_info
+                    
+                    # CRITICAL FIX: Also store the first offer info if it's not already there
+                    # The first offer should be the master offer (the one that was already loaded)
+                    master_offer_name = getattr(master_tab, 'master_offer_name', None)
+                    if master_offer_name and master_offer_name not in file_data['offers']:
+                        master_offer_info = {
+                            'supplier_name': master_offer_name,
+                            'project_name': getattr(self, 'previous_offer_info', {}).get('project_name', 'Unknown'),
+                            'date': getattr(self, 'previous_offer_info', {}).get('date', 'Unknown')
+                        }
+                        file_data['offers'][master_offer_name] = master_offer_info
+                        print(f"[DEBUG] Added master offer info for {master_offer_name}: {master_offer_info}")
+                    
+                    print(f"[DEBUG] All offers after merge: {list(file_data['offers'].keys())}")
+                    print(f"[DEBUG] Updated controller.current_files[{file_key}] with merged DataFrame")
+                    print(f"[DEBUG] Merged DataFrame columns: {list(merged_df.columns)}")
+                    print(f"[DEBUG] Added offer info for {new_offer_name}: {new_offer_info}")
+                    print(f"[DEBUG] Maintained tab reference: {file_data['file_mapping'].tab}")
+                    break
+            
+            # CRITICAL FIX: If no file found, use the first available file
+            if not file_found:
+                print(f"[DEBUG] WARNING: Could not find file_data to update with merged DataFrame!")
+                print(f"[DEBUG] Available files: {list(self.controller.current_files.keys())}")
+                for fd in self.controller.current_files.values():
+                    if 'offers' in fd:
+                        print(f"[DEBUG] File has offers: {list(fd['offers'].keys())}")
+                    if 'file_mapping' in fd:
+                        tab_ref = getattr(fd['file_mapping'], 'tab', None)
+                        print(f"[DEBUG] File mapping tab: {tab_ref}")
+                
+                # Use the first available file as fallback
+                if self.controller.current_files:
+                    file_key = list(self.controller.current_files.keys())[0]
+                    file_data = self.controller.current_files[file_key]
+                    print(f"[DEBUG] Using fallback file: {file_key}")
+                    
+                    # Update the categorized_dataframe in the file mapping
+                    file_data['file_mapping'].categorized_dataframe = merged_df
+                    # Also update the file_data directly
+                    file_data['categorized_dataframe'] = merged_df
+                    
+                    # CRITICAL FIX: Ensure the tab reference is maintained
+                    file_data['file_mapping'].tab = master_tab
+                    
+                    # CRITICAL FIX: Store offer info for the new offer in the comparison
+                    if 'offers' not in file_data:
+                        file_data['offers'] = {}
+                    
+                    # Store the new offer info
+                    new_offer_info = {
+                        'supplier_name': new_offer_name,
+                        'project_name': getattr(self, 'current_offer_info', {}).get('project_name', 'Unknown'),
+                        'date': getattr(self, 'current_offer_info', {}).get('date', 'Unknown')
+                    }
+                    file_data['offers'][new_offer_name] = new_offer_info
+                    
+                    # CRITICAL FIX: Also store the first offer info if it's not already there
+                    # The first offer should be the master offer (the one that was already loaded)
+                    master_offer_name = getattr(master_tab, 'master_offer_name', None)
+                    if master_offer_name and master_offer_name not in file_data['offers']:
+                        master_offer_info = {
+                            'supplier_name': master_offer_name,
+                            'project_name': getattr(self, 'previous_offer_info', {}).get('project_name', 'Unknown'),
+                            'date': getattr(self, 'previous_offer_info', {}).get('date', 'Unknown')
+                        }
+                        file_data['offers'][master_offer_name] = master_offer_info
+                        print(f"[DEBUG] Added master offer info for {master_offer_name}: {master_offer_info}")
+                    
+                    print(f"[DEBUG] All offers after fallback merge: {list(file_data['offers'].keys())}")
+                    print(f"[DEBUG] Updated fallback file with merged DataFrame")
+                    print(f"[DEBUG] Added offer info for {new_offer_name}: {new_offer_info}")
+                    print(f"[DEBUG] Maintained tab reference: {file_data['file_mapping'].tab}")
             
             # Ensure the stored mapping data is preserved for future comparisons
             if not hasattr(master_tab, 'stored_mapping_data') and 'final_dataframe' in master_mapping:
@@ -5236,51 +5391,276 @@ Review the rows below and adjust validity as needed."""
             logger.error(f"Position-description validation error: {e}", exc_info=True)
             return validation_result
 
-    def _collect_summary_data(self):
-        """Collect summary data from all processed files for the new summary grid"""
+    def _collect_summary_data(self, tab=None):
+        """Collect summary data for the new summary grid, using the current tab's DataFrame if available (like the Summarize grid)."""
         summary_data = []
         
-        for file_key, file_data in self.controller.current_files.items():
-            # Get offer info from file data
-            offer_info = file_data.get('offer_info', {})
-            supplier = offer_info.get('supplier_name', 'Unknown')
-            project_name = offer_info.get('project_name', 'Unknown')
-            date = offer_info.get('date', 'Unknown')
+        # Use the current tab's DataFrame if available
+        if tab is not None and hasattr(tab, 'final_dataframe') and tab.final_dataframe is not None:
+            df = tab.final_dataframe
+            file_data = None
+            # Try to find the file_data for this tab (for offer info)
+            for fd in self.controller.current_files.values():
+                if hasattr(fd['file_mapping'], 'tab') and fd['file_mapping'].tab == tab:
+                    file_data = fd
+                    break
             
-            # Calculate total price from file mapping
-            file_mapping = file_data['file_mapping']
-            total_price = self._calculate_total_price(file_mapping)
+            # If not found by tab reference, try to find by checking if this tab has a final_dataframe
+            if file_data is None:
+                for fd in self.controller.current_files.values():
+                    if 'file_mapping' in fd and hasattr(fd['file_mapping'], 'categorized_dataframe'):
+                        # Check if this file has the same DataFrame as the current tab
+                        if hasattr(tab, 'final_dataframe') and tab.final_dataframe is not None:
+                            if fd['file_mapping'].categorized_dataframe is tab.final_dataframe:
+                                file_data = fd
+                                break
             
-            summary_data.append([supplier, project_name, date, total_price])
+            print(f"[DEBUG] Found file_data for tab: {file_data is not None}")
+            if file_data:
+                print(f"[DEBUG] file_data keys: {list(file_data.keys())}")
+                if 'offers' in file_data:
+                    print(f"[DEBUG] file_data offers: {list(file_data['offers'].keys())}")
+            else:
+                print(f"[DEBUG] No file_data found for tab. Available files: {list(self.controller.current_files.keys())}")
+                for fd in self.controller.current_files.values():
+                    if 'file_mapping' in fd:
+                        tab_ref = getattr(fd['file_mapping'], 'tab', None)
+                        print(f"[DEBUG] File mapping tab: {tab_ref}, current tab: {tab}")
+                
+                # DEBUG: Show what's actually stored in controller.current_files
+                print(f"[DEBUG] === DETAILED FILE DATA INSPECTION ===")
+                for file_key, fd in self.controller.current_files.items():
+                    print(f"[DEBUG] File: {file_key}")
+                    print(f"[DEBUG]   Keys: {list(fd.keys())}")
+                    if 'offers' in fd:
+                        print(f"[DEBUG]   Offers: {list(fd['offers'].keys())}")
+                        for offer_key, offer_info in fd['offers'].items():
+                            print(f"[DEBUG]     {offer_key}: {offer_info}")
+                    if 'file_mapping' in fd:
+                        tab_ref = getattr(fd['file_mapping'], 'tab', None)
+                        print(f"[DEBUG]   Tab reference: {tab_ref}")
+                print(f"[DEBUG] === END INSPECTION ===")
+                
+                # Try to find file_data by checking if any file has offers that match our offer keys
+                for fd in self.controller.current_files.values():
+                    if 'offers' in fd:
+                        print(f"[DEBUG] Found file with offers: {list(fd['offers'].keys())}")
+                        # Use the first file with offers as our file_data
+                        file_data = fd
+                        print(f"[DEBUG] Using fallback file_data with offers: {list(file_data['offers'].keys())}")
+                        break
+            
+            if df is not None:
+                print(f"[DEBUG] Using tab.final_dataframe with columns: {list(df.columns)}")
+                
+                # Robust check for comparison columns
+                def is_comparison_col(col):
+                    col_clean = col.replace(' ', '').lower()
+                    # Only consider it a comparison column if it has total_price AND contains brackets or underscores
+                    # This excludes plain 'total_price' columns which are single-offer
+                    return (col_clean.startswith('total_price[') and ']' in col_clean) or \
+                           (col_clean.startswith('total_price_') and '_' in col_clean[12:])  # After 'total_price_'
+                
+                if any(is_comparison_col(col) for col in df.columns):
+                    # Comparison dataset: multiple offers
+                    offer_columns = {}
+                    for col in df.columns:
+                        col_clean = col.replace(' ', '').lower()
+                        if col_clean.startswith('total_price[') and ']' in col:
+                            offer_key = col[col.find('[')+1:col.find(']')]
+                            offer_columns[offer_key] = col
+                        elif col_clean.startswith('total_price_'):
+                            offer_key = col.split('_', 1)[1]
+                            offer_columns[offer_key] = col
+                    
+                    offers_info = file_data.get('offers', {}) if file_data else {}
+                    print(f"[DEBUG] Comparison dataset - offers found: {list(offer_columns.keys())}")
+                    
+                    for offer_key, price_col in offer_columns.items():
+                        offer_info = offers_info.get(offer_key, {})
+                        supplier = offer_info.get('supplier_name', offer_key)
+                        project_name = offer_info.get('project_name', 'Unknown')
+                        date = offer_info.get('date', 'Unknown')
+                        
+                        print(f"[DEBUG] Looking up offer {offer_key}: supplier={supplier}, project={project_name}, date={date}")
+                        print(f"[DEBUG] Available offers in offers_info: {list(offers_info.keys())}")
+                        for k, v in offers_info.items():
+                            print(f"[DEBUG]   {k}: {v}")
+                        
+                        # If offer info is not found in file_data, try to get from current_offer_info
+                        if supplier == offer_key and project_name == 'Unknown' and date == 'Unknown':
+                            current_offer_info = getattr(self, 'current_offer_info', {})
+                            if current_offer_info and current_offer_info.get('supplier_name') == offer_key:
+                                supplier = current_offer_info.get('supplier_name', supplier)
+                                project_name = current_offer_info.get('project_name', project_name)
+                                date = current_offer_info.get('date', date)
+                                print(f"[DEBUG] Using current_offer_info for {offer_key}: supplier={supplier}, project={project_name}, date={date}")
+                        
+                        # Calculate total price with proper null checks
+                        if file_data and 'file_mapping' in file_data:
+                            total_price = self._calculate_total_price(file_data['file_mapping'], offer_name=offer_key)
+                        else:
+                            # Fallback: calculate from the DataFrame directly
+                            try:
+                                if price_col in df.columns:
+                                    # Convert to numeric and handle non-numeric values
+                                    numeric_values = pd.to_numeric(df[price_col], errors='coerce')
+                                    total_price = numeric_values.sum()
+                                    print(f"[DEBUG] Calculated total for {offer_key} from DataFrame: {total_price}")
+                                else:
+                                    total_price = 0.0
+                            except Exception as e:
+                                print(f"[DEBUG] Error calculating total price for {offer_key}: {e}")
+                                total_price = 0.0
+                        
+                        # Ensure total_price is a valid number
+                        try:
+                            if isinstance(total_price, str):
+                                total_price = float(total_price)
+                            elif not isinstance(total_price, (int, float)):
+                                total_price = 0.0
+                        except (ValueError, TypeError):
+                            print(f"[DEBUG] Invalid total_price for {offer_key}: {total_price}, setting to 0.0")
+                            total_price = 0.0
+                        
+                        print(f"[DEBUG] Summary row: offer_key={offer_key}, supplier={supplier}, project={project_name}, date={date}, total_price={total_price}")
+                        summary_data.append([supplier, project_name, date, total_price])
+                else:
+                    # Single-offer dataset
+                    offer_info = file_data.get('offer_info', {}) if file_data else {}
+                    print(f"[DEBUG] Single-offer dataset - file_data offer_info: {offer_info}")
+                    
+                    # Enhanced fallback logic for single-offer datasets
+                    supplier = offer_info.get('supplier_name', 'Unknown')
+                    project_name = offer_info.get('project_name', 'Unknown')
+                    date = offer_info.get('date', 'Unknown')
+                    
+                    # If offer_info is empty or supplier is Unknown, try to get from current_offer_info
+                    if not offer_info or supplier == 'Unknown':
+                        current_offer_info = getattr(self, 'current_offer_info', {})
+                        print(f"[DEBUG] Trying current_offer_info fallback: {current_offer_info}")
+                        if current_offer_info:
+                            supplier = current_offer_info.get('supplier_name', supplier)
+                            project_name = current_offer_info.get('project_name', project_name)
+                            date = current_offer_info.get('date', date)
+                    
+                    # If still Unknown, try to get from current_offer_name
+                    if supplier == 'Unknown':
+                        current_offer_name = getattr(self, 'current_offer_name', None)
+                        print(f"[DEBUG] Trying current_offer_name fallback: {current_offer_name}")
+                        if current_offer_name:
+                            supplier = current_offer_name
+                    
+                    total_price = self._calculate_total_price(file_data['file_mapping'], offer_name=supplier)
+                    print(f"[DEBUG] Summary row (single): supplier={supplier}, project={project_name}, date={date}, total_price={total_price}")
+                    summary_data.append([supplier, project_name, date, total_price])
+        else:
+            # Fallback to original logic for backward compatibility
+            for file_key, file_data in self.controller.current_files.items():
+                file_mapping = file_data['file_mapping']
+                # Try to detect if this is a comparison dataset
+                df = None
+                if hasattr(file_mapping, 'categorized_dataframe') and file_mapping.categorized_dataframe is not None:
+                    df = file_mapping.categorized_dataframe
+                else:
+                    try:
+                        df = self._build_final_grid_dataframe(file_mapping)
+                    except Exception:
+                        df = None
+                
+                if df is not None:
+                    print(f"[DEBUG] DataFrame columns for file {file_key}: {list(df.columns)}")
+                    
+                    # Robust check for comparison columns
+                    def is_comparison_col(col):
+                        col_clean = col.replace(' ', '').lower()
+                        # Only consider it a comparison column if it has total_price AND contains brackets or underscores
+                        # This excludes plain 'total_price' columns which are single-offer
+                        return (col_clean.startswith('total_price[') and ']' in col_clean) or \
+                               (col_clean.startswith('total_price_') and '_' in col_clean[12:])  # After 'total_price_'
+                    
+                    if any(is_comparison_col(col) for col in df.columns):
+                        # Comparison dataset: multiple offers
+                        offer_columns = {}
+                        for col in df.columns:
+                            col_clean = col.replace(' ', '').lower()
+                            if col_clean.startswith('total_price[') and ']' in col:
+                                offer_key = col[col.find('[')+1:col.find(']')]
+                                offer_columns[offer_key] = col
+                            elif col_clean.startswith('total_price_'):
+                                offer_key = col.split('_', 1)[1]
+                                offer_columns[offer_key] = col
+                        
+                        offers_info = file_data.get('offers', {})
+                        print(f"[DEBUG] Offers in file {file_key}: {list(offers_info.keys())}")
+                        
+                        for offer_key, price_col in offer_columns.items():
+                            offer_info = offers_info.get(offer_key, {})
+                            supplier = offer_info.get('supplier_name', offer_key)
+                            project_name = offer_info.get('project_name', 'Unknown')
+                            date = offer_info.get('date', 'Unknown')
+                            total_price = self._calculate_total_price(file_mapping, offer_name=offer_key)
+                            print(f"[DEBUG] Summary row: offer_key={offer_key}, supplier={supplier}, project={project_name}, date={date}, total_price={total_price}")
+                            summary_data.append([supplier, project_name, date, total_price])
+                    else:
+                        # Single-offer dataset (legacy)
+                        offer_info = file_data.get('offer_info', {})
+                        print(f"[DEBUG] Single-offer dataset - file_data offer_info: {offer_info}")
+                        
+                        # Enhanced fallback logic for single-offer datasets
+                        supplier = offer_info.get('supplier_name', 'Unknown')
+                        project_name = offer_info.get('project_name', 'Unknown')
+                        date = offer_info.get('date', 'Unknown')
+                        
+                        # If offer_info is empty or supplier is Unknown, try to get from current_offer_info
+                        if not offer_info or supplier == 'Unknown':
+                            current_offer_info = getattr(self, 'current_offer_info', {})
+                            print(f"[DEBUG] Trying current_offer_info fallback: {current_offer_info}")
+                            if current_offer_info:
+                                supplier = current_offer_info.get('supplier_name', supplier)
+                                project_name = current_offer_info.get('project_name', project_name)
+                                date = current_offer_info.get('date', date)
+                        
+                        # If still Unknown, try to get from current_offer_name
+                        if supplier == 'Unknown':
+                            current_offer_name = getattr(self, 'current_offer_name', None)
+                            print(f"[DEBUG] Trying current_offer_name fallback: {current_offer_name}")
+                            if current_offer_name:
+                                supplier = current_offer_name
+                        
+                        total_price = self._calculate_total_price(file_mapping, offer_name=supplier)
+                        print(f"[DEBUG] Summary row (single): supplier={supplier}, project={project_name}, date={date}, total_price={total_price}")
+                        summary_data.append([supplier, project_name, date, total_price])
         
-        # Sort by total price (smallest to largest)
         summary_data.sort(key=lambda x: float(x[3]) if x[3] != 'Unknown' else 0)
-        
         return summary_data
-    
-    def _calculate_total_price(self, file_mapping):
-        """Calculate total price from file mapping"""
+        
+        summary_data.sort(key=lambda x: float(x[3]) if x[3] != 'Unknown' else 0)
+        return summary_data
+
+    def _calculate_total_price(self, file_mapping, offer_name=None):
+        """Calculate total price from file mapping, handling dynamic offer columns"""
         try:
             total_price = 0.0
-            
-            # Get the final dataframe if available
             if hasattr(file_mapping, 'categorized_dataframe') and file_mapping.categorized_dataframe is not None:
                 df = file_mapping.categorized_dataframe
             else:
-                # Fallback: build dataframe from file mapping
                 df = self._build_final_grid_dataframe(file_mapping)
-            
-            # Find total price column
+            # Find total price column (dynamic)
             price_col = None
-            possible_price_cols = ['total_price', 'Total_price']
-            
-            for col in possible_price_cols:
-                if col in df.columns:
-                    price_col = col
-                    break
-            
+            if offer_name:
+                # Try dynamic column name first
+                for col in df.columns:
+                    if col.lower().startswith('total_price') and offer_name in col:
+                        price_col = col
+                        break
+            if not price_col:
+                # Fallback to static column names
+                for col in ['total_price', 'Total_price']:
+                    if col in df.columns:
+                        price_col = col
+                        break
             if price_col and price_col in df.columns:
-                # Parse and sum total prices
                 def parse_number(val):
                     if isinstance(val, (int, float)):
                         return float(val)
@@ -5291,15 +5671,13 @@ Review the rows below and adjust validity as needed."""
                         return float(s)
                     except Exception:
                         return 0.0
-                
                 df[price_col] = df[price_col].apply(parse_number)
                 total_price = df[price_col].sum()
-            
             return total_price
         except Exception as e:
             print(f"Error calculating total price: {e}")
             return 0.0
-    
+
     def _copy_grid_to_clipboard(self, tree, grid_name):
         """Copy grid contents to clipboard in Excel-friendly format (point as thousands, comma as decimal)"""
         try:
@@ -5333,11 +5711,14 @@ Review the rows below and adjust validity as needed."""
     def _create_new_summary_grid(self, parent_frame, tab):
         """Create the new summary grid with Supplier, Project Name, Date, Total Price"""
         try:
+            print(f"[DEBUG] _create_new_summary_grid called with tab type: {type(tab)}")
+            print(f"[DEBUG] Tab object: {tab}")
+            
             # Clear existing content
             for widget in parent_frame.winfo_children():
                 widget.destroy()
-            # Collect summary data from all processed files
-            summary_data = self._collect_summary_data()
+            # Collect summary data from the current tab (not global files)
+            summary_data = self._collect_summary_data(tab)
             if not summary_data:
                 # No data to show
                 no_data_label = ttk.Label(parent_frame, text="No BOQ data available for summary", 
@@ -5386,7 +5767,11 @@ Review the rows below and adjust validity as needed."""
                                    command=lambda: self._copy_grid_to_clipboard(summary_tree, "BOQ Summary"))
             copy_button.pack(side=tk.RIGHT)
             # Store reference to the tree for potential future use
-            tab.new_summary_tree = summary_tree
+            try:
+                tab.new_summary_tree = summary_tree
+            except AttributeError:
+                # If tab doesn't support attribute assignment, just continue
+                print(f"[DEBUG] Tab doesn't support attribute assignment, continuing without storing tree reference")
         except Exception as e:
             print(f"Error creating new summary grid: {e}")
             import traceback
@@ -5407,5 +5792,62 @@ Review the rows below and adjust validity as needed."""
                                     return
         except Exception as e:
             print(f"Error refreshing new summary grid: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _refresh_summary_grid_centralized(self):
+        """Centralized method to refresh the summary grid with comprehensive logging"""
+        try:
+            print(f"[DEBUG] _refresh_summary_grid_centralized called")
+            print(f"[DEBUG] Current files count: {len(self.controller.current_files)}")
+            
+            # Check if global summary frame exists
+            if not hasattr(self, 'global_summary_frame') or self.global_summary_frame is None:
+                print(f"[DEBUG] Global summary frame does not exist yet")
+                return
+            
+            # Get current tab widget (not just the ID)
+            current_tab_id = self.notebook.select()
+            if not current_tab_id:
+                print(f"[DEBUG] No current tab selected")
+                return
+            
+            current_tab = self.notebook.nametowidget(current_tab_id)
+            print(f"[DEBUG] Refreshing summary grid for tab: {current_tab}")
+            
+            # Collect summary data from the current tab
+            summary_data = self._collect_summary_data(current_tab)
+            print(f"[DEBUG] Collected {len(summary_data)} summary data entries")
+            
+            # Refresh the summary grid
+            self._create_new_summary_grid(self.global_summary_frame, current_tab)
+            print(f"[DEBUG] Summary grid refresh completed successfully")
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to refresh summary grid: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _clear_all_files(self):
+        """Clear all processed files and refresh summary grid"""
+        try:
+            print(f"[DEBUG] _clear_all_files called")
+            # Clear all processed files
+            self.controller.current_files.clear()
+            print(f"[DEBUG] Cleared {len(self.controller.current_files)} files")
+            
+            # Clear all tabs
+            for tab in self.notebook.tabs():
+                self.notebook.forget(tab)
+            print(f"[DEBUG] Cleared all tabs")
+            
+            # Refresh summary grid
+            self._refresh_summary_grid_centralized()
+            
+            self._update_status("All files cleared")
+            print(f"[DEBUG] Clear operation completed")
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to clear files: {e}")
             import traceback
             traceback.print_exc()
