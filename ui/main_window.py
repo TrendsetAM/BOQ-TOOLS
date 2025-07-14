@@ -2749,7 +2749,7 @@ class MainWindow:
             messagebox.showerror("Error", f"Failed to apply changes: {str(e)}")
     
     def _export_final_data(self, dataframe, tab=None):
-        """Export the final categorized data to a nicely formatted Excel file with summary and validation."""
+        """Export the final categorized data to a nicely formatted Excel file with dynamic formulas in summary."""
         try:
             import pandas as pd
             from tkinter import filedialog, messagebox
@@ -2794,9 +2794,9 @@ class MainWindow:
             
             # Write to Excel with formatting
             with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
-                df.to_excel(writer, sheet_name='Data', index=False)
+                df.to_excel(writer, sheet_name='Main Dataset', index=False)
                 workbook = writer.book
-                worksheet = writer.sheets['Data']
+                worksheet = writer.sheets['Main Dataset']
                 
                 # Format headers
                 header_format = workbook.add_format({'bold': True, 'bg_color': '#D9E1F2', 'border': 1})
@@ -2832,7 +2832,7 @@ class MainWindow:
                     else:
                         worksheet.set_column(i, i, width)
                 
-                # Add summary sheet
+                # Add summary sheet with formulas
                 if tab and hasattr(tab, 'summary_frame') and hasattr(tab, 'final_dataframe'):
                     df_summary = tab.final_dataframe.copy()
                     
@@ -2843,8 +2843,8 @@ class MainWindow:
                     summary_ws = workbook.add_worksheet('Summary')
                     
                     if is_comparison:
-                        # Handle comparison dataset - create separate rows for each offer
-                        # print("[DEBUG] Exporting comparison summary")
+                        # Handle comparison dataset - create separate rows for each offer with formulas
+                        # print("[DEBUG] Exporting comparison summary with formulas")
                         
                         # Find all offer columns
                         offer_columns = {}
@@ -2866,33 +2866,82 @@ class MainWindow:
                             for col_idx, col in enumerate(summary_columns):
                                 summary_ws.write(0, col_idx, col, header_format)
                             
-                            # Create a row for each offer
+                            # Create a row for each offer with formulas
                             row_idx = 1
                             for offer_name, price_col in offer_columns.items():
-                                # Parse the price column
-                                df_summary[price_col] = df_summary[price_col].apply(parse_number)
+                                # Write offer name
+                                summary_ws.write(row_idx, 0, offer_name)
                                 
-                                # Group by category for this offer
-                                if 'category' in df_summary.columns:
-                                    summary_dict = df_summary.groupby('category')[price_col].sum().to_dict()
+                                # Find the price column letter in the main dataset
+                                price_col_idx = df.columns.get_loc(price_col)
+                                price_col_letter = chr(65 + price_col_idx)  # Convert to Excel column letter
+                                
+                                # Find category column letter in the main dataset
+                                try:
+                                    cat_col_idx = df.columns.get_loc('category')
+                                    cat_col_letter = chr(65 + cat_col_idx)
+                                except KeyError:
+                                    # Try alternative category column names
+                                    category_col_names = ['Category', 'CATEGORY', 'category', 'cat', 'Cat']
+                                    cat_col_letter = None
+                                    for cat_col_name in category_col_names:
+                                        try:
+                                            cat_col_idx = df.columns.get_loc(cat_col_name)
+                                            cat_col_letter = chr(65 + cat_col_idx)
+                                            break
+                                        except KeyError:
+                                            continue
                                     
-                                    # Ensure all categories are present
-                                    final_summary = {}
-                                    for cat_pretty in categories_pretty:
-                                        final_summary[cat_pretty] = summary_dict.get(cat_pretty, 0.0)
-                                else:
-                                    final_summary = {cat: 0.0 for cat in categories_pretty}
+                                    if cat_col_letter is None:
+                                        # No category column found, use static values
+                                        for col_idx, category in enumerate(categories_pretty, 1):
+                                            summary_ws.write_number(row_idx, col_idx, 0, num_format)
+                                        continue
                                 
-                                # Write offer row
-                                summary_values = [offer_name] + [final_summary[cat] for cat in categories_pretty]
-                                for col_idx, val in enumerate(summary_values):
-                                    if col_idx == 0:
-                                        summary_ws.write(row_idx, col_idx, val)
-                                    else:
-                                        summary_ws.write_number(row_idx, col_idx, val, num_format)
+                                # Write formulas for each category
+                                for col_idx, category in enumerate(categories_pretty, 1):
+                                    # Formula: =SUMIF('Main Dataset'!$category_col:$category_col, "category_name", 'Main Dataset'!$price_col:$price_col)
+                                    try:
+                                        formula = f"=SUMIF('Main Dataset'!${cat_col_letter}:${cat_col_letter}, \"{category}\", 'Main Dataset'!${price_col_letter}:${price_col_letter})"
+                                        summary_ws.write_formula(row_idx, col_idx, formula, num_format)
+                                    except NameError:
+                                        # cat_col_letter not defined (no category column)
+                                        summary_ws.write_number(row_idx, col_idx, 0, num_format)
                                 
                                 row_idx += 1
-                                # print(f"[DEBUG] Exported summary row for {offer_name}")
+                                # print(f"[DEBUG] Exported summary row with formulas for {offer_name}")
+                            
+                            # Add summary rows with formulas for comparison
+                            # Total row
+                            total_row = row_idx
+                            summary_ws.write(total_row, 0, "TOTAL")
+                            for col_idx in range(1, len(summary_columns)):
+                                # Sum across all offers for each category
+                                col_letter = chr(65 + col_idx)
+                                total_formula = f"=SUM({col_letter}2:{col_letter}{row_idx-1})"
+                                summary_ws.write_formula(total_row, col_idx, total_formula, num_format)
+                            
+                            # Average row
+                            avg_row = row_idx + 1
+                            summary_ws.write(avg_row, 0, "AVERAGE")
+                            for col_idx in range(1, len(summary_columns)):
+                                # Average across all offers for each category
+                                col_letter = chr(65 + col_idx)
+                                avg_formula = f"=AVERAGE({col_letter}2:{col_letter}{row_idx-1})"
+                                summary_ws.write_formula(avg_row, col_idx, avg_formula, num_format)
+                            
+                            # Count row (total items per category)
+                            count_row = row_idx + 2
+                            summary_ws.write(count_row, 0, "COUNT")
+                            for col_idx, category in enumerate(categories_pretty, 1):
+                                # Count items in each category from main dataset
+                                try:
+                                    cat_col_letter = chr(65 + df.columns.get_loc('category'))
+                                    count_formula = f"=COUNTIF('Main Dataset'!${cat_col_letter}:${cat_col_letter}, \"{category}\")"
+                                    summary_ws.write_formula(count_row, col_idx, count_formula)
+                                except KeyError:
+                                    # No category column found, write 0
+                                    summary_ws.write_number(count_row, col_idx, 0)
                             
                             # Format columns
                             for i in range(len(summary_columns)):
@@ -2900,10 +2949,36 @@ class MainWindow:
                                     summary_ws.set_column(i, i, 25)  # Offer column: text
                                 else:
                                     summary_ws.set_column(i, i, 18, num_format)  # Category columns: number format
+                            
+                            # Add conditional formatting for better visualization
+                            # Format total row with bold
+                            total_format = workbook.add_format({'bold': True, 'bg_color': '#E6F3FF', 'num_format': '#,##0.00'})
+                            summary_ws.set_row(total_row, None, total_format)
+                            
+                            # Format count row with different background
+                            count_format = workbook.add_format({'bg_color': '#F0F0F0'})
+                            summary_ws.set_row(count_row, None, count_format)
+                            
+                            # Format average row with different background
+                            avg_format = workbook.add_format({'bg_color': '#F9F9F9', 'num_format': '#,##0.00'})
+                            summary_ws.set_row(avg_row, None, avg_format)
+                            
+                            # Add conditional formatting for better visualization
+                            # Format total row with bold
+                            total_format = workbook.add_format({'bold': True, 'bg_color': '#E6F3FF', 'num_format': '#,##0.00'})
+                            summary_ws.set_row(total_row, None, total_format)
+                            
+                            # Format count row with different background
+                            count_format = workbook.add_format({'bg_color': '#F0F0F0'})
+                            summary_ws.set_row(count_row, None, count_format)
+                            
+                            # Format average row with different background
+                            avg_format = workbook.add_format({'bg_color': '#F9F9F9', 'num_format': '#,##0.00'})
+                            summary_ws.set_row(avg_row, None, avg_format)
                     
                     else:
-                        # Handle single offer dataset (original logic)
-                        # print("[DEBUG] Exporting single offer summary")
+                        # Handle single offer dataset with formulas
+                        # print("[DEBUG] Exporting single offer summary with formulas")
                         
                         # Find the correct total price column
                         price_col = None
@@ -2915,47 +2990,111 @@ class MainWindow:
                                 break
                         
                         if price_col and price_col in df_summary.columns:
-                            df_summary[price_col] = df_summary[price_col].apply(parse_number)
+                            # Write headers with formatting
+                            summary_columns = ['Offer'] + categories_pretty
+                            for col_idx, col in enumerate(summary_columns):
+                                summary_ws.write(0, col_idx, col, header_format)
                             
-                            # Create summary by grouping pretty categories directly
-                            if 'category' in df_summary.columns:
-                                summary_dict = df_summary.groupby('category')[price_col].sum().to_dict()
+                            # Write offer name
+                            offer_label = self.current_offer_name if hasattr(self, 'current_offer_name') and self.current_offer_name else 'Offer'
+                            summary_ws.write(1, 0, offer_label)
+                            
+                            # Find the price column letter in the main dataset
+                            price_col_idx = df.columns.get_loc(price_col)
+                            price_col_letter = chr(65 + price_col_idx)
+                            
+                            # Find category column letter in the main dataset
+                            try:
+                                cat_col_idx = df.columns.get_loc('category')
+                                cat_col_letter = chr(65 + cat_col_idx)
+                            except KeyError:
+                                # Try alternative category column names
+                                category_col_names = ['Category', 'CATEGORY', 'category', 'cat', 'Cat']
+                                cat_col_letter = None
+                                for cat_col_name in category_col_names:
+                                    try:
+                                        cat_col_idx = df.columns.get_loc(cat_col_name)
+                                        cat_col_letter = chr(65 + cat_col_idx)
+                                        break
+                                    except KeyError:
+                                        continue
                                 
-                                # Ensure all predefined categories are present
-                                final_summary = {}
-                                for cat_pretty in categories_pretty:
-                                    final_summary[cat_pretty] = summary_dict.get(cat_pretty, 0.0)
-                            else:
-                                final_summary = {cat: 0.0 for cat in categories_pretty}
+                                if cat_col_letter is None:
+                                    # No category column found, use static values
+                                    for col_idx, category in enumerate(categories_pretty, 1):
+                                        summary_ws.write_number(1, col_idx, 0, num_format)
+                                    return
+                            
+                            # Write formulas for each category
+                            for col_idx, category in enumerate(categories_pretty, 1):
+                                # Formula: =SUMIF('Main Dataset'!$category_col:$category_col, "category_name", 'Main Dataset'!$price_col:$price_col)
+                                try:
+                                    formula = f"=SUMIF('Main Dataset'!${cat_col_letter}:${cat_col_letter}, \"{category}\", 'Main Dataset'!${price_col_letter}:${price_col_letter})"
+                                    summary_ws.write_formula(1, col_idx, formula, num_format)
+                                except NameError:
+                                    # cat_col_letter not defined (no category column)
+                                    summary_ws.write_number(1, col_idx, 0, num_format)
+                            
+                            # Add total row with formula
+                            total_row = 2
+                            summary_ws.write(total_row, 0, "TOTAL")
+                            # Total formula: =SUM(B2:Z2) where Z is the last category column
+                            last_col_letter = chr(65 + len(categories_pretty))
+                            total_formula = f"=SUM(B{total_row}:{last_col_letter}{total_row})"
+                            summary_ws.write_formula(total_row, 1, total_formula, num_format)
+                            
+                            # Add count row with formula
+                            count_row = 3
+                            summary_ws.write(count_row, 0, "COUNT")
+                            # Count formula: =COUNTIF('Main Dataset'!$category_col:$category_col, "category_name")
+                            for col_idx, category in enumerate(categories_pretty, 1):
+                                try:
+                                    count_formula = f"=COUNTIF('Main Dataset'!${cat_col_letter}:${cat_col_letter}, \"{category}\")"
+                                    summary_ws.write_formula(count_row, col_idx, count_formula)
+                                except NameError:
+                                    # cat_col_letter not defined (no category column)
+                                    summary_ws.write_number(count_row, col_idx, 0)
+                            
+                            # Add average row with formula
+                            avg_row = 4
+                            summary_ws.write(avg_row, 0, "AVERAGE")
+                            # Average formula: =AVERAGEIF('Main Dataset'!$category_col:$category_col, "category_name", 'Main Dataset'!$price_col:$price_col)
+                            for col_idx, category in enumerate(categories_pretty, 1):
+                                try:
+                                    avg_formula = f"=AVERAGEIF('Main Dataset'!${cat_col_letter}:${cat_col_letter}, \"{category}\", 'Main Dataset'!${price_col_letter}:${price_col_letter})"
+                                    summary_ws.write_formula(avg_row, col_idx, avg_formula, num_format)
+                                except NameError:
+                                    # cat_col_letter not defined (no category column)
+                                    summary_ws.write_number(avg_row, col_idx, 0, num_format)
+                            
+                            # Format columns
+                            for i in range(len(summary_columns)):
+                                if i == 0:
+                                    summary_ws.set_column(i, i, 25)  # Offer column: text
+                                else:
+                                    summary_ws.set_column(i, i, 18, num_format)  # Category columns: number format
                         else:
-                            # No price column found, create empty summary
-                            final_summary = {cat: 0.0 for cat in categories_pretty}
-                        
-                        # Write headers with formatting
-                        summary_columns = ['Offer'] + categories_pretty
-                        for col_idx, col in enumerate(summary_columns):
-                            summary_ws.write(0, col_idx, col, header_format)
-                        
-                        # Write values
-                        offer_label = self.current_offer_name if hasattr(self, 'current_offer_name') and self.current_offer_name else 'Offer'
-                        summary_values = [offer_label] + [final_summary[cat] for cat in categories_pretty]
-                        
-                        # Write summary row with formatting
-                        for col_idx, val in enumerate(summary_values):
-                            if col_idx == 0:
-                                summary_ws.write(1, col_idx, val)
-                            else:
-                                summary_ws.write_number(1, col_idx, val, num_format)
-                        
-                        # Format columns
-                        for i in range(len(summary_columns)):
-                            if i == 0:
-                                summary_ws.set_column(i, i, 25)  # Offer column: text
-                            else:
-                                summary_ws.set_column(i, i, 18, num_format)  # Category columns: number format
+                            # No price column found, create empty summary with headers
+                            summary_columns = ['Offer'] + categories_pretty
+                            for col_idx, col in enumerate(summary_columns):
+                                summary_ws.write(0, col_idx, col, header_format)
+                            
+                            offer_label = self.current_offer_name if hasattr(self, 'current_offer_name') and self.current_offer_name else 'Offer'
+                            summary_ws.write(1, 0, offer_label)
+                            
+                            # Write 0 for each category (no formulas possible)
+                            for col_idx in range(1, len(summary_columns)):
+                                summary_ws.write_number(1, col_idx, 0, num_format)
+                            
+                            # Format columns
+                            for i in range(len(summary_columns)):
+                                if i == 0:
+                                    summary_ws.set_column(i, i, 25)  # Offer column: text
+                                else:
+                                    summary_ws.set_column(i, i, 18, num_format)  # Category columns: number format
                 
-                messagebox.showinfo("Success", f"Data exported to: {file_path}")
-                self._update_status(f"Exported data to: {file_path}")
+                messagebox.showinfo("Success", f"Data exported to: {file_path}\n\nSummary sheet now contains dynamic formulas that automatically update when you modify the main dataset.")
+                self._update_status(f"Exported data with formulas to: {file_path}")
                 
         except Exception as e:
             import traceback
