@@ -2911,37 +2911,7 @@ class MainWindow:
                                 row_idx += 1
                                 # print(f"[DEBUG] Exported summary row with formulas for {offer_name}")
                             
-                            # Add summary rows with formulas for comparison
-                            # Total row
-                            total_row = row_idx
-                            summary_ws.write(total_row, 0, "TOTAL")
-                            for col_idx in range(1, len(summary_columns)):
-                                # Sum across all offers for each category
-                                col_letter = chr(65 + col_idx)
-                                total_formula = f"=SUM({col_letter}2:{col_letter}{row_idx-1})"
-                                summary_ws.write_formula(total_row, col_idx, total_formula, num_format)
                             
-                            # Average row
-                            avg_row = row_idx + 1
-                            summary_ws.write(avg_row, 0, "AVERAGE")
-                            for col_idx in range(1, len(summary_columns)):
-                                # Average across all offers for each category
-                                col_letter = chr(65 + col_idx)
-                                avg_formula = f"=AVERAGE({col_letter}2:{col_letter}{row_idx-1})"
-                                summary_ws.write_formula(avg_row, col_idx, avg_formula, num_format)
-                            
-                            # Count row (total items per category)
-                            count_row = row_idx + 2
-                            summary_ws.write(count_row, 0, "COUNT")
-                            for col_idx, category in enumerate(categories_pretty, 1):
-                                # Count items in each category from main dataset
-                                try:
-                                    cat_col_letter = chr(65 + df.columns.get_loc('category'))
-                                    count_formula = f"=COUNTIF('Main Dataset'!${cat_col_letter}:${cat_col_letter}, \"{category}\")"
-                                    summary_ws.write_formula(count_row, col_idx, count_formula)
-                                except KeyError:
-                                    # No category column found, write 0
-                                    summary_ws.write_number(count_row, col_idx, 0)
                             
                             # Format columns
                             for i in range(len(summary_columns)):
@@ -2950,31 +2920,7 @@ class MainWindow:
                                 else:
                                     summary_ws.set_column(i, i, 18, num_format)  # Category columns: number format
                             
-                            # Add conditional formatting for better visualization
-                            # Format total row with bold
-                            total_format = workbook.add_format({'bold': True, 'bg_color': '#E6F3FF', 'num_format': '#,##0.00'})
-                            summary_ws.set_row(total_row, None, total_format)
-                            
-                            # Format count row with different background
-                            count_format = workbook.add_format({'bg_color': '#F0F0F0'})
-                            summary_ws.set_row(count_row, None, count_format)
-                            
-                            # Format average row with different background
-                            avg_format = workbook.add_format({'bg_color': '#F9F9F9', 'num_format': '#,##0.00'})
-                            summary_ws.set_row(avg_row, None, avg_format)
-                            
-                            # Add conditional formatting for better visualization
-                            # Format total row with bold
-                            total_format = workbook.add_format({'bold': True, 'bg_color': '#E6F3FF', 'num_format': '#,##0.00'})
-                            summary_ws.set_row(total_row, None, total_format)
-                            
-                            # Format count row with different background
-                            count_format = workbook.add_format({'bg_color': '#F0F0F0'})
-                            summary_ws.set_row(count_row, None, count_format)
-                            
-                            # Format average row with different background
-                            avg_format = workbook.add_format({'bg_color': '#F9F9F9', 'num_format': '#,##0.00'})
-                            summary_ws.set_row(avg_row, None, avg_format)
+
                     
                     else:
                         # Handle single offer dataset with formulas
@@ -3035,37 +2981,6 @@ class MainWindow:
                                     # cat_col_letter not defined (no category column)
                                     summary_ws.write_number(1, col_idx, 0, num_format)
                             
-                            # Add total row with formula
-                            total_row = 2
-                            summary_ws.write(total_row, 0, "TOTAL")
-                            # Total formula: =SUM(B2:Z2) where Z is the last category column
-                            last_col_letter = chr(65 + len(categories_pretty))
-                            total_formula = f"=SUM(B{total_row}:{last_col_letter}{total_row})"
-                            summary_ws.write_formula(total_row, 1, total_formula, num_format)
-                            
-                            # Add count row with formula
-                            count_row = 3
-                            summary_ws.write(count_row, 0, "COUNT")
-                            # Count formula: =COUNTIF('Main Dataset'!$category_col:$category_col, "category_name")
-                            for col_idx, category in enumerate(categories_pretty, 1):
-                                try:
-                                    count_formula = f"=COUNTIF('Main Dataset'!${cat_col_letter}:${cat_col_letter}, \"{category}\")"
-                                    summary_ws.write_formula(count_row, col_idx, count_formula)
-                                except NameError:
-                                    # cat_col_letter not defined (no category column)
-                                    summary_ws.write_number(count_row, col_idx, 0)
-                            
-                            # Add average row with formula
-                            avg_row = 4
-                            summary_ws.write(avg_row, 0, "AVERAGE")
-                            # Average formula: =AVERAGEIF('Main Dataset'!$category_col:$category_col, "category_name", 'Main Dataset'!$price_col:$price_col)
-                            for col_idx, category in enumerate(categories_pretty, 1):
-                                try:
-                                    avg_formula = f"=AVERAGEIF('Main Dataset'!${cat_col_letter}:${cat_col_letter}, \"{category}\", 'Main Dataset'!${price_col_letter}:${price_col_letter})"
-                                    summary_ws.write_formula(avg_row, col_idx, avg_formula, num_format)
-                                except NameError:
-                                    # cat_col_letter not defined (no category column)
-                                    summary_ws.write_number(avg_row, col_idx, 0, num_format)
                             
                             # Format columns
                             for i in range(len(summary_columns)):
