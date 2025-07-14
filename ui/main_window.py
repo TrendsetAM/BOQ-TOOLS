@@ -271,6 +271,19 @@ def format_number(value, is_currency=False):
     except (ValueError, TypeError):
         return str(value)
 
+def format_number_eu(val):
+    """Format a number with point as thousands separator and comma as decimal separator (e.g., 1.234.567,89)"""
+    try:
+        if val is None or val == '' or (isinstance(val, float) and (val != val)):
+            return ''
+        num = float(str(val).replace(' ', '').replace('\u202f', '').replace(',', '.'))
+        # Format with US locale, then replace separators
+        s = f"{num:,.2f}"
+        # s is like '1,234,567.89' -> want '1.234.567,89'
+        s = s.replace(',', 'X').replace('.', ',').replace('X', '.')
+        return s
+    except Exception:
+        return str(val)
 
 class MainWindow:
     def __init__(self, controller, root=None):
@@ -565,9 +578,25 @@ class MainWindow:
         self.file_mapping = file_mapping
         self.column_mapper = file_mapping.column_mapper if hasattr(file_mapping, 'column_mapper') else None
         
+        # Store offer info in the controller's current_files for summary data collection
+        file_key = str(Path(filepath).resolve())
+        if file_key in self.controller.current_files:
+            # Add offer info to the stored file data
+            current_offer_info = getattr(self, 'current_offer_info', {})
+            offer_info = {
+                'supplier_name': current_offer_info.get('supplier_name', getattr(self, 'current_offer_name', 'Unknown')),
+                'project_name': current_offer_info.get('project_name', 'Unknown'),
+                'date': current_offer_info.get('date', 'Unknown')
+            }
+            self.controller.current_files[file_key]['offer_info'] = offer_info
+        
         # Remove loading widget and populate tab
         loading_widget.destroy()
         self._populate_file_tab(tab, file_mapping)
+        
+        # Refresh the global summary grid if it exists
+        if hasattr(self, 'global_summary_frame') and self.global_summary_frame is not None:
+            self._create_new_summary_grid(self.global_summary_frame, tab)
         
         # Update status
         self._update_status(f"Processing complete: {os.path.basename(filepath)}")
@@ -1995,6 +2024,8 @@ class MainWindow:
                     # print("[DEBUG] About to call _show_final_categorized_data...")
                     # Show the final data grid in the main window - use the actual tab widget from file_mapping
                     self._show_final_categorized_data(file_mapping.tab, final_dataframe, categorization_result)
+                    # Refresh the new summary grid after categorization
+                    self._refresh_new_summary_grid(file_mapping.tab)
                     self._update_status("Categorization completed successfully - showing final data")
                     # print("[DEBUG] _show_final_categorized_data call completed")
                     break
@@ -2172,7 +2203,8 @@ class MainWindow:
                 # Remove the 'category_internal' column if it exists (it's not needed for display)
                 if 'category_internal' in display_df.columns:
                     display_df = display_df.drop('category_internal', axis=1)
-                # print(f"[DEBUG] Using loaded DataFrame directly with shape: {display_df.shape}")
+            final_display_columns = list(display_df.columns)
+            # print(f"[DEBUG] Using loaded DataFrame directly with shape: {display_df.shape}")
             
             # Clear the current tab content
             for widget in tab.winfo_children():
@@ -2186,9 +2218,10 @@ class MainWindow:
             tab.grid_columnconfigure(0, weight=1)
             main_frame.grid_rowconfigure(0, weight=0)  # Title
             main_frame.grid_rowconfigure(1, weight=0)  # Instructions
-            main_frame.grid_rowconfigure(2, weight=1)  # Data grid (expandable)
-            main_frame.grid_rowconfigure(3, weight=0)  # Summary frame
-            main_frame.grid_rowconfigure(4, weight=0)  # Button frame (always visible)
+            main_frame.grid_rowconfigure(2, weight=0)  # NEW Summary Grid (Supplier, Project Name, Date, Total Price)
+            main_frame.grid_rowconfigure(3, weight=1)  # Data grid (expandable)
+            main_frame.grid_rowconfigure(4, weight=0)  # EXISTING Summary frame
+            main_frame.grid_rowconfigure(5, weight=0)  # Button frame (always visible)
             main_frame.grid_columnconfigure(0, weight=1)
             # Title and instructions
             title_label = ttk.Label(main_frame, text="Final Categorized Data", font=("TkDefaultFont", 14, "bold"))
@@ -2198,39 +2231,69 @@ class MainWindow:
             """
             instruction_label = ttk.Label(main_frame, text=instructions, wraplength=800, justify=tk.LEFT)
             instruction_label.grid(row=1, column=0, sticky=tk.W, pady=(0, 10))
-            # Create frame for the treeview
-            tree_frame = ttk.Frame(main_frame)
+            
+            # --- SCROLLABLE MAIN CONTENT AREA ---
+            tab.grid_rowconfigure(1, weight=1)
+            tab.grid_columnconfigure(0, weight=1)
+            canvas = tk.Canvas(tab)
+            canvas.grid(row=1, column=0, sticky=tk.NSEW)
+            vscroll = ttk.Scrollbar(tab, orient="vertical", command=canvas.yview)
+            vscroll.grid(row=1, column=1, sticky=tk.NS)
+            canvas.configure(yscrollcommand=vscroll.set)
+            # Create a frame inside the canvas
+            scrollable_frame = ttk.Frame(canvas)
+            scrollable_frame.bind(
+                "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+            # Ensure the scrollable frame always matches the canvas width
+            def _on_canvas_configure(event):
+                canvas.itemconfig('main_frame', width=event.width)
+            canvas.bind('<Configure>', _on_canvas_configure)
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw", tags='main_frame')
+            # Make the scrollable frame expand
+            scrollable_frame.grid_rowconfigure(0, weight=1)
+            scrollable_frame.grid_columnconfigure(0, weight=1)
+            main_frame = scrollable_frame
+            main_frame.grid_columnconfigure(0, weight=1)
+            # --- MAIN DATASET GRID (Final Data) ---
+            MAX_TREE_HEIGHT = 20
+            DATASET_FRAME_HEIGHT = 400
+            tree_frame = ttk.Frame(main_frame, height=DATASET_FRAME_HEIGHT)
             tree_frame.grid(row=2, column=0, sticky=tk.NSEW, pady=(0, 10))
+            tree_frame.grid_propagate(False)
             tree_frame.grid_rowconfigure(0, weight=1)
             tree_frame.grid_columnconfigure(0, weight=1)
-            # Only show columns that exist in the DataFrame
-            final_display_columns = list(display_df.columns)
-            tree = ttk.Treeview(tree_frame, columns=final_display_columns, show='headings', height=20)
+            tree = ttk.Treeview(tree_frame, columns=final_display_columns, show='headings', height=MAX_TREE_HEIGHT)
             for col in final_display_columns:
                 tree.heading(col, text=col.capitalize() if col != '#' else '#')
-                # Auto-size columns based on content and header, with special handling for description
                 if col == 'description':
-                    # Description column gets fixed width due to long text
                     width = 250
                 else:
-                    # Auto-size based on content and header
                     width = self._calculate_column_width(display_df, col, col.capitalize())
-                
-                tree.column(col, width=width, minwidth=50, stretch=False)
-            vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
-            hsb = ttk.Scrollbar(tree_frame, orient="horizontal", command=tree.xview)
-            tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+                tree.column(col, width=width, minwidth=50, stretch=True)
             tree.grid(row=0, column=0, sticky=tk.NSEW)
-            vsb.grid(row=0, column=1, sticky=tk.NS)
+            dataset_vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
+            tree.configure(yscrollcommand=dataset_vsb.set)
+            dataset_vsb.grid(row=0, column=1, sticky=tk.NS)
+            hsb = ttk.Scrollbar(tree_frame, orient="horizontal", command=tree.xview)
+            tree.configure(xscrollcommand=hsb.set)
             hsb.grid(row=1, column=0, sticky=tk.EW)
-            # Set selection color to light blue and text color to black for readability
             style = ttk.Style(tree)
             style.map('Treeview', background=[('selected', '#B3E5FC')], foreground=[('selected', 'black')])
             self._populate_final_data_treeview(tree, display_df, final_display_columns)
             self._enable_final_data_editing(tree, display_df)
-            # --- SUMMARY GRID PLACEHOLDER ---
+
+            # --- GLOBAL SUMMARY GRID (BOQ Summary Overview) ---
+            if not hasattr(self, 'global_summary_frame') or self.global_summary_frame is None:
+                self.global_summary_frame = ttk.LabelFrame(main_frame, text="BOQ Summary Overview")
+                self.global_summary_frame.grid(row=3, column=0, sticky=tk.EW, pady=(0, 10))
+                self.global_summary_frame.grid_columnconfigure(0, weight=1)
+            else:
+                self.global_summary_frame.grid(row=3, column=0, sticky=tk.EW, pady=(0, 10))
+            self._create_new_summary_grid(self.global_summary_frame, tab)
+
+            # --- DETAILED SUMMARY GRID (Summarize) ---
             summary_frame = ttk.Frame(main_frame)
-            summary_frame.grid(row=3, column=0, sticky=tk.EW, pady=(0, 10))
+            summary_frame.grid(row=4, column=0, sticky=tk.EW, pady=(0, 10))
             summary_frame.grid_remove()  # Hide by default
             tab.summary_frame = summary_frame
             tab.summary_tree = None
@@ -2329,11 +2392,7 @@ class MainWindow:
                             if i == 0:  # Offer label
                                 display_values.append(str(val))
                             else:  # Numeric values
-                                try:
-                                    num_val = float(val)
-                                    display_values.append(f"{num_val:,.2f}".replace(',', ' ').replace('.', ','))
-                                except (ValueError, TypeError):
-                                    display_values.append(str(val))
+                                display_values.append(format_number_eu(val))
                         
                         summary_tree.insert('', 'end', values=display_values, tags=('offer',))
                         # print(f"[DEBUG] Added summary row for {offer_name}: {display_values[:3]}...")
@@ -2411,11 +2470,7 @@ class MainWindow:
                         if i == 0:  # Offer label
                             display_values.append(str(val))
                         else:  # Numeric values
-                            try:
-                                num_val = float(val)
-                                display_values.append(f"{num_val:,.2f}".replace(',', ' ').replace('.', ','))
-                            except (ValueError, TypeError):
-                                display_values.append(str(val))
+                            display_values.append(format_number_eu(val))
                     
                     summary_tree.insert('', 'end', values=display_values, tags=('offer',))
                 
@@ -2424,6 +2479,14 @@ class MainWindow:
                 summary_tree.configure(xscrollcommand=hsb_summary.set)
                 summary_tree.grid(row=0, column=0, sticky=tk.EW)
                 hsb_summary.grid(row=1, column=0, sticky=tk.EW)
+                
+                # Add copy button for the existing summary grid
+                copy_frame = ttk.Frame(summary_frame)
+                copy_frame.grid(row=2, column=0, sticky=tk.E, pady=(5, 0))
+                
+                copy_button = ttk.Button(copy_frame, text="📋 Copy to Clipboard", 
+                                       command=lambda: self._copy_grid_to_clipboard(summary_tree, "Detailed Summary"))
+                copy_button.pack(side=tk.RIGHT)
                 
                 summary_frame.grid()
                 tab.summary_tree = summary_tree
@@ -2472,7 +2535,7 @@ class MainWindow:
             # --- END SUMMARY GRID PLACEHOLDER ---
             # Button frame at the bottom - always visible
             button_frame = ttk.Frame(main_frame)
-            button_frame.grid(row=4, column=0, sticky=tk.EW, pady=(10, 0))
+            button_frame.grid(row=5, column=0, sticky=tk.EW, pady=(10, 0))
             button_frame.grid_columnconfigure(0, weight=1)  # Allow buttons to expand
             
             # Create a centered button container
@@ -2520,7 +2583,7 @@ class MainWindow:
                     # Remove any existing formatting
                     val = val.replace(' ', '').replace('\u202f', '').replace(',', '.')
                 num = float(val)
-                return f"{num:,.2f}".replace(',', ' ').replace('.', ',')
+                return format_number_eu(num)
             except (ValueError, TypeError):
                 return str(val)
         
@@ -5172,3 +5235,177 @@ Review the rows below and adjust validity as needed."""
             validation_result['summary'] = f"Validation failed due to error: {str(e)}"
             logger.error(f"Position-description validation error: {e}", exc_info=True)
             return validation_result
+
+    def _collect_summary_data(self):
+        """Collect summary data from all processed files for the new summary grid"""
+        summary_data = []
+        
+        for file_key, file_data in self.controller.current_files.items():
+            # Get offer info from file data
+            offer_info = file_data.get('offer_info', {})
+            supplier = offer_info.get('supplier_name', 'Unknown')
+            project_name = offer_info.get('project_name', 'Unknown')
+            date = offer_info.get('date', 'Unknown')
+            
+            # Calculate total price from file mapping
+            file_mapping = file_data['file_mapping']
+            total_price = self._calculate_total_price(file_mapping)
+            
+            summary_data.append([supplier, project_name, date, total_price])
+        
+        # Sort by total price (smallest to largest)
+        summary_data.sort(key=lambda x: float(x[3]) if x[3] != 'Unknown' else 0)
+        
+        return summary_data
+    
+    def _calculate_total_price(self, file_mapping):
+        """Calculate total price from file mapping"""
+        try:
+            total_price = 0.0
+            
+            # Get the final dataframe if available
+            if hasattr(file_mapping, 'categorized_dataframe') and file_mapping.categorized_dataframe is not None:
+                df = file_mapping.categorized_dataframe
+            else:
+                # Fallback: build dataframe from file mapping
+                df = self._build_final_grid_dataframe(file_mapping)
+            
+            # Find total price column
+            price_col = None
+            possible_price_cols = ['total_price', 'Total_price']
+            
+            for col in possible_price_cols:
+                if col in df.columns:
+                    price_col = col
+                    break
+            
+            if price_col and price_col in df.columns:
+                # Parse and sum total prices
+                def parse_number(val):
+                    if isinstance(val, (int, float)):
+                        return float(val)
+                    if pd.isna(val):
+                        return 0.0
+                    s = str(val).replace('\u202f', '').replace(' ', '').replace(',', '.')
+                    try:
+                        return float(s)
+                    except Exception:
+                        return 0.0
+                
+                df[price_col] = df[price_col].apply(parse_number)
+                total_price = df[price_col].sum()
+            
+            return total_price
+        except Exception as e:
+            print(f"Error calculating total price: {e}")
+            return 0.0
+    
+    def _copy_grid_to_clipboard(self, tree, grid_name):
+        """Copy grid contents to clipboard in Excel-friendly format (point as thousands, comma as decimal)"""
+        try:
+            # Collect headers
+            headers = [tree.heading(col)['text'] for col in tree['columns']]
+            # Collect data rows
+            data_rows = []
+            for item in tree.get_children():
+                values = tree.item(item)['values']
+                data_rows.append(values)
+            # Format as tab-separated values with Excel-compatible number formatting
+            clipboard_text = '\t'.join(headers) + '\n'
+            for row in data_rows:
+                formatted_row = []
+                for i, val in enumerate(row):
+                    # Check if this is a numeric column (Total Price or similar)
+                    if i < len(headers) and any(keyword in headers[i].lower() for keyword in ['price', 'total', 'amount', 'value']):
+                        formatted_row.append(format_number_eu(val))
+                    else:
+                        formatted_row.append(str(val))
+                clipboard_text += '\t'.join(formatted_row) + '\n'
+            # Copy to clipboard
+            self.root.clipboard_clear()
+            self.root.clipboard_append(clipboard_text)
+            # Show confirmation
+            messagebox.showinfo("Copied", f"{grid_name} data copied to clipboard")
+        except Exception as e:
+            print(f"Error copying to clipboard: {e}")
+            messagebox.showerror("Error", f"Failed to copy {grid_name} data to clipboard")
+
+    def _create_new_summary_grid(self, parent_frame, tab):
+        """Create the new summary grid with Supplier, Project Name, Date, Total Price"""
+        try:
+            # Clear existing content
+            for widget in parent_frame.winfo_children():
+                widget.destroy()
+            # Collect summary data from all processed files
+            summary_data = self._collect_summary_data()
+            if not summary_data:
+                # No data to show
+                no_data_label = ttk.Label(parent_frame, text="No BOQ data available for summary", 
+                                        font=("TkDefaultFont", 10), foreground="gray")
+                no_data_label.grid(row=0, column=0, pady=20)
+                return
+            # Create frame for the grid and copy button
+            grid_frame = ttk.Frame(parent_frame)
+            grid_frame.grid(row=0, column=0, sticky=tk.EW, pady=(5, 0))
+            grid_frame.grid_columnconfigure(0, weight=1)
+            # Create summary columns: Supplier, Project Name, Date, Total Price
+            summary_columns = ['Supplier', 'Project Name', 'Date', 'Total Price']
+            # Calculate height based on number of BOQs
+            tree_height = max(2, len(summary_data))
+            summary_tree = ttk.Treeview(grid_frame, columns=summary_columns, show='headings', height=tree_height)
+            # Configure columns with appropriate widths
+            column_widths = {
+                'Supplier': 150,
+                'Project Name': 200,
+                'Date': 120,
+                'Total Price': 150
+            }
+            for col in summary_columns:
+                summary_tree.heading(col, text=col)
+                summary_tree.column(col, width=column_widths[col], minwidth=100)
+            # Insert data rows
+            for row_data in summary_data:
+                supplier, project_name, date, total_price = row_data
+                # Format total price for display (point as thousands, comma as decimal)
+                if total_price != 'Unknown' and total_price != 0.0:
+                    display_price = format_number_eu(total_price)
+                else:
+                    display_price = 'Unknown'
+                display_values = [supplier, project_name, date, display_price]
+                summary_tree.insert('', 'end', values=display_values, tags=('boq_summary',))
+            # Add horizontal scrollbar
+            hsb_summary = ttk.Scrollbar(grid_frame, orient=tk.HORIZONTAL, command=summary_tree.xview)
+            summary_tree.configure(xscrollcommand=hsb_summary.set)
+            summary_tree.grid(row=0, column=0, sticky=tk.EW)
+            hsb_summary.grid(row=1, column=0, sticky=tk.EW)
+            # Create copy button frame
+            copy_frame = ttk.Frame(parent_frame)
+            copy_frame.grid(row=1, column=0, sticky=tk.E, pady=(5, 0))
+            # Add copy button with icon
+            copy_button = ttk.Button(copy_frame, text="📋 Copy to Clipboard", 
+                                   command=lambda: self._copy_grid_to_clipboard(summary_tree, "BOQ Summary"))
+            copy_button.pack(side=tk.RIGHT)
+            # Store reference to the tree for potential future use
+            tab.new_summary_tree = summary_tree
+        except Exception as e:
+            print(f"Error creating new summary grid: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _refresh_new_summary_grid(self, tab):
+        """Refresh the new summary grid when new BOQs are loaded"""
+        try:
+            # Find the new summary frame in the tab
+            for widget in tab.winfo_children():
+                if hasattr(widget, 'winfo_children'):
+                    for child in widget.winfo_children():
+                        if hasattr(child, 'winfo_children'):
+                            for grandchild in child.winfo_children():
+                                if isinstance(grandchild, ttk.LabelFrame) and grandchild.cget('text') == "BOQ Summary Overview":
+                                    # Found the summary frame, refresh it
+                                    self._create_new_summary_grid(grandchild, tab)
+                                    return
+        except Exception as e:
+            print(f"Error refreshing new summary grid: {e}")
+            import traceback
+            traceback.print_exc()
