@@ -355,6 +355,119 @@ class RowClassifier:
             errors.append("Missing or invalid total price")
         
         return errors
+
+    def validate_master_row_validity(self, row_data: List[str], column_mapping: Dict[int, ColumnType]) -> bool:
+        """
+        MASTER Row Validity: Check if row meets master validation criteria
+        Conditions:
+        1. Non-empty description
+        2. Valid positive quantity (numeric) (can also be zero)
+        3. Valid positive unit price (numeric) (can also be zero)
+        4. Valid positive total price (numeric) (can also be zero)
+        
+        Args:
+            row_data: Row data as list of cell values
+            column_mapping: Dictionary mapping column index to ColumnType
+            
+        Returns:
+            True if row meets master validity criteria, False otherwise
+        """
+        if not row_data or not column_mapping:
+            return False
+        
+        # Check for required fields
+        has_description = False
+        has_quantity = False
+        has_unit_price = False
+        has_total_price = False
+        
+        # Check each column
+        for col_idx, col_type in column_mapping.items():
+            if col_idx < len(row_data):
+                cell_value = row_data[col_idx].strip() if row_data[col_idx] else ""
+                
+                if col_type == ColumnType.DESCRIPTION:
+                    if cell_value:
+                        has_description = True
+                elif col_type == ColumnType.QUANTITY:
+                    if self._is_positive_numeric(cell_value):
+                        has_quantity = True
+                elif col_type == ColumnType.UNIT_PRICE:
+                    if self._is_positive_numeric(cell_value):
+                        has_unit_price = True
+                elif col_type == ColumnType.TOTAL_PRICE:
+                    if self._is_positive_numeric(cell_value):
+                        has_total_price = True
+        
+        # All conditions must be met
+        return has_description and has_quantity and has_unit_price and has_total_price
+
+    def validate_comparison_row_validity(self, row_data: List[str], column_mapping: Dict[int, ColumnType], 
+                                       master_valid_rows: Set[str], manual_invalid_rows: Set[str]) -> bool:
+        """
+        COMPARISON Row Validity: Check if row meets comparison validation criteria
+        Conditions:
+        1. Row in Master is VALID OR
+        2. Row is not in MASTER valid rows list but satisfies MASTER Row Validity Criteria OR
+        3. Row has not been set to INVALID manually by the user and satisfies MASTER Row Validity Criteria
+        
+        Args:
+            row_data: Row data as list of cell values
+            column_mapping: Dictionary mapping column index to ColumnType
+            master_valid_rows: Set of row keys that are valid in master
+            manual_invalid_rows: Set of row keys manually marked as invalid
+            
+        Returns:
+            True if row meets comparison validity criteria, False otherwise
+        """
+        # Generate row key for this row
+        row_key = self._generate_row_key(row_data, column_mapping)
+        
+        # Check if row is manually marked as invalid
+        if row_key in manual_invalid_rows:
+            return False
+        
+        # Check if row is valid in master
+        if row_key in master_valid_rows:
+            return True
+        
+        # Check if row satisfies master validity criteria
+        if self.validate_master_row_validity(row_data, column_mapping):
+            return True
+        
+        return False
+
+    def _generate_row_key(self, row_data: List[str], column_mapping: Dict[int, ColumnType]) -> str:
+        """
+        Generate unique key for row based on description and position
+        This is used to identify rows across different BoQs
+        
+        Args:
+            row_data: Row data as list of cell values
+            column_mapping: Dictionary mapping column index to ColumnType
+            
+        Returns:
+            Unique row key string
+        """
+        # Extract key fields for row identification
+        description = ""
+        code = ""
+        unit = ""
+        
+        for col_idx, col_type in column_mapping.items():
+            if col_idx < len(row_data):
+                cell_value = row_data[col_idx].strip() if row_data[col_idx] else ""
+                
+                if col_type == ColumnType.DESCRIPTION:
+                    description = cell_value
+                elif col_type == ColumnType.CODE:
+                    code = cell_value
+                elif col_type == ColumnType.UNIT:
+                    unit = cell_value
+        
+        # Create composite key (description is most important for identification)
+        key_parts = [description, code, unit]
+        return "|".join(key_parts)
     
     def get_row_confidence(self, row_data: List[str], 
                           classification: RowClassification) -> float:

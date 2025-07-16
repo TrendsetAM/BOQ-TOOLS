@@ -8,7 +8,7 @@ from tkinter import ttk, filedialog, messagebox
 import os
 import platform
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 import logging
 import threading
 import dataclasses
@@ -304,6 +304,10 @@ class MainWindow:
         self.column_mapper = None  # Will be set when processing files
         self.row_validity = {}  # Initialize row validity dictionary
         self.row_review_treeviews = {}  # Initialize row review treeviews dictionary
+        # New: Store master valid row keys and manual invalidations for comparison logic
+        self.master_valid_row_keys = set()
+        self.manual_invalid_row_keys = set()
+        self.is_comparison_mode = False  # Track if we're in comparison mode
         # Add robust tab-to-file-mapping
         self.tab_id_to_file_mapping = {}
         # Offer name for summary grid
@@ -504,6 +508,9 @@ class MainWindow:
         """Handle the file processing workflow"""
         if not filepath:
             return
+
+        # Reset comparison mode flag for master BoQ processing
+        self.is_comparison_mode = False
 
         # Clear previous results, including treeview references
         self.sheet_treeviews.clear()
@@ -1705,6 +1712,45 @@ class MainWindow:
         is_valid = self.row_validity[sheet_name].get(idx, True)
         new_valid = not is_valid
         self.row_validity[sheet_name][idx] = new_valid
+        
+        # New: Update manual invalid row keys set
+        if not new_valid:
+            # Find the corresponding row data and generate key
+            from core.row_classifier import RowClassifier
+            from utils.config import ColumnType
+            row_classifier = RowClassifier()
+            
+            # Get the current file mapping to find the sheet
+            current_tab_id = self.notebook.select()
+            file_mapping = self.tab_id_to_file_mapping.get(current_tab_id)
+            if file_mapping:
+                for sheet in file_mapping.sheets:
+                    if sheet.sheet_name == sheet_name:
+                        # Find the row classification for this index
+                        for rc in sheet.row_classifications:
+                            if rc.row_index == idx:
+                                row_data = getattr(rc, 'row_data', None)
+                                if row_data is None and hasattr(sheet, 'sheet_data'):
+                                    try:
+                                        row_data = sheet.sheet_data[rc.row_index]
+                                    except Exception:
+                                        row_data = []
+                                if row_data:
+                                    # Convert column mappings
+                                    column_mapping = {}
+                                    for cm in sheet.column_mappings:
+                                        try:
+                                            col_type = ColumnType(cm.mapped_type)
+                                            column_mapping[cm.column_index] = col_type
+                                        except ValueError:
+                                            continue
+                                    
+                                    # Generate row key and add to manual invalid set
+                                    row_key = row_classifier._generate_row_key(row_data, column_mapping)
+                                    self.manual_invalid_row_keys.add(row_key)
+                                break
+                        break
+        
         # Update tag and status column
         tag = 'validrow' if new_valid else 'invalidrow'
         tree.item(row_id, tags=(tag,))
@@ -1845,7 +1891,2177 @@ class MainWindow:
                                     pass
                         
                         row_values.append(val)
-                    is_valid = getattr(rc, 'row_type', None) == RowType.PRIMARY_LINE_ITEM or getattr(rc, 'row_type', None) == 'primary_line_item'
+                    # New: Use new row validity logic based on master vs comparison mode
+                    from core.row_classifier import RowClassifier
+                    from utils.config import ColumnType
+                    row_classifier = RowClassifier()
+                    
+                    # Convert column mappings to format expected by row classifier
+                    column_mapping = {}
+                    for cm in sheet.column_mappings:
+                        try:
+                            col_type = ColumnType(cm.mapped_type)
+                            column_mapping[cm.column_index] = col_type
+                        except ValueError:
+                            continue
+                    
+                    # Generate row key for tracking
+                    row_key = row_classifier._generate_row_key(row_data, column_mapping)
+                    
+                    # Determine validity based on master vs comparison mode
+                    if not self.is_comparison_mode:
+                        # Master BoQ: use master validation criteria
+                        is_valid = row_classifier.validate_master_row_validity(row_data, column_mapping)
+                        if is_valid:
+                            self.master_valid_row_keys.add(row_key)
+                    else:
+                        # Comparison BoQ: use comparison validation criteria
+                        is_valid = row_classifier.validate_comparison_row_validity(
+                            row_data, column_mapping, self.master_valid_row_keys, self.manual_invalid_row_keys)
+                    
+                    self.row_validity[sheet.sheet_name][rc.row_index] = is_valid
+                    status = "Valid" if is_valid else "Invalid"
+                    tag = 'validrow' if is_valid else 'invalidrow'
+                    tree.insert('', 'end', iid=str(rc.row_index), values=row_values + [status], tags=(tag,))
+            tree.tag_configure('validrow', background='#E8F5E9')  # light green
+            tree.tag_configure('invalidrow', background='#FFEBEE')  # light red
+            tree.bind('<Button-1>', lambda e, s=sheet.sheet_name, t=tree: self._on_row_review_click(e, s, t, required_types))
+        # Optionally, select the first sheet by default
+        if file_mapping.sheets:
+            self.row_review_notebook.select(0)
+
+    def _show_column_mapping(self):
+        """Show the Column Mapping section and hide Row Review"""
+        # Hide Row Review
+        if self.row_review_frame:
+            self.row_review_frame.destroy()
+            self.row_review_frame = None
+        # Restore all previously hidden column mapping widgets
+        tab = self.notebook.nametowidget(self.notebook.select())
+        if hasattr(self, '_hidden_column_mapping_widgets'):
+            for widget in self._hidden_column_mapping_widgets:
+                widget.grid()
+            self._hidden_column_mapping_widgets = []
+
+    def _on_confirm_row_review(self):
+        """Handle row review confirmation and start categorization"""
+        self._update_status("Row review confirmed. Starting categorization process...")
+        # Get the current tab ID
+        current_tab_id = self.notebook.select()
+        file_mapping = self.tab_id_to_file_mapping.get(current_tab_id)
+        if not file_mapping:
+            messagebox.showerror("Error", "Could not find file mapping for categorization")
+            return
+        # --- NEW: Create normalized DataFrame for categorization with logging, only including valid rows ---
+        try:
+            import pandas as pd
+            import logging
+            logger = logging.getLogger(__name__)
+            # Build a DataFrame from all sheets marked as BOQ, only including valid rows
+            rows = []
+            sheet_count = 0
+            for sheet in getattr(file_mapping, 'sheets', []):
+                if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
+                    continue
+                sheet_count += 1
+                # Use mapped_type as DataFrame columns
+                col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
+                sheet_name = sheet.sheet_name
+                validity_dict = self.row_validity.get(sheet_name, {})
+                # DEBUG: Log sheet data structure
+                print(f"[DEBUG] Processing sheet: {sheet.sheet_name}")
+                if hasattr(sheet, 'sheet_data'):
+                    print(f"[DEBUG] Sheet data length: {len(sheet.sheet_data)}")
+                    if len(sheet.sheet_data) > 0:
+                        print(f"[DEBUG] First row of sheet data: {sheet.sheet_data[0]}")
+                    if len(sheet.sheet_data) > 1:
+                        print(f"[DEBUG] Second row of sheet data: {sheet.sheet_data[1]}")
+                else:
+                    print(f"[DEBUG] No sheet_data attribute found for {sheet.sheet_name}")
+                
+                # DEBUG: Log column mappings
+                print(f"[DEBUG] Column mappings for {sheet.sheet_name}:")
+                for i, cm in enumerate(sheet.column_mappings):
+                    print(f"[DEBUG]   {i}: {cm.column_index} -> {cm.original_header} -> {cm.mapped_type}")
+                
+                # DEBUG: Log col_headers array
+                print(f"[DEBUG] col_headers array: {col_headers}")
+                
+                # For each row classification, get the row data
+                for rc in getattr(sheet, 'row_classifications', []):
+                    # Only include valid rows
+                    if not validity_dict.get(rc.row_index, True):
+                        continue
+                    row_data = getattr(rc, 'row_data', None)
+                    if row_data is None and hasattr(sheet, 'sheet_data'):
+                        try:
+                            row_data = sheet.sheet_data[rc.row_index]
+                            print(f"[DEBUG] Row {rc.row_index}: extracted data = {row_data}")
+                        except Exception as e:
+                            print(f"[DEBUG] Row {rc.row_index}: extraction failed = {e}")
+                            row_data = None
+                    if row_data is None:
+                        row_data = []
+                        print(f"[DEBUG] Row {rc.row_index}: using empty data")
+                    
+                    # Build dict for DataFrame
+                    row_dict = {}
+                    for cm in sheet.column_mappings:
+                        mapped_type = getattr(cm, 'mapped_type', None)
+                        if not mapped_type:
+                            continue
+                        idx = cm.column_index
+                        row_dict[mapped_type] = row_data[idx] if idx < len(row_data) else ''
+                    # Ensure all expected columns are present
+                    for mt in col_headers:
+                        if mt not in row_dict:
+                            row_dict[mt] = ''
+                    
+                    # DEBUG: Log specific column values and check for data swapping
+                    if 'description' in row_dict:
+                        desc_val = row_dict['description']
+                        print(f"[DEBUG] Row {rc.row_index}: description = '{desc_val}'")
+                        # Check if description looks like a code
+                        if isinstance(desc_val, str) and len(desc_val) < 30 and ('.' in desc_val or '/' in desc_val):
+                            print(f"[DEBUG] ⚠️  Row {rc.row_index}: DESCRIPTION LOOKS LIKE CODE: '{desc_val}'")
+                    if 'code' in row_dict:
+                        code_val = row_dict['code']
+                        print(f"[DEBUG] Row {rc.row_index}: code = '{code_val}'")
+                        # Check if code looks like a description
+                        if isinstance(code_val, str) and len(code_val) > 30:
+                            print(f"[DEBUG] ⚠️  Row {rc.row_index}: CODE LOOKS LIKE DESCRIPTION: '{code_val[:50]}...'")
+                    
+                    # DEBUG: Log the full row_dict to see all values
+                    print(f"[DEBUG] Row {rc.row_index}: Full row_dict = {row_dict}")
+                    
+                    row_dict['Source_Sheet'] = sheet.sheet_name
+                    # Preserve position information for future row matching
+                    row_dict['Position'] = getattr(rc, 'position', None)
+                    rows.append(row_dict)
+            logger.info(f"Categorization: Processed {sheet_count} BOQ sheets, {len(rows)} valid rows for DataFrame.")
+            if rows:
+                df = pd.DataFrame(rows)
+                # Ensure 'Description' column is present and capitalized
+                if 'description' in df.columns and 'Description' not in df.columns:
+                    df.rename(columns={'description': 'Description'}, inplace=True)
+                logger.info(f"Categorization: DataFrame columns: {list(df.columns)}")
+                logger.info(f"Categorization: First 3 rows: {df.head(3).to_dict(orient='records')}")
+                logger.info(f"Categorization: First 10 Description values: {df['Description'].head(10).tolist() if 'Description' in df.columns else 'No Description column'}")
+                
+                # DEBUG: Additional logging for categorization DataFrame
+                print(f"[DEBUG] CATEGORIZATION DataFrame created with {len(df)} rows")
+                print(f"[DEBUG] CATEGORIZATION DataFrame columns: {list(df.columns)}")
+                if 'Description' in df.columns:
+                    print(f"[DEBUG] CATEGORIZATION First 5 Description values: {df['Description'].head(5).tolist()}")
+                    # Check if descriptions look like codes
+                    desc_sample = df['Description'].head(10).tolist()
+                    code_like_count = sum(1 for desc in desc_sample if isinstance(desc, str) and len(desc) < 20 and '.' in desc)
+                    print(f"[DEBUG] CATEGORIZATION {code_like_count}/{len(desc_sample)} descriptions look like codes")
+                if 'code' in df.columns:
+                    print(f"[DEBUG] CATEGORIZATION First 5 code values: {df['code'].head(5).tolist()}")
+                print(f"[DEBUG] CATEGORIZATION First 3 complete rows:")
+                print(df.head(3).to_string())
+            else:
+                df = None
+                logger.warning("Categorization: No valid rows found for DataFrame.")
+            file_mapping.dataframe = df
+            if df is None or df.empty or 'Description' not in df.columns:
+                messagebox.showerror("Categorization Error", "No valid data found for categorization. Please check that your sheets contain valid BOQ rows and that a 'Description' column is mapped.")
+                return
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to build DataFrame for categorization: {e}")
+            file_mapping.dataframe = None
+            messagebox.showerror("Categorization Error", f"Failed to build DataFrame for categorization: {e}")
+            return
+        # --- END NEW ---
+        # Start categorization process
+        self._start_categorization(file_mapping)
+    
+    def _start_categorization(self, file_mapping):
+        """Start the categorization process"""
+        if not CATEGORIZATION_AVAILABLE:
+            messagebox.showerror("Error", "Categorization components not available")
+            return
+        
+        try:
+            # Show categorization dialog
+            dialog = show_categorization_dialog(
+                parent=self.root,
+                controller=self.controller,
+                file_mapping=file_mapping,
+                on_complete=self._on_categorization_complete
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to start categorization: {e}")
+            messagebox.showerror("Error", f"Failed to start categorization: {str(e)}")
+    
+    def _on_categorization_complete(self, final_dataframe, categorization_result):
+        """Handle categorization completion"""
+        try:
+            current_tab_path = self.notebook.select()
+            current_tab = self.notebook.select(current_tab_path)  # Get the actual tab widget
+            # print("[DEBUG] Current tab path:", current_tab_path)
+            # print("[DEBUG] Current tab widget:", current_tab)
+            # print("[DEBUG] File mapping tabs:", [str(file_data['file_mapping'].tab) for file_data in self.controller.current_files.values()])
+            # print("[DEBUG] Number of files:", len(self.controller.current_files))
+            
+            for file_key, file_data in self.controller.current_files.items():
+                # print("[DEBUG] Checking file_key:", file_key)
+                # print("[DEBUG] file_data['file_mapping'].tab:", file_data['file_mapping'].tab)
+                # print("[DEBUG] hasattr check:", hasattr(file_data['file_mapping'], 'tab'))
+                # print("[DEBUG] tab comparison:", str(file_data['file_mapping'].tab) == str(current_tab_path))
+                
+                if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
+                    # print("[DEBUG] Found matching tab, storing data...")
+                    # Store the categorized data
+                    file_data['categorized_dataframe'] = final_dataframe
+                    file_data['categorization_result'] = categorization_result
+                    # Update the file mapping
+                    file_mapping = file_data['file_mapping']
+                    file_mapping.categorized_dataframe = final_dataframe
+                    file_mapping.categorization_result = categorization_result
+                    # print("[DEBUG] About to call _show_final_categorized_data...")
+                    # Show the final data grid in the main window - use the actual tab widget from file_mapping
+                    self._show_final_categorized_data(file_mapping.tab, final_dataframe, categorization_result)
+                    # Refresh the new summary grid after categorization using centralized method
+                    print(f"[DEBUG] Calling centralized summary grid refresh after categorization")
+                    self._refresh_summary_grid_centralized()
+                    self._update_status("Categorization completed successfully - showing final data")
+                    # print("[DEBUG] _show_final_categorized_data call completed")
+                    break
+                else:
+                    # print("[DEBUG] Tab mismatch or no tab attribute")
+                    pass
+        except Exception as e:
+            # print("[DEBUG] Exception in _on_categorization_complete:", e)
+            import traceback
+            traceback.print_exc()
+            logger.error(f"Error handling categorization completion: {e}")
+            messagebox.showerror("Error", f"Error handling categorization completion: {str(e)}")
+    
+"""
+BOQ Tools Main Window
+Comprehensive GUI for Excel file processing and BOQ analysis
+"""
+
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+import os
+import platform
+from pathlib import Path
+from typing import List, Dict, Any, Tuple
+import logging
+import threading
+import dataclasses
+import pandas as pd
+from core.row_classifier import RowType
+from datetime import datetime
+import pickle
+import re
+
+# Get a logger for this module
+logger = logging.getLogger(__name__)
+
+# Custom exceptions for validation failures
+class ValidationError(Exception):
+    """Custom exception for validation failures"""
+    def __init__(self, message, validation_result=None):
+        super().__init__(message)
+        self.validation_result = validation_result
+
+class PositionValidationError(ValidationError):
+    """Specific exception for position-description validation failures"""
+    pass
+
+def _format_validation_error_message(validation_result, context=""):
+    """
+    Standardized error message formatting for position-description validation failures
+    
+    Args:
+        validation_result: Validation result dictionary with errors and summary
+        context: Additional context string (e.g., "Use Mapping", "Compare Full")
+        
+    Returns:
+        str: Formatted error message for user display
+    """
+    if not validation_result or validation_result.get('is_valid', True):
+        return "No validation errors found."
+    
+    # Base error message
+    title = f"{context} - Structure Validation Failed" if context else "Structure Validation Failed"
+    
+    # Summary
+    summary = validation_result.get('summary', 'Validation failed with unknown errors.')
+    
+    # Error details (limit to first 5 errors for readability)
+    errors = validation_result.get('errors', [])
+    error_details = "\n".join(errors[:5])
+    if len(errors) > 5:
+        error_details += f"\n... and {len(errors) - 5} more errors"
+    
+    # Mismatched positions for additional context
+    mismatched_positions = validation_result.get('mismatched_positions', [])
+    position_count = len(mismatched_positions)
+    
+    # Build comprehensive error message
+    if context == "Use Mapping":
+        action_guidance = (
+            "This means the current file has a different structure than the saved mapping.\n"
+            "You cannot apply this mapping to the current file.\n\n"
+            "Possible solutions:\n"
+            "• Use a file with the same structure as the original\n"
+            "• Create a new mapping for this file structure\n"
+            "• Verify you selected the correct mapping file"
+        )
+    elif context == "Compare Full":
+        action_guidance = (
+            "This means the comparison file has a different structure than the master BOQ.\n"
+            "You cannot compare BOQs with different structures.\n\n"
+            "Possible solutions:\n"
+            "• Use a comparison file with the same structure\n"
+            "• Create separate analyses for files with different structures\n"
+            "• Verify you selected the correct comparison file"
+        )
+    else:
+        action_guidance = (
+            "The files have different structures and cannot be processed together.\n\n"
+            "Please verify that you are using compatible files."
+        )
+    
+    formatted_message = (
+        f"{summary}\n\n"
+        f"Details ({position_count} mismatches found):\n{error_details}\n\n"
+        f"{action_guidance}"
+    )
+    
+    return formatted_message
+
+def _log_validation_failure(validation_result, context="", operation="validation"):
+    """
+    Standardized logging for validation failures
+    
+    Args:
+        validation_result: Validation result dictionary
+        context: Operation context (e.g., "Use Mapping", "Compare Full")
+        operation: Type of operation being performed
+    """
+    if not validation_result:
+        logger.error(f"{context} {operation}: No validation result provided")
+        return
+    
+    if validation_result.get('is_valid', True):
+        logger.info(f"{context} {operation}: Validation passed successfully")
+        return
+    
+    # Log summary
+    summary = validation_result.get('summary', 'Unknown validation failure')
+    logger.error(f"{context} {operation} failed: {summary}")
+    
+    # Log detailed errors
+    errors = validation_result.get('errors', [])
+    logger.error(f"{context} {operation}: Found {len(errors)} validation errors:")
+    for i, error in enumerate(errors[:10], 1):  # Log first 10 errors
+        logger.error(f"  {i}. {error}")
+    
+    if len(errors) > 10:
+        logger.error(f"  ... and {len(errors) - 10} more errors")
+    
+    # Log mismatched positions summary
+    mismatched_positions = validation_result.get('mismatched_positions', [])
+    if mismatched_positions:
+        logger.debug(f"{context} {operation}: Mismatched positions details:")
+        for position_info in mismatched_positions[:5]:  # Log first 5 for debugging
+            if 'expected_description' in position_info:
+                logger.debug(f"  Position {position_info.get('position', 'unknown')}: "
+                           f"expected '{position_info.get('expected_description', '')}', "
+                           f"got '{position_info.get('actual_description', '')}'")
+            else:
+                logger.debug(f"  Missing position {position_info.get('position', 'unknown')}: "
+                           f"expected '{position_info.get('expected_description', '')}'")
+
+def _handle_validation_failure(validation_result, context="", operation="validation", show_dialog=True):
+    """
+    Standardized validation failure handling with logging and user notification
+    
+    Args:
+        validation_result: Validation result dictionary
+        context: Operation context for error messages
+        operation: Type of operation being performed
+        show_dialog: Whether to show error dialog to user
+        
+    Returns:
+        bool: False (indicating failure)
+        
+    Raises:
+        PositionValidationError: Always raises this exception to terminate processing
+    """
+    # Log the failure
+    _log_validation_failure(validation_result, context, operation)
+    
+    # Format user message
+    error_message = _format_validation_error_message(validation_result, context)
+    
+    # Show dialog if requested
+    if show_dialog:
+        dialog_title = f"{context} - Structure Validation Failed" if context else "Structure Validation Failed"
+        messagebox.showerror(dialog_title, error_message)
+    
+    # Log termination
+    logger.warning(f"{context} {operation}: Process terminated due to validation failure")
+    
+    # Raise exception to terminate processing
+    raise PositionValidationError(error_message, validation_result)
+
+# Optional imports
+try:
+    from ttkthemes import ThemedTk
+    THEME_AVAILABLE = True
+except ImportError:
+    THEME_AVAILABLE = False
+
+try:
+    import tkinterdnd2 as TkinterDnD
+    DND_AVAILABLE = True
+    DND_FILES = TkinterDnD.DND_FILES
+except ImportError:
+    DND_AVAILABLE = False
+
+# Import settings dialog
+try:
+    from ui.settings_dialog import show_settings_dialog
+    SETTINGS_AVAILABLE = True
+except ImportError:
+    SETTINGS_AVAILABLE = False
+
+# Import sheet categorization dialog
+try:
+    from ui.sheet_categorization_dialog import show_sheet_categorization_dialog
+    SHEET_CATEGORIZATION_AVAILABLE = True
+except ImportError:
+    SHEET_CATEGORIZATION_AVAILABLE = False
+
+# Import row review dialog
+try:
+    from ui.row_review_dialog import show_row_review_dialog
+    ROW_REVIEW_AVAILABLE = True
+except ImportError:
+    ROW_REVIEW_AVAILABLE = False
+
+# Import preview dialog
+try:
+    from ui.preview_dialog import show_preview_dialog
+    PREVIEW_AVAILABLE = True
+except ImportError:
+    PREVIEW_AVAILABLE = False
+
+# Import categorization dialogs
+try:
+    from ui.categorization_dialog import show_categorization_dialog
+    from ui.category_review_dialog import show_category_review_dialog
+    from ui.categorization_stats_dialog import show_categorization_stats_dialog
+    CATEGORIZATION_AVAILABLE = True
+except ImportError:
+    CATEGORIZATION_AVAILABLE = False
+
+# Color coding for confidence
+def confidence_color(score):
+    if score >= 0.8:
+        return '#4CAF50'  # Green
+    elif score >= 0.6:
+        return '#FFC107'  # Amber
+    else:
+        return '#F44336'  # Red
+
+
+def tooltip(widget, text):
+    """Simple tooltip for a widget"""
+    def on_enter(event):
+        widget._tip = tk.Toplevel()
+        widget._tip.wm_overrideredirect(True)
+        x = event.x_root + 10
+        y = event.y_root + 10
+        widget._tip.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(widget._tip, text=text, background="#ffffe0", relief='solid', borderwidth=1, font=("TkDefaultFont", 9))
+        label.pack()
+    def on_leave(event):
+        if hasattr(widget, '_tip') and widget._tip is not None:
+            widget._tip.destroy()
+            widget._tip = None
+    widget.bind('<Enter>', on_enter)
+    widget.bind('<Leave>', on_leave)
+
+
+def format_number(value, is_currency=False):
+    """Format number with thousands separator and decimal formatting"""
+    if not value or value == "":
+        return ""
+    
+    try:
+        # Convert to float
+        num = float(str(value).replace(',', '').replace(' ', ''))
+        
+        if is_currency:
+            # Format as currency with 2 decimal places
+            return f"{num:,.2f}".replace(',', ' ').replace('.', ',')
+        else:
+            # Format as number with 2 decimal places if needed
+            if num == int(num):
+                return f"{int(num):,}".replace(',', ' ')
+            else:
+                return f"{num:,.2f}".replace(',', ' ').replace('.', ',')
+    except (ValueError, TypeError):
+        return str(value)
+
+def format_number_eu(val):
+    """Format a number with point as thousands separator and comma as decimal separator (e.g., 1.234.567,89)"""
+    try:
+        if val is None or val == '' or (isinstance(val, float) and (val != val)):
+            return ''
+        num = float(str(val).replace(' ', '').replace('\u202f', '').replace(',', '.'))
+        # Format with US locale, then replace separators
+        s = f"{num:,.2f}"
+        # s is like '1,234,567.89' -> want '1.234.567,89'
+        s = s.replace(',', 'X').replace('.', ',').replace('X', '.')
+        return s
+    except Exception:
+        return str(val)
+
+class MainWindow:
+    def __init__(self, controller, root=None):
+        self.controller = controller
+        self.root = root or self._create_root()
+        self.root.title("BOQ Tools - Excel Processor")
+        self.root.geometry("1200x700")
+        self.root.minsize(900, 600)
+        self._setup_style()
+        self._create_menu()
+        # Initialize variables before creating widgets
+        self.open_files = {}
+        self.status_var = tk.StringVar(value="Ready.")
+        self.progress_var = tk.DoubleVar(value=0)
+        self.status_bar_visible = True
+        self.file_mapping = None
+        self.sheet_treeviews = {}
+        self.column_mapper = None  # Will be set when processing files
+        self.row_validity = {}  # Initialize row validity dictionary
+        self.row_review_treeviews = {}  # Initialize row review treeviews dictionary
+        # New: Store master valid row keys and manual invalidations for comparison logic
+        self.master_valid_row_keys = set()
+        self.manual_invalid_row_keys = set()
+        self.is_comparison_mode = False  # Track if we're in comparison mode
+        # Add robust tab-to-file-mapping
+        self.tab_id_to_file_mapping = {}
+        # Offer name for summary grid
+        self.current_offer_name = None
+        # Store comprehensive offer information
+        self.current_offer_info = None
+        self.previous_offer_info = None  # For subsequent BOQs in comparison
+        # Create widgets
+        self._create_main_widgets()
+        self._setup_drag_and_drop()
+        self._bind_shortcuts()
+        self._update_status("Welcome to BOQ Tools!")
+
+    def _create_root(self):
+        if THEME_AVAILABLE:
+            return ThemedTk(theme="arc")
+        elif DND_AVAILABLE:
+            return TkinterDnD.Tk()
+        else:
+            return tk.Tk()
+
+    def _setup_style(self):
+        style = ttk.Style(self.root)
+        if platform.system() == 'Windows':
+            style.theme_use('vista')
+        elif platform.system() == 'Darwin':
+            style.theme_use('aqua')
+        else:
+            style.theme_use('clam')
+        style.configure('TNotebook.Tab', padding=[10, 5])
+        style.configure('Treeview', rowheight=28)
+
+    def _create_menu(self):
+        menubar = tk.Menu(self.root)
+        # File
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Open...", accelerator="Ctrl+O", command=self.open_file)
+        file_menu.add_command(label="Export", accelerator="Ctrl+E", command=self.export_file)
+        file_menu.add_separator()
+        file_menu.add_command(label="Clear All Files", command=self._clear_all_files)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", accelerator="Ctrl+Q", command=self.root.quit)
+        menubar.add_cascade(label="File", menu=file_menu)
+        # Edit
+        edit_menu = tk.Menu(menubar, tearoff=0)
+        edit_menu.add_command(label="Undo", accelerator="Ctrl+Z", command=lambda: self._update_status('Undo is not implemented.'))
+        edit_menu.add_command(label="Redo", accelerator="Ctrl+Y", command=lambda: self._update_status('Redo is not implemented.'))
+        menubar.add_cascade(label="Edit", menu=edit_menu)
+        # View
+        view_menu = tk.Menu(menubar, tearoff=0)
+        view_menu.add_command(label="Toggle Status Bar", command=self._toggle_status_bar)
+        menubar.add_cascade(label="View", menu=view_menu)
+        # Tools
+        tools_menu = tk.Menu(menubar, tearoff=0)
+        tools_menu.add_command(label="Settings", command=self.open_settings)
+        menubar.add_cascade(label="Tools", menu=tools_menu)
+        self.root.config(menu=menubar)
+
+    def _create_main_widgets(self):
+        # Configure root window grid
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+        
+        # Main frame using grid
+        main_frame = ttk.Frame(self.root)
+        main_frame.grid(row=0, column=0, sticky=tk.NSEW)
+        
+        # Configure main_frame grid layout
+        main_frame.grid_rowconfigure(0, weight=0)  # Buttons zone
+        main_frame.grid_rowconfigure(1, weight=1)  # Notebook (expandable)
+        main_frame.grid_rowconfigure(2, weight=0)  # Status bar
+        main_frame.grid_columnconfigure(0, weight=1)
+        
+        # Top: Button frame with three buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=0, column=0, sticky=tk.EW, padx=10, pady=8)
+        
+        # Configure button frame columns to be equal width
+        button_frame.grid_columnconfigure(0, weight=1)  # New Analysis
+        button_frame.grid_columnconfigure(1, weight=1)  # Load Analysis
+        button_frame.grid_columnconfigure(2, weight=1)  # Use Mapping
+        
+        # Create the three buttons
+        new_analysis_btn = ttk.Button(button_frame, text="New Analysis", command=self.open_file)
+        new_analysis_btn.grid(row=0, column=0, sticky=tk.EW, padx=5)
+        tooltip(new_analysis_btn, "Start a new BOQ analysis by selecting Excel files")
+        
+        load_analysis_btn = ttk.Button(button_frame, text="Load Analysis", command=self._load_analysis)
+        load_analysis_btn.grid(row=0, column=1, sticky=tk.EW, padx=5)
+        tooltip(load_analysis_btn, "Load a previously saved analysis")
+        
+        use_mapping_btn = ttk.Button(button_frame, text="Use Mapping", command=self._use_mapping)
+        use_mapping_btn.grid(row=0, column=2, sticky=tk.EW, padx=5)
+        tooltip(use_mapping_btn, "Apply a previously saved mapping to new files")
+        
+        # Center: Tabbed interface for files
+        self.notebook = ttk.Notebook(main_frame)
+        self.notebook.grid(row=1, column=0, sticky=tk.NSEW, padx=10, pady=5)
+        
+        # Bottom: Status bar and progress
+        self.status_frame = ttk.Frame(main_frame)
+        self.status_frame.grid(row=2, column=0, sticky=tk.EW)
+        
+        # Configure status frame grid
+        self.status_frame.grid_columnconfigure(0, weight=1)
+        self.status_frame.grid_columnconfigure(1, weight=0)
+        
+        self.status_label = ttk.Label(self.status_frame, textvariable=self.status_var, anchor="w")
+        self.status_label.grid(row=0, column=0, sticky=tk.EW, padx=8)
+        
+        self.progress = ttk.Progressbar(self.status_frame, variable=self.progress_var, maximum=100, length=180)
+        self.progress.grid(row=0, column=1, padx=8)
+
+    def _setup_drag_and_drop(self):
+        if DND_AVAILABLE:
+            try:
+                # Enable drag and drop if available
+                if hasattr(self.root, 'drop_target_register'):
+                    self.root.drop_target_register(DND_FILES)
+                if hasattr(self.root, 'dnd_bind'):
+                    self.root.dnd_bind('<<Drop>>', self._on_drop)
+            except AttributeError:
+                # This can happen if TkinterDnD is available but methods aren't patched correctly (rare)
+                logger.warning("TkinterDnD methods not found on root. Drag and drop will not be fully functional.")
+                pass
+            except Exception:
+                pass
+        # No else clause needed - buttons are already set up in _create_main_widgets
+
+    def _bind_shortcuts(self):
+        self.root.bind('<Control-o>', lambda e: self.open_file())
+        self.root.bind('<Control-e>', lambda e: self.export_file())
+        self.root.bind('<Control-q>', lambda e: self.root.quit())
+        self.root.bind('<Control-z>', lambda e: self._update_status('Undo is not implemented.'))
+        self.root.bind('<Control-y>', lambda e: self._update_status('Redo is not implemented.'))
+
+    def _update_status(self, msg):
+        self.status_var.set(msg)
+        self.root.update_idletasks()
+
+    def _toggle_status_bar(self):
+        if self.status_bar_visible:
+            self.status_frame.grid_remove()
+        else:
+            self.status_frame.grid()
+        self.status_bar_visible = not self.status_bar_visible
+
+    def _not_implemented(self):
+        # Instead of a dialog, just update the status bar
+        self._update_status("This feature is not implemented yet.")
+
+    def open_settings(self):
+        if SETTINGS_AVAILABLE:
+            show_settings_dialog(self.root)
+        else:
+            self._not_implemented()
+
+    def export_file(self):
+        # Get the currently selected tab
+        current_tab = self.notebook.nametowidget(self.notebook.select())
+        if hasattr(current_tab, 'file_mapping'):
+            # Implement export logic here
+            self._update_status("Export functionality to be implemented.")
+        else:
+            self._update_status("No data to export.")
+
+    def open_file(self):
+        # Prompt for comprehensive offer information before opening file dialog
+        offer_info = self._prompt_offer_info(is_first_boq=True)
+        if offer_info is None:
+            self._update_status("File open cancelled (no offer information provided).")
+            return
+        
+        filetypes = [("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
+        filenames = filedialog.askopenfilenames(title="Open Excel File", filetypes=filetypes)
+        for file in filenames:
+            # Check if there is already a file loaded in the current tab
+            current_tab_id = self.notebook.select()
+            if current_tab_id:
+                current_tab = self.notebook.nametowidget(current_tab_id)
+                # If the tab has a final_dataframe, trigger comparison logic
+                if hasattr(current_tab, 'final_dataframe') and getattr(current_tab, 'final_dataframe', None) is not None:
+                    self._compare_full(current_tab)
+                    return
+            # Otherwise, just open as new analysis
+            self._open_excel_file(file)
+
+    def _on_drop(self, event):
+        if DND_AVAILABLE:
+            files = self.root.tk.splitlist(event.data)
+            for file in files:
+                if file.lower().endswith(('.xlsx', '.xls')):
+                    self._open_excel_file(file)
+                else:
+                    self._update_status(f"Unsupported file: {file}")
+
+    def _open_excel_file(self, filepath):
+        """Handle the file processing workflow"""
+        if not filepath:
+            return
+
+        # Reset comparison mode flag for master BoQ processing
+        self.is_comparison_mode = False
+
+        # Clear previous results, including treeview references
+        self.sheet_treeviews.clear()
+        if self.notebook:
+            for tab in self.notebook.tabs():
+                self.notebook.forget(tab)
+
+        self._update_status(f"Processing {os.path.basename(filepath)}, please wait...")
+        self.progress_var.set(0)
+
+        # Create a new tab for the file
+        filename = os.path.basename(filepath)
+        tab = ttk.Frame(self.notebook)
+        self.notebook.add(tab, text=filename)
+        self.notebook.select(tab)
+
+        # Configure grid for the tab frame
+        tab.grid_rowconfigure(0, weight=1)
+        tab.grid_columnconfigure(0, weight=1)
+
+        loading_label = ttk.Label(tab, text="Analyzing file...")
+        loading_label.grid(row=0, column=0, pady=40, padx=100)
+        self.root.update_idletasks()
+
+        def process_in_thread():
+            """Runs the file processing in a background thread."""
+            try:
+                # Step 1: Load the file and get visible sheets
+                from core.file_processor import ExcelProcessor
+                processor = ExcelProcessor()
+                processor.load_file(Path(filepath))
+                visible_sheets = processor.get_visible_sheets()
+                if not visible_sheets:
+                    self.root.after(0, self._on_processing_error, tab, filename, loading_label)
+                    return
+                
+                # Step 2: Ask user to categorize sheets
+                def ask_categorization():
+                    if SHEET_CATEGORIZATION_AVAILABLE:
+                        categories = show_sheet_categorization_dialog(self.root, visible_sheets)
+                        if not categories:
+                            # User cancelled
+                            self._update_status("Sheet categorization cancelled.")
+                            loading_label.destroy()
+                            return
+                        boq_sheets = [sheet for sheet, cat in categories.items() if cat == "BOQ"]
+                        if not boq_sheets:
+                            self._update_status("No sheets marked as BOQ. Processing aborted.")
+                            loading_label.destroy()
+                            return
+                    else:
+                        # Fallback: treat all sheets as BOQ
+                        boq_sheets = visible_sheets
+                        categories = {sheet: "BOQ" for sheet in visible_sheets}
+                    
+                    # Step 3: Process only BOQ sheets
+                    file_mapping = self.controller.process_file(
+                        Path(filepath),
+                        progress_callback=lambda p, m: self.root.after(0, self.update_progress, p, m),
+                        sheet_filter=boq_sheets,
+                        sheet_types=categories
+                    )
+                    # After processing, show the main window with BOQ sheets for column mapping
+                    self.file_mapping = file_mapping
+                    self.column_mapper = file_mapping.column_mapper if hasattr(file_mapping, 'column_mapper') else None
+                    self.root.after(0, self._on_processing_complete, tab, filepath, self.file_mapping, loading_label)
+                
+                self.root.after(0, ask_categorization)
+            except Exception as e:
+                logger.error(f"Failed to process file {filepath}: {e}", exc_info=True)
+                self.root.after(0, self._on_processing_error, tab, filename, loading_label)
+
+        threading.Thread(target=process_in_thread, daemon=True).start()
+
+    def update_progress(self, percentage, message):
+        """Thread-safe method to update the progress bar and status label."""
+        self.progress_var.set(percentage)
+        self._update_status(message)
+
+    def _on_processing_complete(self, tab, filepath, file_mapping, loading_widget):
+        """Handle processing completion"""
+        print(f"[DEBUG] _on_processing_complete called for file: {filepath}")
+        
+        # Store the file mapping and column mapper
+        self.file_mapping = file_mapping
+        self.column_mapper = file_mapping.column_mapper if hasattr(file_mapping, 'column_mapper') else None
+        
+        # Store offer info in the controller's current_files for summary data collection
+        file_key = str(Path(filepath).resolve())
+        if file_key in self.controller.current_files:
+            current_offer_info = getattr(self, 'current_offer_info', {})
+            current_offer_name = getattr(self, 'current_offer_name', 'Unknown')
+            
+            # Enhanced offer info creation with better fallbacks
+            offer_info = {
+                'supplier_name': current_offer_info.get('supplier_name', current_offer_name),
+                'project_name': current_offer_info.get('project_name', 'Unknown'),
+                'date': current_offer_info.get('date', 'Unknown')
+            }
+            
+            # Store under dynamic offer name for comparison datasets
+            offer_name = offer_info['supplier_name']
+            if 'offers' not in self.controller.current_files[file_key]:
+                self.controller.current_files[file_key]['offers'] = {}
+            self.controller.current_files[file_key]['offers'][offer_name] = offer_info
+            # For backward compatibility, also store the last offer as 'offer_info'
+            self.controller.current_files[file_key]['offer_info'] = offer_info
+            print(f"[DEBUG] Stored offer info for offer_name '{offer_name}': {offer_info}")
+            print(f"[DEBUG] Current offer info state: current_offer_info={current_offer_info}, current_offer_name={current_offer_name}")
+        
+        # Remove loading widget and populate tab
+        loading_widget.destroy()
+        self._populate_file_tab(tab, file_mapping)
+        
+        # Use centralized refresh method
+        print(f"[DEBUG] Calling centralized summary grid refresh")
+        self._refresh_summary_grid_centralized()
+        
+        # Update status
+        self._update_status(f"Processing complete: {os.path.basename(filepath)}")
+
+    def _on_processing_error(self, tab, filename, loading_widget):
+        """Callback for when file processing fails. Runs in the main UI thread."""
+        print(f"[DEBUG] _on_processing_error called for file: {filename}")
+        loading_widget.destroy()
+        # Use grid for consistency
+        error_label = ttk.Label(tab, text=f"Failed to process {filename}.\nSee logs for details.", foreground="red")
+        error_label.grid(row=0, column=0, pady=40, padx=100)
+        self._update_status(f"Error processing {filename}")
+        self.progress_var.set(0)
+        # Refresh summary grid even on error to show current state
+        print(f"[DEBUG] Calling centralized summary grid refresh after error")
+        self._refresh_summary_grid_centralized()
+
+    def _populate_file_tab(self, tab, file_mapping):
+        # print("[DEBUG] _populate_file_tab called for tab:", tab)
+        """Populates a tab with the processed data from a file mapping."""
+        # Debug: print all sheet names and their types
+        # print('DEBUG: Sheets in file_mapping:')
+        for s in file_mapping.sheets:
+            print(f'  {s.sheet_name} (sheet_type={getattr(s, "sheet_type", None)})')
+        
+        # Clear any existing widgets (like loading/error labels)
+        for widget in tab.winfo_children():
+            widget.destroy()
+        
+        # Create main container frame
+        tab_frame = ttk.Frame(tab)
+        tab_frame.grid(row=0, column=0, sticky=tk.NSEW)
+        
+        # Configure tab_frame's grid layout
+        tab_frame.grid_rowconfigure(0, weight=1)  # For sheet_notebook (main content, expands vertically)
+        tab_frame.grid_rowconfigure(1, weight=0)  # For confirm_col_btn
+        tab_frame.grid_rowconfigure(2, weight=1)  # For row_review_container (expands vertically)
+        tab_frame.grid_columnconfigure(0, weight=1)  # Only one column, expands horizontally
+
+        # Create sheet notebook for individual sheet tabs
+        sheet_notebook = ttk.Notebook(tab_frame)
+        sheet_notebook.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        
+        # Populate each sheet as a tab in the sheet_notebook
+        for sheet in file_mapping.sheets:
+            sheet_frame = ttk.Frame(sheet_notebook)
+            sheet_notebook.add(sheet_frame, text=sheet.sheet_name)
+            self._populate_sheet_tab(sheet_frame, sheet)
+        
+        # Add confirmation button for column mappings
+        confirm_frame = ttk.Frame(tab_frame)
+        confirm_frame.grid(row=1, column=0, sticky=tk.EW, padx=5, pady=5)
+        confirm_frame.grid_columnconfigure(0, weight=1)
+        confirm_btn = ttk.Button(confirm_frame, text="Confirm Column Mappings", command=self._save_all_mappings_for_all_sheets)
+        confirm_btn.grid(row=0, column=0, sticky=tk.EW, padx=5, pady=5)
+        
+        # Row Review section will be created only after column mapping is confirmed
+        self.row_review_frame = None
+        self.row_review_notebook = None
+        self.row_review_treeviews = {}
+        self.row_validity = {}
+
+        # Ensure file_mapping knows its tab for later lookup
+        file_mapping.tab = tab
+        # Store mapping from tab ID to file_mapping for robust lookup
+        tab_id = str(tab)
+        self.tab_id_to_file_mapping[tab_id] = file_mapping
+
+    def _populate_sheet_tab(self, sheet_frame, sheet):
+        """Populate an individual sheet tab with its data and column mappings."""
+        # Configure sheet frame grid
+        sheet_frame.grid_rowconfigure(0, weight=0)  # Header row control
+        sheet_frame.grid_rowconfigure(1, weight=1)  # Column mappings table
+        sheet_frame.grid_columnconfigure(0, weight=1)
+        
+        # Header Row Control
+        header_control_frame = ttk.Frame(sheet_frame)
+        header_control_frame.grid(row=0, column=0, sticky=tk.EW, padx=5, pady=5)
+        
+        # Get current header row (convert from 0-based to 1-based for display)
+        current_header_row = getattr(sheet, 'header_row_index', 0) + 1
+        header_row_var = tk.IntVar(value=current_header_row)
+        
+        # Get sheet data length for validation (use a reasonable default)
+        # We'll load the file only when the user actually clicks the +/- buttons
+        sheet_data_length = 50  # Reasonable default for most Excel files
+        
+        # Header row control widgets
+        ttk.Label(header_control_frame, text="Header Row:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        decrease_btn = ttk.Button(header_control_frame, text="−", width=3,
+                                 command=lambda: self._on_header_row_decrease(sheet, header_row_var, entry_widget, 
+                                                                             decrease_btn, increase_btn))
+        decrease_btn.pack(side=tk.LEFT, padx=(0, 2))
+        
+        entry_widget = ttk.Entry(header_control_frame, textvariable=header_row_var, width=4, 
+                                justify=tk.CENTER, state='readonly')
+        entry_widget.pack(side=tk.LEFT, padx=(0, 2))
+        
+        increase_btn = ttk.Button(header_control_frame, text="+", width=3,
+                                 command=lambda: self._on_header_row_increase(sheet, header_row_var, entry_widget,
+                                                                             decrease_btn, increase_btn))
+        increase_btn.pack(side=tk.LEFT)
+        
+        # Update button states based on current row
+        self._update_header_row_buttons_simple(current_header_row, decrease_btn, increase_btn)
+        
+        # Column mappings table
+        mappings_frame = ttk.LabelFrame(sheet_frame, text="Column Mappings (Double-click to edit) - Required columns are highlighted")
+        mappings_frame.grid(row=1, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        mappings_frame.grid_rowconfigure(0, weight=1)
+        mappings_frame.grid_columnconfigure(0, weight=1)
+        
+        # Add the propagate button to the left, above the Treeview in the mappings_frame
+        propagate_btn = ttk.Button(mappings_frame, text="Apply These Mappings to All Other Sheets", command=lambda s=sheet: self._apply_mappings_to_all_sheets(s))
+        propagate_btn.grid(row=99, column=0, sticky=tk.W, padx=5, pady=(0, 5))
+        
+        # Create treeview for column mappings
+        columns = ("Original Header", "Mapped Type", "Confidence", "Required", "Actions")
+        tree = ttk.Treeview(mappings_frame, columns=columns, show="headings", height=10)
+        
+        for col in columns:
+            tree.heading(col, text=col)
+            tree.column(col, width=150)
+        
+        # Add scrollbars
+        v_scrollbar = ttk.Scrollbar(mappings_frame, orient=tk.VERTICAL, command=tree.yview)
+        h_scrollbar = ttk.Scrollbar(mappings_frame, orient=tk.HORIZONTAL, command=tree.xview)
+        tree.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
+        
+        # Grid layout for treeview and scrollbars
+        tree.grid(row=0, column=0, sticky=tk.NSEW)
+        v_scrollbar.grid(row=0, column=1, sticky=tk.NS)
+        h_scrollbar.grid(row=1, column=0, sticky=tk.EW)
+        
+        # Required types (base required + successfully mapped new columns)
+        if self.column_mapper and hasattr(self.column_mapper, 'config'):
+            base_required_types = {col_type.value for col_type in self.column_mapper.config.get_required_columns()}
+        else:
+            base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        
+        # Add new columns as "required" if they are successfully mapped (confidence > 0)
+        required_types = base_required_types.copy()
+        if hasattr(sheet, 'column_mappings'):
+            for mapping in sheet.column_mappings:
+                mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                confidence = getattr(mapping, 'confidence', 0)
+                # Treat scope, manhours, wage as required if successfully mapped
+                if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                    required_types.add(mapped_type)
+        
+        # Populate treeview with column mappings
+        if hasattr(sheet, 'column_mappings'):
+            for mapping in sheet.column_mappings:
+                confidence = getattr(mapping, 'confidence', 0)
+                mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                required = mapped_type in required_types
+                original_header = getattr(mapping, 'original_header', 'Unknown')
+                # Determine if this mapping was user-edited
+                if hasattr(mapping, 'is_user_edited'):
+                    actions = "Edited" if getattr(mapping, 'is_user_edited', False) else "Auto-detected"
+                else:
+                    # Only show 'Edited' if confidence==1.0 and the Actions field was set to 'Edited' in the edit dialog, it's user-edited
+                    actions = "Edited" if (confidence == 1.0 and hasattr(mapping, 'user_edited') and getattr(mapping, 'user_edited', False)) else "Auto-detected"
+                tags = []
+                if required:
+                    tags.append('required')
+                tree.insert("", tk.END, values=(
+                    original_header,
+                    mapped_type,
+                    f"{confidence:.1%}",
+                    "Yes" if required else "No",
+                    actions
+                ), tags=tags)
+        
+        # Only highlight required fields (light blue)
+        tree.tag_configure('required', background='#e0f0ff')
+        
+        # Store treeview reference for later access
+        self.sheet_treeviews[sheet.sheet_name] = tree
+        
+        # Bind double-click to edit
+        tree.bind('<Double-1>', lambda e, t=tree, s=sheet: self._edit_column_mapping(t, s))
+    
+    def _update_header_row_buttons(self, current_row, decrease_btn, increase_btn, max_rows):
+        """Update the state of header row buttons based on current row"""
+        # Disable decrease button if at minimum (row 1)
+        if current_row <= 1:
+            decrease_btn.config(state='disabled')
+        else:
+            decrease_btn.config(state='normal')
+        
+        # Disable increase button if at maximum
+        if current_row >= max_rows:
+            increase_btn.config(state='disabled')
+        else:
+            increase_btn.config(state='normal')
+    
+    def _update_header_row_buttons_simple(self, current_row, decrease_btn, increase_btn):
+        """Update the state of header row buttons based on current row (simple version)"""
+        # Disable decrease button if at minimum (row 1)
+        if current_row <= 1:
+            decrease_btn.config(state='disabled')
+        else:
+            decrease_btn.config(state='normal')
+        
+        # Increase button is always enabled (validation happens in reprocess method)
+        increase_btn.config(state='normal')
+    
+    def _on_header_row_decrease(self, sheet, header_row_var, entry_widget, decrease_btn, increase_btn):
+        """Decrease header row number and immediately refresh"""
+        current_row = header_row_var.get()
+        if current_row > 1:  # Minimum row 1
+            new_row = current_row - 1
+            header_row_var.set(new_row)
+            
+            # Update entry widget
+            entry_widget.config(state='normal')
+            entry_widget.delete(0, tk.END)
+            entry_widget.insert(0, str(new_row))
+            entry_widget.config(state='readonly')
+            
+            # Immediately reprocess with new header row (validation happens inside)
+            success = self._reprocess_sheet_with_header_row(sheet, new_row - 1)  # Convert to 0-based
+            
+            # Update button states based on success and new row
+            if success:
+                self._update_header_row_buttons_simple(new_row, decrease_btn, increase_btn)
+            else:
+                # Revert on failure
+                header_row_var.set(current_row)
+                entry_widget.config(state='normal')
+                entry_widget.delete(0, tk.END)
+                entry_widget.insert(0, str(current_row))
+                entry_widget.config(state='readonly')
+    
+    def _on_header_row_increase(self, sheet, header_row_var, entry_widget, decrease_btn, increase_btn):
+        """Increase header row number and immediately refresh"""
+        current_row = header_row_var.get()
+        new_row = current_row + 1
+        header_row_var.set(new_row)
+        
+        # Update entry widget
+        entry_widget.config(state='normal')
+        entry_widget.delete(0, tk.END)
+        entry_widget.insert(0, str(new_row))
+        entry_widget.config(state='readonly')
+        
+        # Immediately reprocess with new header row (validation happens inside)
+        success = self._reprocess_sheet_with_header_row(sheet, new_row - 1)  # Convert to 0-based
+        
+        # Update button states based on success and new row
+        if success:
+            self._update_header_row_buttons_simple(new_row, decrease_btn, increase_btn)
+        else:
+            # Revert on failure
+            header_row_var.set(current_row)
+            entry_widget.config(state='normal')
+            entry_widget.delete(0, tk.END)
+            entry_widget.insert(0, str(current_row))
+            entry_widget.config(state='readonly')
+    
+    def _reprocess_sheet_with_header_row(self, sheet, new_header_row_index):
+        """Reprocess sheet with new header row and update UI"""
+        try:
+            # Get the current file path from the file mapping
+            if not hasattr(self, 'file_mapping') or not self.file_mapping:
+                messagebox.showerror("Error", "No file mapping available")
+                return False
+            
+            # Get the file path from the metadata
+            file_path = Path(self.file_mapping.metadata.file_path)
+            if not file_path.exists():
+                messagebox.showerror("Error", f"Original file not found: {file_path}")
+                return False
+            
+            # Reload the file temporarily to get sheet data
+            try:
+                from core.file_processor import ExcelProcessor
+                temp_processor = ExcelProcessor()
+                temp_processor.load_file(file_path)
+                
+                # Get sheet data for the specific sheet
+                sheet_data = temp_processor.get_sheet_data(sheet.sheet_name)
+                
+                if not sheet_data:
+                    messagebox.showerror("Error", "No sheet data available for reprocessing")
+                    return False
+                
+                # Validate the new header row index
+                if new_header_row_index < 0 or new_header_row_index >= len(sheet_data):
+                    messagebox.showerror("Error", f"Invalid header row {new_header_row_index + 1}. Sheet has {len(sheet_data)} rows.")
+                    return False
+                
+            except Exception as e:
+                logger.error(f"Failed to reload file and get sheet data: {e}")
+                messagebox.showerror("Error", f"Failed to reload file: {str(e)}")
+                return False
+            
+            # Use the column mapper to reprocess with forced header row
+            if not self.column_mapper:
+                messagebox.showerror("Error", "Column mapper not available")
+                return False
+            
+            # Process with forced header row
+            mapping_result = self.column_mapper.process_sheet_mapping_with_forced_header(
+                sheet_data, new_header_row_index
+            )
+            
+            # Update sheet object with new mapping results
+            sheet.header_row_index = new_header_row_index
+            sheet.confidence = mapping_result.overall_confidence
+            
+            # Convert mappings to the format expected by the sheet
+            new_column_mappings = []
+            for mapping in mapping_result.mappings:
+                # Create a simple object with the required attributes
+                col_mapping = type('ColumnMapping', (), {})()
+                col_mapping.column_index = mapping.column_index
+                col_mapping.original_header = mapping.original_header
+                col_mapping.mapped_type = mapping.mapped_type.value
+                col_mapping.confidence = mapping.confidence
+                col_mapping.user_edited = True  # Mark as user-edited since user manually changed header row
+                col_mapping.reasoning = mapping.reasoning
+                new_column_mappings.append(col_mapping)
+            
+            sheet.column_mappings = new_column_mappings
+            
+            # CRITICAL FIX: Update the cached sheet data in the controller to reflect the new header row
+            # This prevents data corruption during row classification
+            if hasattr(self, 'controller') and self.controller:
+                # Find the file key by matching the file mapping
+                file_key = None
+                for key, file_data in self.controller.current_files.items():
+                    if file_data.get('file_mapping') == self.file_mapping:
+                        file_key = key
+                        break
+                
+                if file_key and hasattr(self.controller, 'current_files') and file_key in self.controller.current_files:
+                    processor_results = self.controller.current_files[file_key].get('processor_results', {})
+                    original_sheet_data = processor_results.get('sheet_data', {})
+                    
+                    # Update the cached sheet data with the new header row information
+                    if sheet.sheet_name in original_sheet_data:
+                        # Store the new header row index as metadata for this sheet
+                        # This will be used during row classification to skip the correct header row
+                        if 'header_row_indices' not in processor_results:
+                            processor_results['header_row_indices'] = {}
+                        processor_results['header_row_indices'][sheet.sheet_name] = new_header_row_index
+                        
+                        print(f"[DEBUG] Updated cached header row index for sheet '{sheet.sheet_name}' to {new_header_row_index}")
+            
+            # CRITICAL FIX: Set the sheet.sheet_data to the FULL original data
+            # The row classifications contain indices that reference the original data structure
+            # We should NOT remove the header row from sheet.sheet_data because the row indices
+            # in the classifications are adjusted to account for the header row position
+            sheet.sheet_data = sheet_data
+            print(f"[DEBUG] Set sheet.sheet_data for '{sheet.sheet_name}' with full original data")
+            print(f"[DEBUG] Data length: {len(sheet_data)}")
+            print(f"[DEBUG] Header row index: {new_header_row_index}")
+            if new_header_row_index < len(sheet_data):
+                print(f"[DEBUG] Header row content: {sheet_data[new_header_row_index]}")
+            if len(sheet_data) > 0:
+                print(f"[DEBUG] First row of sheet_data: {sheet_data[0]}")
+            if len(sheet_data) > 1:
+                print(f"[DEBUG] Second row of sheet_data: {sheet_data[1]}")
+            
+            # Refresh the UI for this sheet
+            self._refresh_single_sheet_tab(sheet)
+            
+            # Update status
+            self._update_status(f"Header row updated to row {new_header_row_index + 1} for sheet '{sheet.sheet_name}'")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error reprocessing sheet with header row {new_header_row_index}: {e}")
+            messagebox.showerror("Error", f"Failed to reprocess sheet: {str(e)}")
+            return False
+    
+    def _refresh_single_sheet_tab(self, sheet):
+        """Refresh the UI for a single sheet tab"""
+        try:
+            # Find the sheet tab in the notebook
+            if not hasattr(self, 'file_mapping') or not self.file_mapping:
+                return
+            
+            # Get the sheet treeview
+            tree = self.sheet_treeviews.get(sheet.sheet_name)
+            if not tree:
+                return
+            
+            # Clear existing items
+            for item in tree.get_children():
+                tree.delete(item)
+            
+            # Required types (base required + successfully mapped new columns)
+            if self.column_mapper and hasattr(self.column_mapper, 'config'):
+                base_required_types = {col_type.value for col_type in self.column_mapper.config.get_required_columns()}
+            else:
+                base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+            
+            # Add new columns as "required" if they are successfully mapped (confidence > 0)
+            required_types = base_required_types.copy()
+            if hasattr(sheet, 'column_mappings'):
+                for mapping in sheet.column_mappings:
+                    mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                    confidence = getattr(mapping, 'confidence', 0)
+                    # Treat scope, manhours, wage as required if successfully mapped
+                    if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                        required_types.add(mapped_type)
+            
+            # Repopulate treeview with updated column mappings
+            if hasattr(sheet, 'column_mappings'):
+                for mapping in sheet.column_mappings:
+                    confidence = getattr(mapping, 'confidence', 0)
+                    mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                    required = mapped_type in required_types
+                    original_header = getattr(mapping, 'original_header', 'Unknown')
+                    
+                    # Determine if this mapping was user-edited
+                    actions = "Manual Header" if getattr(mapping, 'user_edited', False) else "Auto-detected"
+                    
+                    tags = []
+                    if required:
+                        tags.append('required')
+                    
+                    tree.insert("", tk.END, values=(
+                        original_header,
+                        mapped_type,
+                        f"{confidence:.1%}",
+                        "Yes" if required else "No",
+                        actions
+                    ), tags=tags)
+            
+        except Exception as e:
+            logger.error(f"Error refreshing sheet tab: {e}")
+            # Don't show error dialog as this is a background refresh
+
+    def _edit_column_mapping(self, tree, sheet):
+        selection = tree.selection()
+        if not selection:
+            return
+        item = tree.item(selection[0])
+        values = item['values']
+        if not values:
+            return
+        column_name = values[0]
+        # Find the column mapping object
+        col_mapping = None
+        for cm in getattr(sheet, 'column_mappings', []):
+            if getattr(cm, 'original_header', None) == column_name:
+                col_mapping = cm
+                break
+        if not col_mapping:
+            return
+        # Radio button options for mapped type
+        mapped_type_options = [
+            "description", "quantity", "unit_price", "total_price", "unit", "code", "scope", "manhours", "wage", "ignore"
+        ]
+        # Base required types + new columns if successfully mapped
+        base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        required_types = base_required_types.copy()
+        if hasattr(sheet, 'column_mappings'):
+            for mapping in sheet.column_mappings:
+                mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                confidence = getattr(mapping, 'confidence', 0)
+                if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                    required_types.add(mapped_type)
+        # Dialog to edit mapped type
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"Edit Column: {column_name}")
+        dialog.geometry("500x650")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Main content frame
+        main_frame = ttk.Frame(dialog)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Header
+        header_label = tk.Label(main_frame, text=f"Column: {column_name}", font=("Arial", 12, "bold"))
+        header_label.pack(pady=(0, 10))
+        
+        # Current mapping info
+        current_type = getattr(col_mapping, 'mapped_type', 'unknown')
+        current_confidence = getattr(col_mapping, 'confidence', 0)
+        info_text = f"Current: {current_type} (Confidence: {current_confidence:.1%})"
+        info_label = ttk.Label(main_frame, text=info_text, foreground="gray")
+        info_label.pack(pady=(0, 15))
+        
+        # Selection label
+        ttk.Label(main_frame, text="Select new mapped type:").pack(pady=(0, 10))
+        
+        # Radio buttons for each mapped type
+        radio_frame = ttk.Frame(main_frame)
+        radio_frame.pack(pady=5, fill=tk.X)
+        type_var = tk.StringVar(value=current_type)
+        
+        for opt in mapped_type_options:
+            radio_btn = ttk.Radiobutton(radio_frame, text=opt, variable=type_var, value=opt)
+            radio_btn.pack(anchor=tk.W, padx=10, pady=2)
+            
+            # Note: ttk.Radiobutton styling is handled by the theme system
+        
+        # Learning info frame
+        learning_frame = ttk.LabelFrame(main_frame, text="Learning Information")
+        learning_frame.pack(fill=tk.X, pady=15)
+        
+        learning_text = "When you save a required type mapping, it will be added to the system's learning database for future use."
+        learning_label = ttk.Label(learning_frame, text=learning_text, wraplength=450, justify=tk.LEFT)
+        learning_label.pack(padx=10, pady=10)
+        
+        # Button frame
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(20, 0))
+        
+        def save():
+            new_type = type_var.get()
+            # Check for duplicate required type
+            if new_type in required_types:
+                for cm in getattr(sheet, 'column_mappings', []):
+                    if cm is not col_mapping and getattr(cm, 'mapped_type', None) == new_type:
+                        other_col_name = getattr(cm, 'original_header', '')
+                        proceed = messagebox.askyesno(
+                            "Duplicate Required Type",
+                            f"The required type '{new_type}' is already assigned to column '{other_col_name}'.\nIf you continue, column '{other_col_name}' will be set to 'unknown'.\nContinue?"
+                        )
+                        if not proceed:
+                            return
+                        # Set the other column to unknown and update the treeview
+                        cm.mapped_type = "unknown"
+                        cm.confidence = 0.0
+                        cm.user_edited = True  # Mark as user-edited since user demoted it
+                        # Find the row in the treeview for the other column
+                        for row_id in tree.get_children():
+                            row_vals = tree.item(row_id)['values']
+                            if row_vals and row_vals[0] == other_col_name:
+                                tree.set(row_id, column="Mapped Type", value="unknown")
+                                tree.set(row_id, column="Required", value="No")
+                                tree.set(row_id, column="Confidence", value="0.0%")
+                                tree.set(row_id, column="Actions", value="Edited")
+                                tree.item(row_id, tags=())
+                                break
+                        break
+            # Update the column mapping
+            col_mapping.mapped_type = new_type
+            col_mapping.confidence = 1.0  # User is always right
+            col_mapping.user_edited = True  # Mark as user-edited
+            # Learn from user confirmation for required types
+            learning_message = ""
+            if new_type in required_types and self.column_mapper:
+                try:
+                    self.column_mapper.update_canonical_mapping(column_name, new_type)
+                    learning_message = f"\n\n✓ Learning: '{column_name}' has been added to the system's mapping database."
+                    logger.info(f"Learned new mapping: '{column_name}' -> '{new_type}'")
+                except Exception as e:
+                    learning_message = f"\n\n⚠ Warning: Failed to save mapping to database: {e}"
+                    logger.warning(f"Failed to update canonical mapping: {e}")
+            # Update the treeview row
+            tree.set(selection[0], column="Mapped Type", value=new_type)
+            tree.set(selection[0], column="Confidence", value="100.0%")
+            # Update the 'Required' field in the treeview row
+            required_val = "Yes" if new_type in required_types else "No"
+            tree.set(selection[0], column="Required", value=required_val)
+            tree.set(selection[0], column="Actions", value="Edited")
+            # Update row highlighting for required
+            if required_val == "Yes":
+                tree.item(selection[0], tags=("required",))
+            else:
+                tree.item(selection[0], tags=())
+            dialog.destroy()
+        
+        # Buttons
+        save_btn = ttk.Button(button_frame, text="Save & Learn", command=save)
+        save_btn.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        cancel_btn = ttk.Button(button_frame, text="Cancel", command=dialog.destroy)
+        cancel_btn.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # Set focus to save button
+        save_btn.focus_set()
+        
+        # Bind Enter key to save
+        dialog.bind('<Return>', lambda e: save())
+        dialog.bind('<Escape>', lambda e: dialog.destroy())
+
+    def _apply_mappings_to_all_sheets(self, source_sheet):
+        # Propagate user-edited column mappings to all other sheets with the same Original Header (case and whitespace insensitive)
+        if not self.file_mapping or not hasattr(self.file_mapping, 'sheets'):
+            self._update_status("No file loaded to propagate mappings.")
+            return
+        user_edited = [cm for cm in getattr(source_sheet, 'column_mappings', []) if getattr(cm, 'confidence', 0) == 1.0]
+        if not user_edited:
+            self._update_status("No user-edited columns to propagate.")
+            return
+        count = 0
+        # Base required types + new columns if successfully mapped
+        base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        required_types = base_required_types.copy()
+        if hasattr(source_sheet, 'column_mappings'):
+            for mapping in source_sheet.column_mappings:
+                mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                confidence = getattr(mapping, 'confidence', 0)
+                if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                    required_types.add(mapped_type)
+        affected_sheets = set()
+        for edited_cm in user_edited:
+            edited_header = getattr(edited_cm, 'original_header', None)
+            if edited_header is None:
+                continue
+            edited_header_key = edited_header.strip().lower()
+            for target_sheet in self.file_mapping.sheets:
+                if not hasattr(target_sheet, 'column_mappings'):
+                    continue
+                # Skip the same column object in the source sheet
+                if target_sheet is source_sheet:
+                    continue
+                for target_cm in target_sheet.column_mappings:
+                    target_header = getattr(target_cm, 'original_header', None)
+                    if target_header is not None and target_header.strip().lower() == edited_header_key:
+                        # If required, demote any other column with this type in the target sheet
+                        if edited_cm.mapped_type in required_types:
+                            for other_cm in target_sheet.column_mappings:
+                                if other_cm is not target_cm and other_cm.mapped_type == edited_cm.mapped_type:
+                                    other_cm.mapped_type = "unknown"
+                                    other_cm.confidence = 0.0
+                                    other_cm.user_edited = True  # Mark as user-edited since user demoted it
+                        target_cm.mapped_type = edited_cm.mapped_type
+                        target_cm.confidence = 1.0
+                        target_cm.user_edited = True  # Mark as user-edited (propagated)
+                        count += 1
+                        affected_sheets.add(getattr(target_sheet, 'sheet_name', None))
+        # Always refresh the current sheet as well
+        affected_sheets.add(getattr(source_sheet, 'sheet_name', None))
+        # Refresh Treeviews for affected sheets
+        for sheet_name in affected_sheets:
+            tree = self.sheet_treeviews.get(sheet_name)
+            if tree:
+                # Find the corresponding sheet object
+                target_sheet = next((s for s in self.file_mapping.sheets if getattr(s, 'sheet_name', None) == sheet_name), None)
+                if target_sheet:
+                    # Clear and repopulate the treeview
+                    tree.delete(*tree.get_children())
+                    for mapping in target_sheet.column_mappings:
+                        confidence = getattr(mapping, 'confidence', 0)
+                        mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                        required = mapped_type in required_types
+                        original_header = getattr(mapping, 'original_header', 'Unknown')
+                        # Determine if this mapping was user-edited
+                        if hasattr(mapping, 'is_user_edited'):
+                            actions = "Edited" if getattr(mapping, 'is_user_edited', False) else "Auto-detected"
+                        else:
+                            actions = "Edited" if getattr(mapping, 'user_edited', False) else "Auto-detected"
+                        tags = []
+                        if required:
+                            tags.append('required')
+                        tree.insert("", tk.END, values=(
+                            original_header,
+                            mapped_type,
+                            f"{confidence:.1%}",
+                            "Yes" if required else "No",
+                            actions
+                        ), tags=tags)
+        messagebox.showinfo("Propagation Complete", f"Propagated {count} column mappings to all other sheets.")
+        self._update_status(f"Propagated {count} column mappings to all other sheets.")
+
+    def _save_all_mappings_for_all_sheets(self):
+        if not self.file_mapping or not hasattr(self.file_mapping, 'sheets'):
+            messagebox.showwarning("No File", "No file loaded.")
+            return
+        
+        # Save column mappings first
+        total_saved = 0
+        total_failed = 0
+        total_already = 0
+        for sheet in self.file_mapping.sheets:
+            saved, failed, already = self._save_all_mappings(sheet, show_dialogs=False)
+            total_saved += saved
+            total_failed += failed
+            total_already += already
+        
+        # Trigger row mapping with updated column mappings
+        self._trigger_row_mapping()
+
+    def _trigger_row_mapping(self):
+        """Trigger row mapping with the current column mappings"""
+        if not self.file_mapping or not hasattr(self.file_mapping, 'sheets'):
+            self._update_status("No file loaded for row mapping.")
+            return
+            
+        # CRITICAL VALIDATION: Check for missing required columns before proceeding
+        validation_result = self._validate_required_columns()
+        if not validation_result['is_valid']:
+            self._show_missing_columns_warning(validation_result)
+            return
+        
+        try:
+            # Import row classifier here to avoid circular imports
+            from core.row_classifier import RowClassifier
+            from utils.config import ColumnType
+            
+            row_classifier = RowClassifier()
+            
+            # Get the original sheet data from the controller
+            if hasattr(self, 'controller') and self.controller:
+                # Try to get the original sheet data from the controller
+                # Find the file key by matching the file mapping
+                file_key = None
+                for key, file_data in self.controller.current_files.items():
+                    if file_data.get('file_mapping') == self.file_mapping:
+                        file_key = key
+                        break
+                
+                if file_key and hasattr(self.controller, 'current_files') and file_key in self.controller.current_files:
+                    processor_results = self.controller.current_files[file_key].get('processor_results', {})
+                    original_sheet_data = processor_results.get('sheet_data', {})
+                else:
+                    # Fallback: try to reconstruct from current file mapping
+                    original_sheet_data = {}
+                    for sheet in self.file_mapping.sheets:
+                        # This is a fallback - we might not have the original data
+                        original_sheet_data[sheet.sheet_name] = []
+            else:
+                # Fallback when controller is not available
+                original_sheet_data = {}
+                for sheet in self.file_mapping.sheets:
+                    original_sheet_data[sheet.sheet_name] = []
+            
+            # Process each sheet for row mapping
+            updated_sheets = []
+            for sheet in self.file_mapping.sheets:
+                sheet_data = original_sheet_data.get(sheet.sheet_name, [])
+                if not sheet_data:
+                    # Skip if we don't have the original data
+                    continue
+                
+                # CRITICAL FIX: Check if header row was manually changed and adjust sheet data accordingly
+                header_row_index = 0  # Default header row index
+                if hasattr(self, 'controller') and self.controller:
+                    # Find the file key by matching the file mapping
+                    file_key = None
+                    for key, file_data in self.controller.current_files.items():
+                        if file_data.get('file_mapping') == self.file_mapping:
+                            file_key = key
+                            break
+                    
+                    if file_key and hasattr(self.controller, 'current_files') and file_key in self.controller.current_files:
+                        processor_results = self.controller.current_files[file_key].get('processor_results', {})
+                        header_row_indices = processor_results.get('header_row_indices', {})
+                        
+                        # Use the manually set header row index if available
+                        if sheet.sheet_name in header_row_indices:
+                            header_row_index = header_row_indices[sheet.sheet_name]
+                            print(f"[DEBUG] Using manually set header row index {header_row_index} for sheet '{sheet.sheet_name}'")
+                        elif hasattr(sheet, 'header_row_index'):
+                            header_row_index = sheet.header_row_index
+                
+                # Remove the header row from sheet data before classification to prevent confusion
+                # The row classifier should only classify data rows, not header rows
+                if header_row_index < len(sheet_data):
+                    # Create a copy of sheet data without the header row
+                    data_rows = sheet_data[:header_row_index] + sheet_data[header_row_index + 1:]
+                    print(f"[DEBUG] Removed header row {header_row_index} from sheet '{sheet.sheet_name}' data for classification")
+                else:
+                    data_rows = sheet_data
+                
+                # Convert column mappings to the format expected by row classifier
+                # Use the current column mappings from the sheet (which reflect any manual changes)
+                column_mapping_dict = {}
+                
+                # Use the sheet's current column mappings
+                for col_mapping in sheet.column_mappings:
+                    try:
+                        # Convert string column type to ColumnType enum
+                        col_type = ColumnType(col_mapping.mapped_type)
+                        # Use the column index as-is (it's already 0-based from the mapping result)
+                        column_mapping_dict[col_mapping.column_index] = col_type
+                    except ValueError:
+                        # Skip unknown column types
+                        continue
+                
+                # DEBUG: Log the column mapping and first few rows to diagnose indexing
+                # Only debug the "Miscellaneous" sheet where Bank Guarantee is located
+                if sheet.sheet_name == "Miscellaneous":
+                    # print(f"[DEBUG] Column mapping for {sheet.sheet_name}: {column_mapping_dict}")
+                    if sheet_data:
+                        # print(f"[DEBUG] First row data: {sheet_data[0] if len(sheet_data) > 0 else 'No data'}")
+                        # print(f"[DEBUG] Row data length: {len(sheet_data[0]) if sheet_data else 0}")
+                        
+                        # Show headers to understand column mapping
+                        if hasattr(sheet, 'column_mappings'):
+                            # print(f"[DEBUG] Headers for {sheet.sheet_name}:")
+                            for i, col_mapping in enumerate(sheet.column_mappings):
+                                header = getattr(col_mapping, 'original_header', f'Column_{i}')
+                                mapped_type = getattr(col_mapping, 'mapped_type', 'unknown')
+                                confidence = getattr(col_mapping, 'confidence', 0)
+                                # print(f"[DEBUG] Column {col_mapping.column_index}: '{header}' -> {mapped_type} (confidence: {confidence:.2f})")
+                        
+                        # Show first 10 rows to find Bank Guarantee
+                        for i in range(min(10, len(sheet_data))):
+                            if any('Bank Guarantee' in str(cell) for cell in sheet_data[i]):
+                                # print(f"[DEBUG] FOUND BANK GUARANTEE at row {i}: {sheet_data[i]}")
+                                pass
+                            else:
+                                # print(f"[DEBUG] Row {i}: {sheet_data[i]}")
+                                pass
+                
+                # Perform row classification using the data rows (without header row)
+                row_classification_result = row_classifier.classify_rows(data_rows, column_mapping_dict, sheet.sheet_name)
+                
+                # Update the sheet's row classifications
+                sheet.row_classifications = []
+                for row_class in row_classification_result.classifications:
+                    from core.mapping_generator import RowClassificationInfo
+                    # CRITICAL FIX: Adjust row index to account for removed header row
+                    # The row classifier processed data WITHOUT the header row, so its indices
+                    # are already shifted down. We need to shift them back up to match the original data.
+                    adjusted_row_index = row_class.row_index
+                    if row_class.row_index >= header_row_index:
+                        adjusted_row_index = row_class.row_index + 1
+                    
+                    print(f"[DEBUG] Row classification: original_index={row_class.row_index}, header_row={header_row_index}, adjusted_index={adjusted_row_index}")
+                    
+                    row_info = RowClassificationInfo(
+                        row_index=adjusted_row_index,
+                        row_type=row_class.row_type.value,
+                        confidence=row_class.confidence,
+                        completeness_score=row_class.completeness_score,
+                        hierarchical_level=row_class.hierarchical_level,
+                        section_title=row_class.section_title,
+                        validation_errors=row_class.validation_errors,
+                        reasoning=row_class.reasoning,
+                        position=row_class.position
+                    )
+                    sheet.row_classifications.append(row_info)
+                
+                # Update sheet statistics
+                sheet.row_count = len(data_rows)  # Use data rows count (excluding header)
+                sheet.overall_confidence = row_classification_result.overall_quality_score
+                
+                # Update processing status based on row classification quality
+                if row_classification_result.overall_quality_score >= 0.8:
+                    sheet.processing_status = "SUCCESS"
+                elif row_classification_result.overall_quality_score >= 0.6:
+                    sheet.processing_status = "PARTIAL"
+                else:
+                    sheet.processing_status = "NEEDS_REVIEW"
+                
+                updated_sheets.append(sheet.sheet_name)
+            
+            # Update the UI to reflect the new row mappings
+            self._refresh_sheet_tabs()
+            
+            # Show success message
+            if updated_sheets:
+                self._update_status(f"Row mapping completed for {len(updated_sheets)} sheets.")
+                
+            # After row mapping is complete and data is available:
+            # Show the Row Review section with correct data
+                pass
+            self._show_row_review(self.file_mapping, original_sheet_data)
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error during row mapping: {e}", exc_info=True)
+            messagebox.showerror(
+                "Row Mapping Error",
+                f"An error occurred during row mapping:\n{str(e)}\n\n"
+                f"Please check the logs for more details."
+            )
+            self._update_status(f"Row mapping failed: {str(e)}")
+
+    def _validate_required_columns(self):
+        """
+        Validate that all required columns are properly mapped across all sheets.
+        Returns a dictionary with validation results.
+        """
+        # Define required columns
+        base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        
+        validation_result = {
+            'is_valid': True,
+            'missing_columns': {},  # sheet_name -> [missing_column_types]
+            'unmapped_sheets': [],
+            'total_sheets': 0,
+            'valid_sheets': 0
+        }
+        
+        if not self.file_mapping or not hasattr(self.file_mapping, 'sheets'):
+            validation_result['is_valid'] = False
+            return validation_result
+        
+        for sheet in self.file_mapping.sheets:
+            validation_result['total_sheets'] += 1
+            sheet_name = sheet.sheet_name
+            
+            # Get mapped types for this sheet
+            mapped_types = set()
+            if hasattr(sheet, 'column_mappings'):
+                for mapping in sheet.column_mappings:
+                    mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                    confidence = getattr(mapping, 'confidence', 0)
+                    # Only count columns with reasonable confidence or user-edited
+                    if confidence > 0 or getattr(mapping, 'user_edited', False):
+                        mapped_types.add(mapped_type)
+            
+            # Check for missing required columns
+            missing_columns = []
+            for required_type in base_required_types:
+                if required_type not in mapped_types:
+                    missing_columns.append(required_type)
+            
+            if missing_columns:
+                validation_result['is_valid'] = False
+                validation_result['missing_columns'][sheet_name] = missing_columns
+            else:
+                validation_result['valid_sheets'] += 1
+        
+        return validation_result
+    
+    def _show_missing_columns_warning(self, validation_result):
+        """
+        Show a detailed warning dialog about missing required columns.
+        """
+        from tkinter import messagebox
+        
+        missing_info = validation_result['missing_columns']
+        total_sheets = validation_result['total_sheets']
+        valid_sheets = validation_result['valid_sheets']
+        
+        # Build detailed message
+        message_parts = [
+            f"⚠️ COLUMN MAPPING INCOMPLETE ⚠️",
+            f"",
+            f"Cannot proceed to row mapping because some required columns are not mapped.",
+            f"",
+            f"Status: {valid_sheets}/{total_sheets} sheets have complete column mappings.",
+            f""
+        ]
+        
+        if missing_info:
+            message_parts.append("Missing required columns by sheet:")
+            message_parts.append("")
+            
+            for sheet_name, missing_columns in missing_info.items():
+                message_parts.append(f"📋 {sheet_name}:")
+                for col in missing_columns:
+                    message_parts.append(f"   • {col}")
+                message_parts.append("")
+        
+        message_parts.extend([
+            "Required columns for BOQ processing:",
+            "• description (item descriptions)",
+            "• quantity (quantities)",  
+            "• unit (units of measurement)",
+            "• unit_price (unit prices)",
+            "• total_price (total prices)",
+            "• code (position codes)",
+            "",
+            "Please:",
+            "1. Review the column mappings in each sheet tab",
+            "2. Double-click columns to edit their mapping",
+            "3. Ensure all required columns are properly mapped",
+            "4. Try row mapping again"
+        ])
+        
+        full_message = "\n".join(message_parts)
+        
+        messagebox.showerror(
+            "Missing Required Columns",
+            full_message
+        )
+        
+        self._update_status(f"Column mapping incomplete: {total_sheets - valid_sheets} sheets need attention")
+
+    def _refresh_sheet_tabs(self):
+        """Refresh the sheet tabs to show updated row mapping information"""
+        if not self.file_mapping or not hasattr(self.file_mapping, 'sheets'):
+            return
+        
+        # Find the current file tab
+        current_tab = None
+        for tab in self.notebook.tabs():
+            if hasattr(tab, 'file_mapping') and tab.file_mapping == self.file_mapping:
+                current_tab = tab
+                break
+        
+        if current_tab:
+            # Clear and repopulate the file tab
+            for widget in current_tab.winfo_children():
+                widget.destroy()
+            
+            # Repopulate with updated data
+            self._populate_file_tab(current_tab, self.file_mapping)
+
+    def _save_all_mappings(self, sheet, show_dialogs=True):
+        """Save all required field mappings from the given sheet to the JSON file if not already present. Returns (saved, failed, already_present)."""
+        if not self.column_mapper:
+            if show_dialogs:
+                messagebox.showwarning("No Column Mapper", "Column mapper not available. Please reload the file.")
+            return 0, 0, 0
+        # Base required types + new columns if successfully mapped
+        base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        required_types = base_required_types.copy()
+        if hasattr(sheet, 'column_mappings'):
+            for mapping in sheet.column_mappings:
+                mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                confidence = getattr(mapping, 'confidence', 0)
+                if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                    required_types.add(mapped_type)
+        saved_count = 0
+        failed_count = 0
+        already_present_count = 0
+        current_mappings = self.column_mapper.get_canonical_mappings()
+        for mapping in getattr(sheet, 'column_mappings', []):
+            mapped_type = getattr(mapping, 'mapped_type', '')
+            if mapped_type in required_types:
+                original_header = getattr(mapping, 'original_header', '')
+                confidence = getattr(mapping, 'confidence', 0)
+                if original_header and mapped_type:
+                    is_already_present = False
+                    if mapped_type in current_mappings:
+                        normalized_header = original_header.strip()
+                        for existing_header in current_mappings[mapped_type]:
+                            if existing_header.strip() == normalized_header:
+                                is_already_present = True
+                                break
+                    if is_already_present:
+                        already_present_count += 1
+                        logger.debug(f"Mapping already present: '{original_header}' -> '{mapped_type}'")
+                    else:
+                        try:
+                            self.column_mapper.update_canonical_mapping(original_header, mapped_type)
+                            saved_count += 1
+                            action_type = "user-edited" if confidence == 1.0 else "auto-detected"
+                            logger.info(f"Saved {action_type} mapping: '{original_header}' -> '{mapped_type}' (confidence: {confidence:.1%})")
+                        except Exception as e:
+                            failed_count += 1
+                            logger.warning(f"Failed to save mapping '{original_header}' -> '{mapped_type}': {e}")
+        if show_dialogs:
+            if saved_count > 0:
+                messagebox.showinfo(
+                    "Mappings Saved", 
+                    f"Successfully saved {saved_count} new mappings to the database.\n"
+                    f"These mappings will be used for future file processing.\n\n"
+                    f"Already present: {already_present_count} mappings"
+                )
+                self._update_status(f"Saved {saved_count} new mappings to database.")
+            else:
+                if already_present_count > 0:
+                    messagebox.showinfo(
+                        "No New Mappings to Save", 
+                        f"All {already_present_count} required field mappings are already in the database.\n"
+                        f"No new mappings were saved."
+                    )
+                    self._update_status("All mappings already present in database.")
+                else:
+                    messagebox.showinfo(
+                        "No Required Mappings Found", 
+                        "No required type mappings found to save.\n"
+                        "Make sure columns are mapped to required types first."
+                    )
+                    self._update_status("No required mappings found.")
+            if failed_count > 0:
+                messagebox.showwarning(
+                    "Some Mappings Failed", 
+                    f"{failed_count} mappings failed to save. Check the logs for details."
+                )
+        return saved_count, failed_count, already_present_count
+
+    def _on_row_review_click(self, event, sheet_name, tree, required_cols):
+        region = tree.identify('region', event.x, event.y)
+        if region != 'cell':
+            return
+        row_id = tree.identify_row(event.y)
+        if not row_id:
+            return
+        idx = int(row_id)
+        # Toggle validity
+        is_valid = self.row_validity[sheet_name].get(idx, True)
+        new_valid = not is_valid
+        self.row_validity[sheet_name][idx] = new_valid
+        
+        # New: Update manual invalid row keys set
+        if not new_valid:
+            # Find the corresponding row data and generate key
+            from core.row_classifier import RowClassifier
+            from utils.config import ColumnType
+            row_classifier = RowClassifier()
+            
+            # Get the current file mapping to find the sheet
+            current_tab_id = self.notebook.select()
+            file_mapping = self.tab_id_to_file_mapping.get(current_tab_id)
+            if file_mapping:
+                for sheet in file_mapping.sheets:
+                    if sheet.sheet_name == sheet_name:
+                        # Find the row classification for this index
+                        for rc in sheet.row_classifications:
+                            if rc.row_index == idx:
+                                row_data = getattr(rc, 'row_data', None)
+                                if row_data is None and hasattr(sheet, 'sheet_data'):
+                                    try:
+                                        row_data = sheet.sheet_data[rc.row_index]
+                                    except Exception:
+                                        row_data = []
+                                if row_data:
+                                    # Convert column mappings
+                                    column_mapping = {}
+                                    for cm in sheet.column_mappings:
+                                        try:
+                                            col_type = ColumnType(cm.mapped_type)
+                                            column_mapping[cm.column_index] = col_type
+                                        except ValueError:
+                                            continue
+                                    
+                                    # Generate row key and add to manual invalid set
+                                    row_key = row_classifier._generate_row_key(row_data, column_mapping)
+                                    self.manual_invalid_row_keys.add(row_key)
+                                break
+                        break
+        
+        # Update tag and status column
+        tag = 'validrow' if new_valid else 'invalidrow'
+        tree.item(row_id, tags=(tag,))
+        vals = list(tree.item(row_id, 'values'))
+        vals[-1] = "Valid" if new_valid else "Invalid"
+        tree.item(row_id, values=vals)
+
+    def _show_row_review(self, file_mapping, original_sheet_data=None):
+        # Remove existing Row Review frame if present
+        if self.row_review_frame:
+            self.row_review_frame.destroy()
+        
+        # Hide all widgets/frames related to column mapping in the current tab
+        tab = self.notebook.nametowidget(self.notebook.select())
+        self._hidden_column_mapping_widgets = []
+        for child in tab.winfo_children():
+            # Hide everything except the Row Review frame (if present)
+            if child != getattr(self, 'row_review_frame', None):
+                child.grid_remove()
+                self._hidden_column_mapping_widgets.append(child)
+        
+        # Add Row Review container
+        self.row_review_frame = ttk.LabelFrame(tab, text="Row Review")
+        self.row_review_frame.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        self.row_review_frame.grid_rowconfigure(0, weight=1)
+        self.row_review_frame.grid_columnconfigure(0, weight=1)
+        
+        # Add a notebook for row review per sheet
+        self.row_review_notebook = ttk.Notebook(self.row_review_frame)
+        self.row_review_notebook.grid(row=0, column=0, sticky=tk.NSEW)
+        self.row_review_treeviews = {}
+        self.row_validity = {}
+        
+        # Add a "Back to Column Mapping" button
+        back_frame = ttk.Frame(self.row_review_frame)
+        back_frame.grid(row=1, column=0, sticky=tk.EW, padx=5, pady=5)
+        back_frame.grid_columnconfigure(0, weight=1)
+        back_btn = ttk.Button(back_frame, text="← Back to Column Mapping", 
+                             command=lambda: self._show_column_mapping())
+        back_btn.pack(side=tk.LEFT, padx=5)
+
+        # Add a "Confirm Row Review" button below the Row Review window
+        confirm_row_frame = ttk.Frame(tab)
+        confirm_row_frame.grid(row=1, column=0, sticky=tk.EW, padx=5, pady=5)
+        confirm_row_frame.grid_columnconfigure(0, weight=1)
+        confirm_row_btn = ttk.Button(confirm_row_frame, text="Confirm Row Review", command=self._on_confirm_row_review)
+        confirm_row_btn.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        self.confirm_row_frame = confirm_row_frame
+
+        for sheet_idx, sheet in enumerate(file_mapping.sheets):
+            frame = ttk.Frame(self.row_review_notebook)
+            self.row_review_notebook.add(frame, text=sheet.sheet_name)
+            # Use standard mapped column names for display and value extraction
+            if self.column_mapper and hasattr(self.column_mapper, 'config'):
+                base_required_types = [col_type.value for col_type in self.column_mapper.config.get_required_columns()]
+            else:
+                base_required_types = ["description", "quantity", "unit_price", "total_price", "unit", "code"]
+            
+            # Add new columns as "required" if they are successfully mapped (confidence > 0)
+            required_types = base_required_types.copy()
+            if hasattr(sheet, 'column_mappings'):
+                for mapping in sheet.column_mappings:
+                    mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                    confidence = getattr(mapping, 'confidence', 0)
+                    # Treat scope, manhours, wage as required if successfully mapped
+                    if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                        if mapped_type not in required_types:
+                            required_types.append(mapped_type)
+            
+            # Define the correct column order for display
+            display_column_order = ["code", "description", "unit", "quantity", "unit_price", "total_price", "scope", "manhours", "wage"]
+            
+            # Use the display order, but only include columns that are actually mapped
+            available_columns = []
+            for col in display_column_order:
+                if col in required_types:
+                    available_columns.append(col)
+            
+            # Add any remaining required columns that weren't in the display order
+            for col in required_types:
+                if col not in available_columns:
+                    available_columns.append(col)
+            
+            mapped_type_to_index = {}
+            if hasattr(sheet, 'column_mappings'):
+                for cm in sheet.column_mappings:
+                    mapped_type_to_index[getattr(cm, 'mapped_type', None)] = cm.column_index
+            
+            # Use mapped type keys as columns (not uppercased)
+            columns = ["#"] + available_columns + ["status"]
+            tree = ttk.Treeview(frame, columns=columns, show="headings", height=12, selectmode="none")
+            for col in columns:
+                tree.heading(col, text=col.capitalize() if col != '#' else '#')
+                if col == "status":
+                    tree.column(col, width=80, anchor=tk.CENTER)
+                else:
+                    tree.column(col, width=120 if col != "#" else 40, anchor=tk.W, minwidth=50, stretch=False)
+            # Add scrollbars
+            v_scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=tree.yview)
+            h_scrollbar = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=tree.xview)
+            tree.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
+            tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+            v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+            self.row_review_treeviews[sheet.sheet_name] = tree
+            # Remove blue selection highlight
+            style = ttk.Style(tree)
+            style.map('Treeview', background=[('selected', '#FFEBEE')])  # Always red on select
+            style.layout('Treeview.Item', [('Treeitem.padding', {'sticky': 'nswe', 'children': [('Treeitem.indicator', {'side': 'left', 'sticky': ''}), ('Treeitem.image', {'side': 'left', 'sticky': ''}), ('Treeitem.text', {'side': 'left', 'sticky': ''})]})])
+            # Populate rows
+            self.row_validity[sheet.sheet_name] = {}
+            if hasattr(sheet, 'row_classifications'):
+                for rc in sheet.row_classifications:
+                    row_data = getattr(rc, 'row_data', None)
+                    if row_data is None and hasattr(sheet, 'sheet_data'):
+                        try:
+                            row_data = sheet.sheet_data[rc.row_index]
+                        except Exception:
+                            row_data = None
+                    if row_data is None:
+                        row_data = []
+                    row_values = [rc.row_index + 1]
+                    for col in available_columns:
+                        idx = mapped_type_to_index.get(col)
+                        val = row_data[idx] if idx is not None and idx < len(row_data) else ""
+                        
+                        # Apply number formatting for specific columns
+                        if col in ['unit_price', 'total_price', 'wage']:
+                            val = format_number(val, is_currency=True)
+                        elif col in ['quantity', 'manhours']:
+                            val = format_number(val, is_currency=False)
+                            # Special formatting for manhours - only 2 decimals
+                            if col == 'manhours' and val and val != '':
+                                try:
+                                    num_val = float(str(val).replace(',', '.'))
+                                    val = f"{num_val:.2f}"
+                                except:
+                                    pass
+                        
+                        row_values.append(val)
+                    # New: Use new row validity logic based on master vs comparison mode
+                    from core.row_classifier import RowClassifier
+                    from utils.config import ColumnType
+                    row_classifier = RowClassifier()
+                    
+                    # Convert column mappings to format expected by row classifier
+                    column_mapping = {}
+                    for cm in sheet.column_mappings:
+                        try:
+                            col_type = ColumnType(cm.mapped_type)
+                            column_mapping[cm.column_index] = col_type
+                        except ValueError:
+                            continue
+                    
+                    # Generate row key for tracking
+                    row_key = row_classifier._generate_row_key(row_data, column_mapping)
+                    
+                    # Determine validity based on master vs comparison mode
+                    if not self.is_comparison_mode:
+                        # Master BoQ: use master validation criteria
+                        is_valid = row_classifier.validate_master_row_validity(row_data, column_mapping)
+                        if is_valid:
+                            self.master_valid_row_keys.add(row_key)
+                    else:
+                        # Comparison BoQ: use comparison validation criteria
+                        is_valid = row_classifier.validate_comparison_row_validity(
+                            row_data, column_mapping, self.master_valid_row_keys, self.manual_invalid_row_keys)
+                    
                     self.row_validity[sheet.sheet_name][rc.row_index] = is_valid
                     status = "Valid" if is_valid else "Invalid"
                     tag = 'validrow' if is_valid else 'invalidrow'
@@ -4371,6 +6587,9 @@ Review the rows below and adjust validity as needed."""
         from pathlib import Path
         self._update_status(f"Processing {os.path.basename(filepath)} for comparison...")
         
+        # Set comparison mode flag
+        self.is_comparison_mode = True
+        
         def process_in_thread():
             try:
                 # Step 1: Load the file and get sheets
@@ -4602,6 +6821,75 @@ Review the rows below and adjust validity as needed."""
             # Ensure the stored mapping data is preserved for future comparisons
             if not hasattr(master_tab, 'stored_mapping_data') and 'final_dataframe' in master_mapping:
                 master_tab.stored_mapping_data = master_mapping
+            
+            # NEW: Detect and categorize new rows from comparison BoQ
+            master_offers = getattr(master_tab, 'comparison_offers', [])
+            if master_offers:
+                # Remove the new offer from the list to get only master offers
+                master_offers = [offer for offer in master_offers if offer != new_offer_name]
+            
+            # Detect new rows
+            new_row_indices = self.detect_new_rows_after_merge(merged_df, master_offers, new_offer_name)
+            
+            if new_row_indices:
+                print(f"[DEBUG] Found {len(new_row_indices)} new rows in comparison BoQ")
+                
+                # Extract new rows data
+                new_rows = []
+                for idx in new_row_indices:
+                    row_data = merged_df.iloc[idx].to_dict()
+                    new_rows.append(row_data)
+                
+                # Auto-categorize new rows
+                auto_categorized_rows, failed_categorization_rows = self.auto_categorize_new_rows(new_rows, new_offer_name)
+                
+                print(f"[DEBUG] Auto-categorized {len(auto_categorized_rows)} new rows")
+                print(f"[DEBUG] Failed to categorize {len(failed_categorization_rows)} new rows")
+                
+                # Handle failed categorizations
+                if failed_categorization_rows:
+                    # Generate Excel file for manual categorization
+                    excel_file_path = self.generate_categorization_excel_for_new_rows(failed_categorization_rows, new_offer_name)
+                    
+                    # Show dialog for manual categorization
+                    result = messagebox.askyesno(
+                        "Manual Categorization Required",
+                        f"{len(failed_categorization_rows)} new rows from '{new_offer_name}' could not be auto-categorized.\n\n"
+                        f"An Excel file has been created for manual categorization.\n\n"
+                        f"Would you like to open the file now for manual categorization?"
+                    )
+                    
+                    if result:
+                        # Open the Excel file
+                        import os
+                        os.startfile(excel_file_path)
+                        
+                        # Show instructions
+                        messagebox.showinfo(
+                            "Manual Categorization Instructions",
+                            f"1. Open the Excel file: {excel_file_path}\n"
+                            f"2. Fill in the 'manual_category' column for each row\n"
+                            f"3. Save the file\n"
+                            f"4. Return to this application and click 'Import Categorized Data'"
+                        )
+                        
+                        # TODO: Add import functionality for manually categorized data
+                        # For now, we'll leave the rows uncategorized
+                        print(f"[DEBUG] Manual categorization required for {len(failed_categorization_rows)} rows")
+                
+                # Update the merged DataFrame with auto-categorized rows
+                for row_data in auto_categorized_rows:
+                    # Find the corresponding row in merged_df and update its category
+                    # This is a simplified approach - in a full implementation, we'd need more robust matching
+                    for idx in new_row_indices:
+                        if merged_df.iloc[idx]['description'] == row_data.get('description', ''):
+                            merged_df.at[idx, 'category'] = row_data.get('category', '')
+                            break
+                
+                # Update the master tab with the updated DataFrame
+                master_tab.final_dataframe = merged_df
+                
+                print(f"[DEBUG] Updated merged DataFrame with {len(auto_categorized_rows)} auto-categorized rows")
             
             # Update the display
             self._update_comparison_display(master_tab, merged_df)
@@ -5163,6 +7451,146 @@ Review the rows below and adjust validity as needed."""
         print(merged_df.head(3).to_string())
         
         return merged_df
+
+    def detect_new_rows_after_merge(self, merged_df, master_offers: List[str], new_offer_name: str) -> List[int]:
+        """
+        Detect new rows after merge by finding rows where:
+        - The new offer has data (non-zero values)
+        - All master offers have zero values (indicating new row)
+        
+        Args:
+            merged_df: The merged DataFrame
+            master_offers: List of master offer names
+            new_offer_name: Name of the new offer being added
+            
+        Returns:
+            List of row indices that are new (not in master offers)
+        """
+        import pandas as pd
+        
+        new_row_indices = []
+        
+        for idx, row in merged_df.iterrows():
+            # Check if this row has data in the new offer
+            new_offer_has_data = False
+            for col in ['quantity', 'unit_price', 'total_price']:
+                col_name = f'{col}[{new_offer_name}]'
+                if col_name in merged_df.columns:
+                    value = pd.to_numeric(row[col_name], errors='coerce')
+                    if pd.isna(value):
+                        value = 0
+                    if value > 0:
+                        new_offer_has_data = True
+                        break
+            
+            # Check if all master offers have no data
+            master_offers_have_no_data = True
+            for offer in master_offers:
+                for col in ['quantity', 'unit_price', 'total_price']:
+                    col_name = f'{col}[{offer}]'
+                    if col_name in merged_df.columns:
+                        value = pd.to_numeric(row[col_name], errors='coerce')
+                        if pd.isna(value):
+                            value = 0
+                        if value > 0:
+                            master_offers_have_no_data = False
+                            break
+                if not master_offers_have_no_data:
+                    break
+            
+            # If new offer has data but master offers don't, this is a new row
+            if new_offer_has_data and master_offers_have_no_data:
+                new_row_indices.append(idx)
+        
+        return new_row_indices
+
+    def auto_categorize_new_rows(self, new_rows: List[Dict], new_offer_name: str) -> Tuple[List[Dict], List[Dict]]:
+        """
+        Auto-categorize new rows from comparison BoQ
+        
+        Args:
+            new_rows: List of new row dictionaries
+            new_offer_name: Name of the new offer
+            
+        Returns:
+            Tuple of (auto_categorized_rows, failed_categorization_rows)
+        """
+        import pandas as pd
+        
+        if not CATEGORIZATION_AVAILABLE:
+            # If auto-categorization is not available, return all rows as failed
+            return [], new_rows
+        
+        try:
+            # Convert new rows to DataFrame for auto-categorization
+            df = pd.DataFrame(new_rows)
+            
+            # Use existing auto-categorization logic
+            from core.auto_categorizer import AutoCategorizer
+            categorizer = AutoCategorizer()
+            
+            # Auto-categorize the new rows
+            categorization_result = categorizer.categorize_dataframe(df)
+            
+            # Separate successful and failed categorizations
+            auto_categorized_rows = []
+            failed_categorization_rows = []
+            
+            for idx, row in df.iterrows():
+                category = categorization_result.get_category_for_row(idx)
+                if category and category != '':
+                    # Successfully categorized
+                    row_dict = row.to_dict()
+                    row_dict['category'] = category
+                    auto_categorized_rows.append(row_dict)
+                else:
+                    # Failed to categorize
+                    row_dict = row.to_dict()
+                    row_dict['category'] = ''
+                    failed_categorization_rows.append(row_dict)
+            
+            return auto_categorized_rows, failed_categorization_rows
+            
+        except Exception as e:
+            # If auto-categorization fails, return all rows as failed
+            print(f"Auto-categorization failed for new rows: {e}")
+            return [], new_rows
+
+    def generate_categorization_excel_for_new_rows(self, failed_rows: List[Dict], new_offer_name: str) -> str:
+        """
+        Generate Excel file with new rows that failed auto-categorization
+        
+        Args:
+            failed_rows: List of row dictionaries that failed auto-categorization
+            new_offer_name: Name of the new offer
+            
+        Returns:
+            Path to generated Excel file
+        """
+        import pandas as pd
+        import os
+        from datetime import datetime
+        
+        # Create DataFrame from failed rows
+        df = pd.DataFrame(failed_rows)
+        
+        # Add suggested category column (empty for manual input)
+        df['suggested_category'] = ''
+        df['manual_category'] = ''
+        
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"new_rows_categorization_{new_offer_name}_{timestamp}.xlsx"
+        
+        # Save to temporary directory
+        temp_dir = os.path.join(os.getcwd(), "temp")
+        os.makedirs(temp_dir, exist_ok=True)
+        filepath = os.path.join(temp_dir, filename)
+        
+        # Save to Excel
+        df.to_excel(filepath, index=False)
+        
+        return filepath
 
     def _on_confirm_mapped_file_review(self, file_mapping):
         """Simplified confirmation handler for mapped-file row review, mirroring the normal workflow."""
