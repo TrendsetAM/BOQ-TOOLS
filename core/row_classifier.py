@@ -963,7 +963,7 @@ def generate_row_position(sheet_name: str, excel_row_number: int) -> str:
     """
     # Clean sheet name to avoid issues with special characters
     clean_sheet_name = re.sub(r'[^\w\-_\.]', '_', sheet_name)
-    return f"{clean_sheet_name}_{excel_row_number}"
+    return f"{clean_sheet_name}_{excel_row_number}" 
 
 
 def calculate_cumulative_row_counts(sheets_data: Dict[str, List[List[str]]], 

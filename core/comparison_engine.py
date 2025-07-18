@@ -77,12 +77,22 @@ class ComparisonEngine:
                 'wage': f'wage[{offer_name}]'
             }
             
-            # Create offer-specific columns if they don't exist
-            for col_name, offer_col_name in offer_columns.items():
-                if offer_col_name not in dataset_dataframe.columns:
-                    dataset_dataframe[offer_col_name] = None
-                    offer_columns_created.append(offer_col_name)
-                    logger.info(f"Created new column: {offer_col_name}")
+            # Only create offer-specific columns if we have actual values to merge
+            has_values_to_merge = False
+            for col_idx, col_type in column_mapping.items():
+                if col_idx < len(comparison_row_data):
+                    cell_value = str(comparison_row_data[col_idx]).strip() if comparison_row_data[col_idx] is not None else ""
+                    if cell_value and col_type in ["QUANTITY", "UNIT_PRICE", "TOTAL_PRICE", "MANHOURS", "WAGE"]:
+                        has_values_to_merge = True
+                        break
+            
+            # Create offer-specific columns only if we have values to merge
+            if has_values_to_merge:
+                for col_name, offer_col_name in offer_columns.items():
+                    if offer_col_name not in dataset_dataframe.columns:
+                        dataset_dataframe[offer_col_name] = None
+                        offer_columns_created.append(offer_col_name)
+                        logger.info(f"Created new column: {offer_col_name}")
             
             # Map comparison row data to offer columns
             updated_values = {}
@@ -381,11 +391,25 @@ class ComparisonProcessor:
         """
         if self.master_dataset is None or self.comparison_data is None:
             return False, "Master or comparison dataset not loaded."
+        
+        # Check if master dataset has descriptions
+        if 'Description' in self.master_dataset.columns:
+            master_descriptions = self.master_dataset['Description'].head(10).tolist()
+            empty_count = sum(1 for desc in master_descriptions if not desc or str(desc).strip() == '')
+            if empty_count == len(master_descriptions):
+                return False, "Master dataset has empty descriptions. Cannot perform comparison without descriptions."
+            elif empty_count > 0:
+                logger.warning(f"Master dataset has {empty_count}/{len(master_descriptions)} empty descriptions")
+            else:
+                logger.info(f"Master dataset has valid descriptions: {len(master_descriptions) - empty_count}/{len(master_descriptions)} non-empty")
+        
+        # Check column compatibility
         master_cols = set(self.master_dataset.columns)
         comp_cols = set(self.comparison_data.columns)
         missing_in_comp = master_cols - comp_cols
         if missing_in_comp:
             return False, f"Comparison data missing columns: {missing_in_comp}"
+        
         # Optionally, check for required columns
         return True, "Validation successful." 
 
@@ -500,6 +524,41 @@ class ComparisonProcessor:
             # Get all instances in both datasets
             comp_instances = self.comparison_data[self.comparison_data[key_columns[0]] == description]
             master_instances = self.master_dataset[self.master_dataset[key_columns[0]] == description]
+            
+            # Debug: Log matching information
+            logger.info(f"Description: '{description}'")
+            logger.info(f"Comparison instances found: {len(comp_instances)}")
+            logger.info(f"Master instances found: {len(master_instances)}")
+            
+            # If no matches found, try case-insensitive matching
+            if len(master_instances) == 0:
+                master_instances = self.master_dataset[
+                    self.master_dataset[key_columns[0]].str.lower() == description.lower()
+                ]
+                logger.info(f"Case-insensitive master instances found: {len(master_instances)}")
+                
+                # If still no matches, try normalized matching (remove extra whitespace)
+                if len(master_instances) == 0:
+                    normalized_desc = ' '.join(description.split())  # Normalize whitespace
+                    master_instances = self.master_dataset[
+                        self.master_dataset[key_columns[0]].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
+                    ]
+                    logger.info(f"Normalized whitespace master instances found: {len(master_instances)}")
+                    
+                    # If still no matches, try fuzzy matching for very similar descriptions
+                    if len(master_instances) == 0:
+                        # Check for descriptions that are very similar (might be encoding issues)
+                        master_desc_lower = self.master_dataset[key_columns[0]].str.lower()
+                        similar_matches = master_desc_lower[master_desc_lower.str.contains(description.lower()[:50], na=False)]
+                        if len(similar_matches) > 0:
+                            logger.warning(f"Found {len(similar_matches)} similar descriptions for '{description[:50]}...'")
+                            logger.warning(f"Similar descriptions: {similar_matches.head(3).tolist()}")
+                
+                # If still no matches, this is normal - the description doesn't exist in master
+                # This means we should ADD this row, not throw an error
+                if len(master_instances) == 0:
+                    logger.info(f"No match found for description: '{description}' - will be added as new row")
+                    # Continue processing - this row will be added in the ADD section below
             # For each nth instance, match and merge/add
             for n, (comp_idx, comp_row) in enumerate(comp_instances.iterrows()):
                 if n < len(master_instances):

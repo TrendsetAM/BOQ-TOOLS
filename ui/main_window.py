@@ -1979,7 +1979,7 @@ class MainWindow:
                             continue
                     
                     # Use master validation criteria for all rows
-                    is_valid = row_classifier.validate_master_row_validity(row_data, column_mapping)
+                        is_valid = row_classifier.validate_master_row_validity(row_data, column_mapping)
                     
                     self.row_validity[sheet.sheet_name][rc.row_index] = is_valid
                     status = "Valid" if is_valid else "Invalid"
@@ -2357,19 +2357,11 @@ class MainWindow:
                 messagebox.showerror("Error", "Could not find master file mapping")
                 return
             
-            # Check if master has data (either categorized or raw)
-            master_df = None
-            if hasattr(tab, 'final_dataframe') and tab.final_dataframe is not None:
-                # Use categorized data if available
-                master_df = tab.final_dataframe.copy()
-                logger.debug("Using categorized data for comparison")
-            else:
-                # Use raw data from file mapping
-                master_df = self._create_dataframe_from_mapping(master_file_mapping)
-                if master_df is None or master_df.empty:
-                    messagebox.showerror("Error", "No data available for comparison")
-                    return
-                logger.debug("Using raw data for comparison")
+            # Create unified master dataset with consistent structure
+            master_df = self._create_unified_dataframe(master_file_mapping, is_master=True)
+            if master_df is None or master_df.empty:
+                messagebox.showerror("Error", "No data available for comparison")
+                return
             
             # Prompt for comparison file
             filetypes = [("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
@@ -2413,21 +2405,59 @@ class MainWindow:
             # Load master dataset
             self.comparison_processor.load_master_dataset(master_df)
             
-            # Load comparison data (already properly mapped from _process_file_with_mapping)
-            comparison_df = comparison_file_mapping.dataframe
+            # Create unified comparison dataset with consistent structure
+            comparison_df = self._create_unified_dataframe(comparison_file_mapping, is_master=False)
+            if comparison_df is None or comparison_df.empty:
+                messagebox.showerror("Error", "No comparison data available")
+                return
             
-            # Debug: Log comparison data info
-            logger.info(f"Comparison DataFrame shape: {comparison_df.shape}")
-            logger.info(f"Comparison DataFrame columns: {list(comparison_df.columns)}")
-            logger.info(f"Comparison DataFrame head:\n{comparison_df.head()}")
+            # Debug: Log both datasets for verification
+            logger.info(f"Master DataFrame shape: {master_df.shape}, columns: {list(master_df.columns)}")
+            logger.info(f"Comparison DataFrame shape: {comparison_df.shape}, columns: {list(comparison_df.columns)}")
+            
+            # Verify both datasets have the same required columns
+            master_cols = set(master_df.columns)
+            comparison_cols = set(comparison_df.columns)
+            missing_in_comparison = master_cols - comparison_cols
+            missing_in_master = comparison_cols - master_cols
+            
+            if missing_in_comparison:
+                logger.warning(f"Comparison dataset missing columns: {missing_in_comparison}")
+                # Add missing columns to comparison dataset
+                for col in missing_in_comparison:
+                    comparison_df[col] = ''
+            
+            if missing_in_master:
+                logger.warning(f"Master dataset missing columns: {missing_in_master}")
+                # Add missing columns to master dataset
+                for col in missing_in_master:
+                    master_df[col] = ''
+            
+            # Ensure both datasets have the same column order
+            all_columns = list(set(master_df.columns) | set(comparison_df.columns))
+            master_df = master_df.reindex(columns=all_columns, fill_value='')
+            comparison_df = comparison_df.reindex(columns=all_columns, fill_value='')
             
             self.comparison_processor.load_comparison_data(comparison_df)
             
-            # Validate comparison data
+            # Validate comparison data with enhanced error handling
             is_valid, message = self.comparison_processor.validate_comparison_data()
             if not is_valid:
-                messagebox.showerror("Validation Error", f"Comparison data validation failed: {message}")
-                return
+                # Try to fix common validation issues
+                logger.warning(f"Initial validation failed: {message}")
+                
+                # Check if it's a column mismatch issue
+                if "missing columns" in message.lower():
+                    # We've already handled column alignment above, so this shouldn't happen
+                    logger.error(f"Column alignment failed despite our attempts: {message}")
+                    messagebox.showerror("Validation Error", 
+                                       f"Comparison data validation failed: {message}\n\n"
+                                       f"Master columns: {list(master_df.columns)}\n"
+                                       f"Comparison columns: {list(comparison_df.columns)}")
+                    return
+                else:
+                    messagebox.showerror("Validation Error", f"Comparison data validation failed: {message}")
+                    return
             
             # Process rows for validity
             self._update_status("Processing row validity...")
@@ -3330,20 +3360,58 @@ Offer Information:
             # Prepare data for display
             display_df = final_dataframe.copy()
             
-            # Remove unwanted columns
-            columns_to_remove = ['ignore', 'Position']
-            for col in columns_to_remove:
-                if col in display_df.columns:
+            # Remove unwanted columns - expanded list of internal processing columns
+            columns_to_remove = [
+                'ignore', 'Position', 'Source_Sheet', 'Labour', 
+                'ignore_14', 'ignore_15', '_3', 'scope'
+            ]
+            
+            # Also remove any columns that start with 'ignore_' or are just numbers
+            for col in list(display_df.columns):
+                if col.startswith('ignore_') or col.isdigit() or col in columns_to_remove:
                     display_df = display_df.drop(columns=[col])
             
-            # Define desired column order
-            desired_order = ['code', 'Source_Sheet', 'Category', 'Description', 'unit', 
-                           'quantity', 'unit_price', 'total_price', 'manhours', 'wage']
+            # Keep only essential columns for comparison results
+            essential_columns = [
+                'Description', 'code', 'unit', 'quantity', 'unit_price', 'total_price',
+                'Category', 'manhours', 'wage'
+            ]
             
-            # Reorder columns (only include columns that exist)
-            existing_columns = [col for col in desired_order if col in display_df.columns]
-            other_columns = [col for col in display_df.columns if col not in desired_order]
-            final_columns = existing_columns + other_columns
+            # Add any offer-specific columns (quantity[OfferName], etc.)
+            offer_columns = [col for col in display_df.columns if '[' in col and ']' in col]
+            
+            # Final column order: essential columns first, then offer-specific columns
+            final_columns = [col for col in essential_columns if col in display_df.columns]
+            final_columns.extend(offer_columns)
+            
+            # Add any remaining columns that aren't offer-specific
+            remaining_columns = [col for col in display_df.columns if col not in final_columns and col not in offer_columns]
+            final_columns.extend(remaining_columns)
+            
+            display_df = display_df[final_columns]
+            
+            # Define desired column order for comparison results
+            desired_order = ['Description', 'code', 'unit', 'quantity', 'unit_price', 'total_price', 'Category']
+            
+            # Add offer-specific columns in a logical order
+            offer_columns = [col for col in display_df.columns if '[' in col and ']' in col]
+            quantity_offers = [col for col in offer_columns if col.startswith('quantity[')]
+            price_offers = [col for col in offer_columns if col.startswith('unit_price[') or col.startswith('total_price[')]
+            
+            # Build final column order
+            final_columns = [col for col in desired_order if col in display_df.columns]
+            final_columns.extend(quantity_offers)
+            final_columns.extend(price_offers)
+            
+            # Add any remaining offer columns
+            remaining_offers = [col for col in offer_columns if col not in final_columns]
+            final_columns.extend(remaining_offers)
+            
+            # Add any other essential columns
+            other_essential = ['manhours', 'wage']
+            for col in other_essential:
+                if col in display_df.columns and col not in final_columns:
+                    final_columns.append(col)
             
             display_df = display_df[final_columns]
             
@@ -3353,21 +3421,29 @@ Offer Information:
             
             # Configure columns with appropriate widths
             column_widths = {
-                'code': 80,
-                'Source_Sheet': 120,
-                'Category': 150,
-                'Description': 300,
+                'Description': 400,  # Wider for descriptions
+                'code': 100,
                 'unit': 80,
                 'quantity': 100,
                 'unit_price': 120,
                 'total_price': 120,
+                'Category': 150,
                 'manhours': 100,
-                'wage': 100
+                'wage': 80
             }
+            
+            # Set default width for offer-specific columns
+            default_offer_width = 120
             
             for col in columns:
                 tree.heading(col, text=col)
-                width = column_widths.get(col, 100)
+                # Use specific width if defined, otherwise use default for offer columns
+                if col in column_widths:
+                    width = column_widths[col]
+                elif '[' in col and ']' in col:
+                    width = default_offer_width
+                else:
+                    width = 100
                 tree.column(col, width=width, minwidth=80)
             
             # Add scrollbars
@@ -4096,6 +4172,12 @@ Offer Information:
         try:
             import pandas as pd
             
+            # First, try to use the dataframe attribute if it exists
+            if hasattr(file_mapping, 'dataframe') and file_mapping.dataframe is not None:
+                logger.debug(f"Using existing dataframe from file mapping with {len(file_mapping.dataframe)} rows")
+                return file_mapping.dataframe.copy()
+            
+            # Fallback: create DataFrame from sheet data
             rows = []
             for sheet in file_mapping.sheets:
                 if hasattr(sheet, 'sheet_data') and sheet.sheet_data:
@@ -4117,7 +4199,7 @@ Offer Information:
             
             if rows:
                 df = pd.DataFrame(rows)
-                logger.debug(f"Created DataFrame with {len(df)} rows from file mapping")
+                logger.debug(f"Created DataFrame with {len(df)} rows from file mapping sheet data")
                 return df
             else:
                 logger.warning("No data found in file mapping")
@@ -4470,6 +4552,82 @@ Offer Information:
             return file_mapping
         except Exception as e:
             logger.error(f"Error processing comparison file with master mappings: {e}")
+            return None
+
+    def _create_unified_dataframe(self, file_mapping, is_master=True):
+        """
+        Create a unified DataFrame from file mapping data with consistent structure
+        
+        Args:
+            file_mapping: FileMapping object containing the data
+            is_master: Whether this is the master dataset (affects logging)
+            
+        Returns:
+            DataFrame with consistent column structure
+        """
+        try:
+            import pandas as pd
+            
+            dataset_type = "master" if is_master else "comparison"
+            logger.info(f"Creating unified DataFrame for {dataset_type} dataset")
+            
+            # First, try to use the dataframe attribute if it exists
+            if hasattr(file_mapping, 'dataframe') and file_mapping.dataframe is not None:
+                df = file_mapping.dataframe.copy()
+                logger.info(f"Using existing dataframe for {dataset_type}: {len(df)} rows, columns: {list(df.columns)}")
+                
+                # Ensure we have the required columns
+                required_columns = ['Description', 'code', 'unit', 'quantity', 'unit_price', 'total_price']
+                missing_columns = [col for col in required_columns if col not in df.columns]
+                
+                if missing_columns:
+                    logger.warning(f"Missing columns in {dataset_type} dataset: {missing_columns}")
+                    # Add missing columns with empty values
+                    for col in missing_columns:
+                        df[col] = ''
+                
+                # Ensure consistent column order
+                final_columns = required_columns + [col for col in df.columns if col not in required_columns]
+                df = df[final_columns]
+                
+                # Log sample descriptions to verify they're not empty
+                if 'Description' in df.columns:
+                    sample_descriptions = df['Description'].head(5).tolist()
+                    logger.info(f"Sample descriptions in {dataset_type} dataset: {sample_descriptions}")
+                else:
+                    logger.error(f"No Description column found in {dataset_type} dataset!")
+                
+                return df
+            
+            # Fallback: create DataFrame from sheet data
+            logger.warning(f"No dataframe attribute found for {dataset_type}, falling back to sheet data")
+            rows = []
+            for sheet in file_mapping.sheets:
+                if hasattr(sheet, 'sheet_data') and sheet.sheet_data:
+                    for i, row_data in enumerate(sheet.sheet_data):
+                        if i == 0:  # Skip header row
+                            continue
+                        row_dict = {
+                            'Source_Sheet': sheet.sheet_name,
+                            'Description': row_data[0] if len(row_data) > 0 else '',
+                            'code': row_data[1] if len(row_data) > 1 else '',
+                            'unit': row_data[2] if len(row_data) > 2 else '',
+                            'quantity': row_data[3] if len(row_data) > 3 else '',
+                            'unit_price': row_data[4] if len(row_data) > 4 else '',
+                            'total_price': row_data[5] if len(row_data) > 5 else '',
+                        }
+                        rows.append(row_dict)
+            
+            if rows:
+                df = pd.DataFrame(rows)
+                logger.info(f"Created DataFrame from sheet data for {dataset_type}: {len(df)} rows")
+                return df
+            else:
+                logger.error(f"No data found in {dataset_type} file mapping")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error creating unified DataFrame for {dataset_type}: {e}")
             return None
 
     def run(self):
