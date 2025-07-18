@@ -13,6 +13,7 @@ import logging
 import threading
 import dataclasses
 import pandas as pd
+import openpyxl
 from core.row_classifier import RowType
 from datetime import datetime
 import pickle
@@ -2834,6 +2835,9 @@ Offer Information:
                         cell.font = header_font
                         cell.fill = header_fill
                         cell.alignment = header_alignment
+                    
+                    # Add summary sheet with formulas
+                    self._add_summary_sheet_with_formulas_comparison(workbook, processor.master_dataset, offer_info)
                 
                 messagebox.showinfo("Export Complete", f"Comparison results exported to {filename}")
                 
@@ -3546,12 +3550,210 @@ Offer Information:
                         cell.font = header_font
                         cell.fill = header_fill
                         cell.alignment = header_alignment
+                    
+                    # Get offer name for summary sheet
+                    offer_name = "Current Offer"
+                    current_tab_path = self.notebook.select()
+                    for file_key, file_data in self.controller.current_files.items():
+                        if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
+                            if hasattr(file_data['file_mapping'], 'offer_info') and file_data['file_mapping'].offer_info:
+                                offer_info = file_data['file_mapping'].offer_info
+                                offer_name = offer_info.get('offer_name', offer_name)
+                            elif 'offer_info' in file_data:
+                                offer_info = file_data['offer_info']
+                                offer_name = offer_info.get('offer_name', offer_name)
+                            break
+                    
+                    # Add summary sheet with formulas
+                    self._add_summary_sheet_with_formulas(workbook, export_df, offer_name)
                 
                 messagebox.showinfo("Export Complete", f"Categorized data exported to {filename}")
                 
         except Exception as e:
             logger.error(f"Error exporting categorized data: {e}")
             messagebox.showerror("Export Error", f"Failed to export data: {str(e)}")
+
+    def _add_summary_sheet_with_formulas(self, workbook, dataframe, offer_name):
+        """Add a summary sheet with formulas that calculate totals for each category"""
+        try:
+            logger.info(f"Creating summary sheet for offer: {offer_name}")
+            # Create summary sheet
+            summary_sheet = workbook.create_sheet("Summary")
+            
+            # Define category order (same as in _summarize_categorized_data)
+            category_order = [
+                "General Costs",
+                "Site Costs", 
+                "Civil Works",
+                "Earth Movement",
+                "Roads",
+                "OEM Building",
+                "Electrical Works",
+                "Solar Cables",
+                "LV Cables", 
+                "MV Cables",
+                "Trenching",
+                "PV Mod. Installation",
+                "Cleaning and Cabling of PV Mod.",
+                "Tracker Inst.",
+                "Other"
+            ]
+            
+            # Create headers
+            headers = ['Offer Name'] + category_order
+            for col_idx, header in enumerate(headers, 1):
+                cell = summary_sheet.cell(row=1, column=col_idx, value=header)
+                cell.font = openpyxl.styles.Font(bold=True)
+                cell.fill = openpyxl.styles.PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+                cell.alignment = openpyxl.styles.Alignment(horizontal="center", vertical="center")
+            
+            # Add offer name
+            summary_sheet.cell(row=2, column=1, value=offer_name)
+            
+            # Add formulas for each category
+            for col_idx, category in enumerate(category_order, 2):  # Start from column 2 (after Offer Name)
+                # Find the Category column in the main data sheet
+                category_col_idx = None
+                for idx, col_name in enumerate(dataframe.columns, 1):
+                    if col_name == 'Category':
+                        category_col_idx = idx
+                        break
+                
+                # Find the total_price column in the main data sheet
+                total_price_col_idx = None
+                for idx, col_name in enumerate(dataframe.columns, 1):
+                    if col_name == 'total_price':
+                        total_price_col_idx = idx
+                        break
+                
+                if category_col_idx and total_price_col_idx:
+                    # Create SUMIFS formula: =SUMIFS('BOQ Data'!F:F,'BOQ Data'!C:C,"General Costs")
+                    # Where F is total_price column and C is Category column
+                    category_col_letter = openpyxl.utils.get_column_letter(category_col_idx)
+                    total_price_col_letter = openpyxl.utils.get_column_letter(total_price_col_idx)
+                    
+                    formula = f'=SUMIFS(\'BOQ Data\'!{total_price_col_letter}:{total_price_col_letter},\'BOQ Data\'!{category_col_letter}:{category_col_letter},"{category}")'
+                    
+                    cell = summary_sheet.cell(row=2, column=col_idx)
+                    cell.value = formula
+                    
+                    # Apply European number formatting
+                    cell.number_format = '#,##0.00'
+                else:
+                    # If columns not found, set to 0
+                    summary_sheet.cell(row=2, column=col_idx, value=0)
+                    summary_sheet.cell(row=2, column=col_idx).number_format = '#,##0.00'
+            
+            # Auto-adjust column widths
+            for column in summary_sheet.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 50)  # Cap at 50 characters
+                summary_sheet.column_dimensions[column_letter].width = adjusted_width
+                
+        except Exception as e:
+            logger.error(f"Error adding summary sheet with formulas: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            # Don't raise the exception, just log it so the main export can continue
+
+    def _add_summary_sheet_with_formulas_comparison(self, workbook, dataframe, offer_info):
+        """Add a summary sheet with formulas for comparison results"""
+        try:
+            offer_name = offer_info.get('offer_name', 'Comparison Results') if offer_info else 'Comparison Results'
+            logger.info(f"Creating summary sheet for comparison: {offer_name}")
+            # Create summary sheet
+            summary_sheet = workbook.create_sheet("Summary")
+            
+            # Define category order (same as in _summarize_categorized_data)
+            category_order = [
+                "General Costs",
+                "Site Costs", 
+                "Civil Works",
+                "Earth Movement",
+                "Roads",
+                "OEM Building",
+                "Electrical Works",
+                "Solar Cables",
+                "LV Cables", 
+                "MV Cables",
+                "Trenching",
+                "PV Mod. Installation",
+                "Cleaning and Cabling of PV Mod.",
+                "Tracker Inst.",
+                "Other"
+            ]
+            
+            # Create headers
+            headers = ['Offer Name'] + category_order
+            for col_idx, header in enumerate(headers, 1):
+                cell = summary_sheet.cell(row=1, column=col_idx, value=header)
+                cell.font = openpyxl.styles.Font(bold=True)
+                cell.fill = openpyxl.styles.PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+                cell.alignment = openpyxl.styles.Alignment(horizontal="center", vertical="center")
+            
+            # Add offer name
+            offer_name = offer_info.get('offer_name', 'Comparison Results') if offer_info else 'Comparison Results'
+            summary_sheet.cell(row=2, column=1, value=offer_name)
+            
+            # Add formulas for each category
+            for col_idx, category in enumerate(category_order, 2):  # Start from column 2 (after Offer Name)
+                # Find the Category column in the main data sheet
+                category_col_idx = None
+                for idx, col_name in enumerate(dataframe.columns, 1):
+                    if col_name == 'Category':
+                        category_col_idx = idx
+                        break
+                
+                # Find the total_price column in the main data sheet
+                total_price_col_idx = None
+                for idx, col_name in enumerate(dataframe.columns, 1):
+                    if col_name == 'total_price':
+                        total_price_col_idx = idx
+                        break
+                
+                if category_col_idx and total_price_col_idx:
+                    # Create SUMIFS formula: =SUMIFS('Comparison Results'!F:F,'Comparison Results'!C:C,"General Costs")
+                    # Where F is total_price column and C is Category column
+                    category_col_letter = openpyxl.utils.get_column_letter(category_col_idx)
+                    total_price_col_letter = openpyxl.utils.get_column_letter(total_price_col_idx)
+                    
+                    formula = f'=SUMIFS(\'Comparison Results\'!{total_price_col_letter}:{total_price_col_letter},\'Comparison Results\'!{category_col_letter}:{category_col_letter},"{category}")'
+                    
+                    cell = summary_sheet.cell(row=2, column=col_idx)
+                    cell.value = formula
+                    
+                    # Apply European number formatting
+                    cell.number_format = '#,##0.00'
+                else:
+                    # If columns not found, set to 0
+                    summary_sheet.cell(row=2, column=col_idx, value=0)
+                    summary_sheet.cell(row=2, column=col_idx).number_format = '#,##0.00'
+            
+            # Auto-adjust column widths
+            for column in summary_sheet.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 50)  # Cap at 50 characters
+                summary_sheet.column_dimensions[column_letter].width = adjusted_width
+                
+        except Exception as e:
+            logger.error(f"Error adding summary sheet with formulas for comparison: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            # Don't raise the exception, just log it so the main export can continue
 
     def _summarize_categorized_data(self, dataframe):
         """Show detailed summary of categorized data below the summary treeview"""
