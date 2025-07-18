@@ -1,6 +1,6 @@
 # BOQ Tools - Bill of Quantities (BOQ) Excel Processor
 
-A powerful and intelligent desktop application designed to streamline the processing and analysis of Bill of Quantities (BOQ) Excel files. It automates tedious tasks like data extraction, classification, and validation, providing a comprehensive suite of tools for professionals dealing with BOQs.
+A powerful and intelligent desktop application designed to streamline the processing and analysis of Bill of Quantities (BOQ) Excel files. It automates tedious tasks like data extraction, classification, validation, and comparison, providing a comprehensive suite of tools for professionals dealing with BOQs.
 
 ## Key Features
 
@@ -8,6 +8,7 @@ A powerful and intelligent desktop application designed to streamline the proces
 - **Interactive User Interface**: A user-friendly graphical interface to manage, process, and review BOQ files.
 - **Advanced Categorization**: Sophisticated automatic and manual categorization of BOQ items.
 - **Powerful Validation**: A robust validation engine to ensure data integrity and consistency.
+- **Advanced Comparison Engine**: Intelligent comparison and merging of multiple BOQ files with offer-specific data.
 - **High Configurability**: Easily customize the application's behavior to fit specific BOQ formats and project requirements.
 - **Flexible Exporting**: Export processed data into well-formatted Excel files.
 
@@ -39,6 +40,20 @@ The application provides a rich, interactive user interface that makes processin
 - **Categorization Statistics**: View detailed statistics about the categorization process, including categorized and uncategorized items.
 - **Centralized Settings**: A comprehensive settings dialog to manage all application configurations.
 
+### Advanced Comparison Engine
+
+The application features a sophisticated comparison system for analyzing multiple BOQ files and offers.
+
+- **Master Dataset Management**: Designate a primary BOQ as the master dataset for comparison.
+- **Comparison File Processing**: Load and process additional BOQ files for comparison against the master.
+- **Intelligent Row Matching**: Automatically match rows between master and comparison datasets based on descriptions and codes.
+- **Offer-Specific Data**: Create offer-specific columns (e.g., `quantity[Offer1]`, `unit_price[Offer2]`) for each comparison file.
+- **Manual Row Review**: Interactive dialog to review and manually validate/invalidate comparison rows.
+- **MERGE Operations**: Update existing master rows with comparison data for matched items.
+- **ADD Operations**: Add new items from comparison files that don't exist in the master dataset.
+- **Data Validation**: Comprehensive validation of comparison data before processing.
+- **Instance Management**: Handle multiple instances of the same item across different offers.
+
 ### Advanced Categorization
 
 - **Automatic Categorization**: Leverages a customizable keyword-based dictionary to automatically categorize BOQ items.
@@ -49,11 +64,13 @@ The application provides a rich, interactive user interface that makes processin
 
 - **Data Integrity Checks**: Validates data against a set of configurable rules.
 - **Confidence Scoring**: Provides confidence scores for automatic classifications to help identify potential errors.
+- **Comparison Validation**: Validates comparison data compatibility and structure.
 
 ### Exporting
 
 - **Styled Excel Exports**: Export the processed and cleaned data into a new, well-formatted, and styled Excel file.
 - **Inclusion of Reports**: Option to include validation and summary reports in the exported file.
+- **Comparison Results**: Export comparison results with offer-specific data columns.
 
 ### Command-Line Interface (CLI)
 
@@ -63,6 +80,37 @@ For automation and power users, a CLI provides access to the application's core 
 - **Batch Operations**: Script batch processing of multiple BOQ files.
 - **Interactive Mode**: An interactive CLI mode for guided processing.
 
+## Comparison Workflow
+
+The comparison workflow allows you to analyze multiple BOQ files and merge offer-specific data:
+
+### Step 1: Master Dataset Preparation
+1. Load and process your primary BOQ file
+2. Complete categorization of the master dataset
+3. Ensure the master dataset is properly validated
+
+### Step 2: Comparison File Processing
+1. Select "Compare Full" from the main interface
+2. Choose a comparison BOQ file
+3. Provide offer information (name, date, etc.)
+4. The system validates file compatibility
+
+### Step 3: Row Review and Validation
+1. Review each comparison row for validity
+2. Toggle row validity manually if needed
+3. Confirm the review to proceed with processing
+
+### Step 4: Data Processing
+1. **MERGE Operations**: Update existing master rows with comparison data
+2. **ADD Operations**: Add new items from comparison files
+3. **Instance Management**: Handle multiple instances of the same item
+4. **Data Cleanup**: Finalize and clean up the merged dataset
+
+### Step 5: Results and Export
+1. View comparison results and statistics
+2. Export the final dataset with offer-specific columns
+3. Review any processing errors or warnings
+
 ## Saving and Resuming Work
 
 The application allows you to save your analysis and mappings to a file. This is useful for resuming your work later or for reusing a set of mappings on a new BOQ file that has a similar structure.
@@ -70,8 +118,6 @@ The application allows you to save your analysis and mappings to a file. This is
 - **Save Analysis**: Saves the entire state of your current analysis, including the processed data and all mappings, to a `.pkl` file. This allows you to close the application and perfectly restore your session later.
 - **Save Mappings**: Saves only the sheet, column, and row mappings to a `.pkl` file. This is ideal for creating a reusable template for BOQs with a consistent layout.
 - **Load Analysis/Mappings**: You can load a previously saved `.pkl` file to either resume a session or apply a saved mapping to a new file.
-
-
 
 ## Configuration
 
@@ -82,6 +128,7 @@ Key configurable areas include:
 - **Sheet Classifications**: Keywords to classify Excel sheets.
 - **Validation Thresholds**: Rules for the data validation engine.
 - **Processing Limits**: Settings for file size, memory usage, etc.
+- **Comparison Settings**: Configuration for comparison workflow behavior.
 
 ## Dependencies
 

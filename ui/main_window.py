@@ -621,7 +621,7 @@ class MainWindow:
 
     def _on_processing_complete(self, tab, filepath, file_mapping, loading_widget):
         """Handle processing completion"""
-        print(f"[DEBUG] _on_processing_complete called for file: {filepath}")
+        logger.info(f"Processing complete for file: {filepath}")
         
         # Store the file mapping and column mapper
         self.file_mapping = file_mapping
@@ -647,31 +647,33 @@ class MainWindow:
             self.controller.current_files[file_key]['offers'][offer_name] = offer_info
             # For backward compatibility, also store the last offer as 'offer_info'
             self.controller.current_files[file_key]['offer_info'] = offer_info
-            print(f"[DEBUG] Stored offer info for offer_name '{offer_name}': {offer_info}")
-            print(f"[DEBUG] Current offer info state: current_offer_info={current_offer_info}, current_offer_name={current_offer_name}")
+            logger.debug(f"Stored offer info for offer_name '{offer_name}': {offer_info}")
+            logger.debug(f"Current offer info state: current_offer_info={current_offer_info}, current_offer_name={current_offer_name}")
         
         # Remove loading widget and populate tab
         loading_widget.destroy()
         self._populate_file_tab(tab, file_mapping)
         
         # Use centralized refresh method
-        print(f"[DEBUG] Calling centralized summary grid refresh")
+        logger.debug("Calling centralized summary grid refresh")
         self._refresh_summary_grid_centralized()
         
         # Update status
         self._update_status(f"Processing complete: {os.path.basename(filepath)}")
 
     def _on_processing_error(self, tab, filename, loading_widget):
-        """Callback for when file processing fails. Runs in the main UI thread."""
-        print(f"[DEBUG] _on_processing_error called for file: {filename}")
-        loading_widget.destroy()
-        # Use grid for consistency
-        error_label = ttk.Label(tab, text=f"Failed to process {filename}.\nSee logs for details.", foreground="red")
-        error_label.grid(row=0, column=0, pady=40, padx=100)
-        self._update_status(f"Error processing {filename}")
-        self.progress_var.set(0)
-        # Refresh summary grid even on error to show current state
-        print(f"[DEBUG] Calling centralized summary grid refresh after error")
+        """Handle processing errors"""
+        logger.error(f"Processing error for file: {filename}")
+        
+        # Remove loading widget
+        if loading_widget:
+            loading_widget.destroy()
+        
+        # Show error message
+        messagebox.showerror("Processing Error", f"Failed to process file: {filename}")
+        
+        # Use centralized refresh method
+        logger.debug("Calling centralized summary grid refresh after error")
         self._refresh_summary_grid_centralized()
 
     def _populate_file_tab(self, tab, file_mapping):
@@ -2089,38 +2091,27 @@ class MainWindow:
             # print("[DEBUG] File mapping tabs:", [str(file_data['file_mapping'].tab) for file_data in self.controller.current_files.values()])
             # print("[DEBUG] Number of files:", len(self.controller.current_files))
             
+            # Find the matching file data
             for file_key, file_data in self.controller.current_files.items():
-                # print("[DEBUG] Checking file_key:", file_key)
-                # print("[DEBUG] file_data['file_mapping'].tab:", file_data['file_mapping'].tab)
-                # print("[DEBUG] hasattr check:", hasattr(file_data['file_mapping'], 'tab'))
-                # print("[DEBUG] tab comparison:", str(file_data['file_mapping'].tab) == str(current_tab_path))
-                
                 if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
-                    # print("[DEBUG] Found matching tab, storing data...")
-                    # Store the categorized data
-                    file_data['categorized_dataframe'] = final_dataframe
+                    # Store the final dataframe and categorization result
+                    file_data['final_dataframe'] = final_dataframe
                     file_data['categorization_result'] = categorization_result
-                    # Update the file mapping
-                    file_mapping = file_data['file_mapping']
-                    file_mapping.categorized_dataframe = final_dataframe
-                    file_mapping.categorization_result = categorization_result
-                    # print("[DEBUG] About to call _show_final_categorized_data...")
-                    # Show the final data grid in the main window - use the actual tab widget from file_mapping
-                    self._show_final_categorized_data(file_mapping.tab, final_dataframe, categorization_result)
-                    # Refresh the new summary grid after categorization using centralized method
-                    print(f"[DEBUG] Calling centralized summary grid refresh after categorization")
+                    
+                    # Update the tab with the final categorized data
+                    self._show_final_categorized_data(current_tab, final_dataframe, categorization_result)
+                    
+                    # Refresh summary grid
+                    logger.debug("Calling centralized summary grid refresh after categorization")
                     self._refresh_summary_grid_centralized()
-                    self._update_status("Categorization completed successfully - showing final data")
-                    # print("[DEBUG] _show_final_categorized_data call completed")
                     break
-                else:
-                    # print("[DEBUG] Tab mismatch or no tab attribute")
-                    pass
+            else:
+                logger.warning("Tab mismatch or no tab attribute found for categorization completion")
+                
         except Exception as e:
-            # print("[DEBUG] Exception in _on_categorization_complete:", e)
+            logger.error(f"Error handling categorization completion: {e}")
             import traceback
             traceback.print_exc()
-            logger.error(f"Error handling categorization completion: {e}")
             messagebox.showerror("Error", f"Error handling categorization completion: {str(e)}")
 
     def _compare_full(self, tab):
@@ -2402,12 +2393,202 @@ Master Dataset Updated: {len(processor.master_dataset)} rows
             
             messagebox.showinfo("Comparison Complete", summary)
             
-            # TODO: Show detailed results in a new tab or dialog
-            # This could include showing the updated master dataset with new columns
+            # Show detailed results in a new tab
+            self._show_detailed_comparison_results(processor, offer_info)
             
         except Exception as e:
             logger.error(f"Error showing comparison results: {e}")
             messagebox.showerror("Error", f"Failed to show comparison results: {str(e)}")
+
+    def _show_detailed_comparison_results(self, processor, offer_info):
+        """
+        Show detailed comparison results in a new tab
+        
+        Args:
+            processor: ComparisonProcessor instance
+            offer_info: Offer information dictionary
+        """
+        try:
+            # Create a new tab for comparison results
+            tab_title = f"Comparison Results - {offer_info.get('offer_name', 'Comparison')}"
+            tab = ttk.Frame(self.notebook)
+            self.notebook.add(tab, text=tab_title)
+            
+            # Create the tab content
+            self._populate_comparison_results_tab(tab, processor, offer_info)
+            
+            # Switch to the new tab
+            self.notebook.select(tab)
+            
+        except Exception as e:
+            logger.error(f"Error showing detailed comparison results: {e}")
+            messagebox.showerror("Error", f"Failed to show detailed comparison results: {str(e)}")
+
+    def _populate_comparison_results_tab(self, tab, processor, offer_info):
+        """
+        Populate the comparison results tab with detailed information
+        
+        Args:
+            tab: The tab to populate
+            processor: ComparisonProcessor instance
+            offer_info: Offer information dictionary
+        """
+        try:
+            # Create main frame
+            main_frame = ttk.Frame(tab, padding="10")
+            main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+            
+            # Configure grid weights
+            tab.columnconfigure(0, weight=1)
+            tab.rowconfigure(0, weight=1)
+            main_frame.columnconfigure(0, weight=1)
+            main_frame.rowconfigure(1, weight=1)
+            
+            # Title
+            title_label = ttk.Label(main_frame, text=f"Comparison Results - {offer_info.get('offer_name', 'Comparison')}", 
+                                   font=("Arial", 14, "bold"))
+            title_label.grid(row=0, column=0, pady=(0, 10), sticky=tk.W)
+            
+            # Create notebook for different views
+            results_notebook = ttk.Notebook(main_frame)
+            results_notebook.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+            
+            # Summary tab
+            summary_frame = ttk.Frame(results_notebook)
+            results_notebook.add(summary_frame, text="Summary")
+            self._populate_summary_frame(summary_frame, processor, offer_info)
+            
+            # Updated dataset tab
+            dataset_frame = ttk.Frame(results_notebook)
+            results_notebook.add(dataset_frame, text="Updated Dataset")
+            self._populate_dataset_frame(dataset_frame, processor, offer_info)
+            
+            # Button frame
+            button_frame = ttk.Frame(main_frame)
+            button_frame.grid(row=2, column=0, pady=(10, 0), sticky=(tk.E, tk.W))
+            button_frame.columnconfigure(1, weight=1)
+            
+            # Export button
+            export_btn = ttk.Button(button_frame, text="Export Results", 
+                                   command=lambda: self._export_comparison_results(processor, offer_info))
+            export_btn.grid(row=0, column=0, padx=(0, 10))
+            
+            # Close button
+            close_btn = ttk.Button(button_frame, text="Close", command=lambda: self.notebook.forget(tab))
+            close_btn.grid(row=0, column=2)
+            
+        except Exception as e:
+            logger.error(f"Error populating comparison results tab: {e}")
+            raise
+
+    def _populate_summary_frame(self, frame, processor, offer_info):
+        """Populate the summary frame with comparison statistics"""
+        try:
+            # Statistics
+            total_rows = len(processor.row_results)
+            valid_rows = sum(1 for r in processor.row_results if r['is_valid'])
+            invalid_rows = total_rows - valid_rows
+            merge_count = len(processor.merge_results)
+            add_count = len(processor.add_results)
+            
+            # Create statistics text
+            stats_text = f"""
+Comparison Statistics for {offer_info.get('offer_name', 'Comparison')}:
+
+Processing Results:
+• Total Rows Processed: {total_rows}
+• Valid Rows: {valid_rows}
+• Invalid Rows: {invalid_rows}
+
+Operations Performed:
+• Merge Operations: {merge_count}
+• Add Operations: {add_count}
+
+Dataset Information:
+• Master Dataset Rows: {len(processor.master_dataset)}
+• New Columns Created: {len([col for col in processor.master_dataset.columns if '[' in col])}
+
+Offer Information:
+• Offer Name: {offer_info.get('offer_name', 'N/A')}
+• Client: {offer_info.get('client_name', 'N/A')}
+• Project: {offer_info.get('project_name', 'N/A')}
+• Date: {offer_info.get('date', 'N/A')}
+            """
+            
+            # Create text widget
+            text_widget = tk.Text(frame, wrap=tk.WORD, height=20, width=60)
+            text_widget.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
+            
+            # Add scrollbar
+            scrollbar = ttk.Scrollbar(frame, orient="vertical", command=text_widget.yview)
+            scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+            text_widget.configure(yscrollcommand=scrollbar.set)
+            
+            # Insert text
+            text_widget.insert(tk.END, stats_text)
+            text_widget.config(state=tk.DISABLED)
+            
+            # Configure grid weights
+            frame.columnconfigure(0, weight=1)
+            frame.rowconfigure(0, weight=1)
+            
+        except Exception as e:
+            logger.error(f"Error populating summary frame: {e}")
+            raise
+
+    def _populate_dataset_frame(self, frame, processor, offer_info):
+        """Populate the dataset frame with the updated master dataset"""
+        try:
+            # Create treeview
+            columns = list(processor.master_dataset.columns)
+            tree = ttk.Treeview(frame, columns=columns, show='headings', height=15)
+            
+            # Configure columns
+            for col in columns:
+                tree.heading(col, text=col)
+                tree.column(col, width=100, minwidth=80)
+            
+            # Add scrollbars
+            vsb = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
+            hsb = ttk.Scrollbar(frame, orient="horizontal", command=tree.xview)
+            tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+            
+            # Grid layout
+            tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
+            vsb.grid(row=0, column=1, sticky=(tk.N, tk.S))
+            hsb.grid(row=1, column=0, sticky=(tk.W, tk.E))
+            
+            # Populate with data (limit to first 100 rows for performance)
+            for i, row in processor.master_dataset.head(100).iterrows():
+                values = [str(val) if pd.notna(val) else "" for val in row.values]
+                tree.insert('', 'end', values=values)
+            
+            # Configure grid weights
+            frame.columnconfigure(0, weight=1)
+            frame.rowconfigure(0, weight=1)
+            
+        except Exception as e:
+            logger.error(f"Error populating dataset frame: {e}")
+            raise
+
+    def _export_comparison_results(self, processor, offer_info):
+        """Export comparison results to Excel"""
+        try:
+            filetypes = [("Excel files", "*.xlsx"), ("All files", "*.*")]
+            filename = filedialog.asksaveasfilename(
+                title="Export Comparison Results",
+                filetypes=filetypes,
+                defaultextension=".xlsx"
+            )
+            
+            if filename:
+                # Export the updated master dataset
+                processor.master_dataset.to_excel(filename, index=False)
+                messagebox.showinfo("Export Complete", f"Comparison results exported to {filename}")
+                
+        except Exception as e:
+            logger.error(f"Error exporting comparison results: {e}")
+            messagebox.showerror("Export Error", f"Failed to export results: {str(e)}")
 
     def _prompt_offer_info(self, is_first_boq=True):
         """
