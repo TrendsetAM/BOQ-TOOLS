@@ -155,8 +155,8 @@ class OfferInfoDialog:
         date_entry = ttk.Entry(form_frame, textvariable=self.date_var)
         date_entry.grid(row=row, column=1, sticky=tk.EW, pady=(0, 10))
         
-        # Set default date to current date (July 11, 2025) for both first and subsequent BOQs
-        default_date = "2025-07-11"  # As specified in requirements
+        # Set default date to current date upon opening
+        default_date = datetime.now().strftime('%Y-%m-%d')
         self.date_var.set(default_date)
         
         # Optional fields note
