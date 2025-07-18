@@ -178,7 +178,10 @@ class ComparisonRowReviewDialog:
         """Handle row click to toggle validity"""
         region = self.tree.identify("region", event.x, event.y)
         if region == "cell":
-            item = self.tree.selection()[0]
+            selection = self.tree.selection()
+            if not selection:
+                return  # No item selected
+            item = selection[0]
             row_idx = int(self.tree.item(item, 'values')[0]) - 1  # Convert back to 0-based
             
             # Find the corresponding result

@@ -131,7 +131,8 @@ class ExcelProcessor:
             
             self.file_path = filepath
             logger.info(f"Successfully loaded Excel file: {filepath.name}")
-            logger.info(f"Total sheets: {len(self.workbook.sheetnames)}")
+            if self.workbook:
+                logger.info(f"Total sheets: {len(self.workbook.sheetnames)}")
             
             return True
             
@@ -392,13 +393,66 @@ class ExcelProcessor:
             raise
     
     def _find_data_boundaries(self, worksheet: Worksheet) -> Tuple[int, int, int, int]:
-        """Find the boundaries of actual data in the worksheet"""
+        """Find the boundaries of actual data in the worksheet using optimized scanning"""
         max_row = worksheet.max_row
         max_col = worksheet.max_column
         
         if max_row == 0 or max_col == 0:
             return 0, 0, 0, 0
         
+        # For very large sheets, use sampling to find boundaries faster
+        if max_row > 1000 or max_col > 100:
+            return self._find_data_boundaries_sampled(worksheet, max_row, max_col)
+        
+        # For smaller sheets, use the original method
+        return self._find_data_boundaries_full(worksheet, max_row, max_col)
+    
+    def _find_data_boundaries_sampled(self, worksheet: Worksheet, max_row: int, max_col: int) -> Tuple[int, int, int, int]:
+        """Find data boundaries using sampling for large sheets"""
+        # Sample every 10th row and column for large sheets
+        row_sample = 10
+        col_sample = 10
+        
+        # Find first data row (sample first 1000 rows)
+        first_data_row = max_row + 1
+        search_rows = min(1000, max_row)
+        for row in range(1, search_rows + 1, row_sample):
+            for col in range(1, min(max_col + 1, 100), col_sample):
+                if worksheet.cell(row=row, column=col).value is not None:
+                    first_data_row = min(first_data_row, row)
+                    break
+        
+        # Find last data row (sample last 1000 rows)
+        last_data_row = 0
+        search_start = max(1, max_row - 1000)
+        for row in range(max_row, search_start - 1, -row_sample):
+            for col in range(1, min(max_col + 1, 100), col_sample):
+                if worksheet.cell(row=row, column=col).value is not None:
+                    last_data_row = max(last_data_row, row)
+                    break
+        
+        # Find first data column (sample first 100 columns)
+        first_data_col = max_col + 1
+        search_cols = min(100, max_col)
+        for col in range(1, search_cols + 1, col_sample):
+            for row in range(first_data_row, min(last_data_row + 1, first_data_row + 100), row_sample):
+                if worksheet.cell(row=row, column=col).value is not None:
+                    first_data_col = min(first_data_col, col)
+                    break
+        
+        # Find last data column (sample last 100 columns)
+        last_data_col = 0
+        search_start = max(1, max_col - 100)
+        for col in range(max_col, search_start - 1, -col_sample):
+            for row in range(first_data_row, min(last_data_row + 1, first_data_row + 100), row_sample):
+                if worksheet.cell(row=row, column=col).value is not None:
+                    last_data_col = max(last_data_col, col)
+                    break
+        
+        return first_data_row, last_data_row, first_data_col, last_data_col
+    
+    def _find_data_boundaries_full(self, worksheet: Worksheet, max_row: int, max_col: int) -> Tuple[int, int, int, int]:
+        """Find data boundaries using full scanning for smaller sheets"""
         # Find first data row
         first_data_row = max_row + 1
         for row in range(1, min(max_row + 1, 1000)):  # Limit search for performance

@@ -2240,9 +2240,107 @@ class MainWindow:
             traceback.print_exc()
             messagebox.showerror("Error", f"Error handling categorization completion: {str(e)}")
 
+    def _remap_comparison_columns(self, df):
+        """
+        Remap the columns of the comparison DataFrame to canonical names using ColumnMapper.
+        """
+        from core.column_mapper import ColumnMapper
+        import pandas as pd
+        
+        mapper = ColumnMapper()
+        headers = list(df.columns)
+        
+        # Log original headers for debugging
+        logger.info(f"Original headers: {headers}")
+        
+        # First, try to map using ColumnMapper
+        mapping = mapper.map_columns_to_types(headers)
+        
+        # Build a mapping from original header to canonical name
+        header_map = {}
+        for m in mapping:
+            if m.mapped_type.value not in header_map.values():
+                header_map[m.original_header] = m.mapped_type.value
+        
+        # Log the mapping for debugging
+        logger.info(f"ColumnMapper mapping: {header_map}")
+        
+        # If ColumnMapper didn't find much, try manual mapping based on common patterns
+        if len(header_map) < 3:  # If we found less than 3 columns
+            logger.info("ColumnMapper found few matches, trying manual mapping...")
+            
+            # Manual mapping based on common patterns
+            manual_mapping = {}
+            for header in headers:
+                header_lower = str(header).lower().strip()
+                
+                # Quantity patterns
+                if any(keyword in header_lower for keyword in ['qty', 'quantity', 'no', 'number', 'count']):
+                    manual_mapping[header] = 'quantity'
+                
+                # Description patterns
+                elif any(keyword in header_lower for keyword in ['description', 'item', 'work', 'activity', 'task', 'detail']):
+                    manual_mapping[header] = 'Description'
+                
+                # Unit price patterns
+                elif any(keyword in header_lower for keyword in ['unit price', 'rate', 'price per unit', 'unit cost']):
+                    manual_mapping[header] = 'unit_price'
+                
+                # Total price patterns
+                elif any(keyword in header_lower for keyword in ['total', 'total price', 'total cost', 'value', 'amount']):
+                    manual_mapping[header] = 'total_price'
+                
+                # Unit patterns
+                elif any(keyword in header_lower for keyword in ['unit', 'measurement', 'uom', 'unit of measure']):
+                    manual_mapping[header] = 'unit'
+                
+                # Code patterns
+                elif any(keyword in header_lower for keyword in ['code', 'item code', 'reference', 'ref', 'item no']):
+                    manual_mapping[header] = 'code'
+            
+            # Update header_map with manual mappings
+            header_map.update(manual_mapping)
+            logger.info(f"Manual mapping additions: {manual_mapping}")
+        
+        # Rename columns
+        df_renamed = df.rename(columns=header_map)
+        
+        # Ensure we have all required columns with proper casing
+        required_columns = {
+            'quantity': 'quantity',
+            'unit_price': 'unit_price', 
+            'total_price': 'total_price',
+            'Description': 'Description',
+            'code': 'code',
+            'unit': 'unit'
+        }
+        
+        # Check if we have the required columns (case-insensitive)
+        missing_columns = []
+        for required_col, canonical_name in required_columns.items():
+            found = False
+            for col in df_renamed.columns:
+                if col.lower() == required_col.lower():
+                    # Rename to canonical name if needed
+                    if col != canonical_name:
+                        df_renamed = df_renamed.rename(columns={col: canonical_name})
+                    found = True
+                    break
+            if not found:
+                missing_columns.append(canonical_name)
+        
+        if missing_columns:
+            logger.warning(f"Missing required columns after mapping: {missing_columns}")
+            # Add empty columns for missing required columns
+            for col in missing_columns:
+                df_renamed[col] = None
+        
+        logger.info(f"Final columns: {list(df_renamed.columns)}")
+        return df_renamed
+
     def _compare_full(self, tab):
         """
-        New comparison workflow using ComparisonProcessor
+        Optimized comparison workflow using master BOQ structure
         
         Args:
             tab: The tab containing the master BoQ data
@@ -2290,22 +2388,21 @@ class MainWindow:
                 self._update_status("Comparison cancelled (no offer information provided)")
                 return
             
-            # Process comparison file
+            # Process comparison file using optimized method
             self._update_status("Processing comparison file...")
             
-            # Load comparison file using existing file processing
-            comparison_file_mapping = self._process_comparison_file(comparison_file, comparison_offer_info)
+            # Process comparison file using the same logic as "Use Mapping"
+            self._update_status("Processing comparison file...")
+            
+            # Use the same file processing logic as "Use Mapping" workflow but adapted for comparison
+            comparison_file_mapping = self._process_comparison_file_with_master_mappings(
+                comparison_file, 
+                master_file_mapping,  # Use master BOQ mappings
+                comparison_offer_info
+            )
             
             if not comparison_file_mapping:
                 messagebox.showerror("Error", "Failed to process comparison file")
-                return
-            
-            # Validate that mappings are identical
-            validation_result = self._validate_mapping_compatibility(master_file_mapping, comparison_file_mapping)
-            
-            if not validation_result.get('is_valid', False):
-                # Use existing validation error handling
-                _handle_validation_failure(validation_result, "Compare Full", "mapping validation")
                 return
             
             # Set comparison workflow state
@@ -2316,8 +2413,14 @@ class MainWindow:
             # Load master dataset
             self.comparison_processor.load_master_dataset(master_df)
             
-            # Load comparison data
+            # Load comparison data (already properly mapped from _process_file_with_mapping)
             comparison_df = comparison_file_mapping.dataframe
+            
+            # Debug: Log comparison data info
+            logger.info(f"Comparison DataFrame shape: {comparison_df.shape}")
+            logger.info(f"Comparison DataFrame columns: {list(comparison_df.columns)}")
+            logger.info(f"Comparison DataFrame head:\n{comparison_df.head()}")
+            
             self.comparison_processor.load_comparison_data(comparison_df)
             
             # Validate comparison data
@@ -2351,7 +2454,8 @@ class MainWindow:
             
             # Process valid rows with MERGE/ADD logic
             self._update_status("Processing valid rows...")
-            instance_results = self.comparison_processor.process_valid_rows()
+            offer_name = comparison_offer_info.get('offer_name', 'Comparison')
+            instance_results = self.comparison_processor.process_valid_rows(offer_name=offer_name)
             
             # Clean up data
             self._update_status("Cleaning up data...")
@@ -2392,17 +2496,23 @@ class MainWindow:
             if not excel_processor.load_file(filepath):
                 return None
             
-            # Get visible sheets and filter to BOQ sheets only
+            # Get visible sheets
             visible_sheets = excel_processor.get_visible_sheets()
             if not visible_sheets:
                 return None
             
-            # For comparison, treat all sheets as BOQ to avoid sheet categorization dialog
-            boq_sheets = visible_sheets
-            sheet_categories = {sheet: "BOQ" for sheet in visible_sheets}
+            # Identify BOQ sheets to optimize processing
+            boq_sheets = boq_processor.identify_boq_sheets(visible_sheets)
+            if not boq_sheets:
+                # If no BOQ sheets identified, use all visible sheets
+                boq_sheets = visible_sheets
+                logger.info("No BOQ sheets identified, processing all visible sheets")
             
-            # Process the file using BOQ processor with sheet filtering
-            if not boq_processor.load_excel(filepath):
+            # For comparison, treat identified sheets as BOQ to avoid sheet categorization dialog
+            sheet_categories = {sheet: "BOQ" for sheet in boq_sheets}
+            
+            # Process only BOQ sheets for better performance
+            if not boq_processor.load_excel(filepath, sheets_to_process=boq_sheets):
                 return None
             
             # Process only BOQ sheets
@@ -4077,6 +4187,290 @@ Offer Information:
         except Exception as e:
             logger.error(f"Error starting comparison: {e}")
             messagebox.showerror("Error", f"Failed to start comparison: {str(e)}")
+
+    def _process_comparison_file_optimized(self, filepath, offer_info, master_file_mapping):
+        """
+        Process comparison file using master BOQ mapping for maximum efficiency
+        
+        Args:
+            filepath: Path to comparison file
+            offer_info: Offer information dictionary
+            master_file_mapping: Master BOQ file mapping with known structure
+        
+        Returns:
+            FileMapping object or None if failed
+        """
+        try:
+            from core.file_processor import ExcelProcessor
+            import pandas as pd
+            
+            # Create Excel processor
+            excel_processor = ExcelProcessor()
+            
+            # Load the file
+            if not excel_processor.load_file(filepath):
+                return None
+            
+            # Get the exact sheets that exist in the master BOQ
+            master_sheet_names = set()
+            if hasattr(master_file_mapping, 'sheets') and master_file_mapping.sheets:
+                master_sheet_names = {sheet.sheet_name for sheet in master_file_mapping.sheets}
+            else:
+                # Fallback: get visible sheets
+                master_sheet_names = set(excel_processor.get_visible_sheets())
+            
+            # Get visible sheets from comparison file
+            visible_sheets = excel_processor.get_visible_sheets()
+            if not visible_sheets:
+                return None
+            
+            # Check if all master sheets exist in comparison file
+            missing_sheets = master_sheet_names - set(visible_sheets)
+            if missing_sheets:
+                error_msg = f"Comparison file is missing required sheets: {missing_sheets}"
+                logger.error(error_msg)
+                messagebox.showerror("Structure Mismatch", error_msg)
+                return None
+            
+            # Only process the exact sheets from master BOQ
+            sheets_to_process = list(master_sheet_names)
+            logger.info(f"Processing {len(sheets_to_process)} sheets based on master BOQ structure")
+            
+            # Extract data directly using master mapping information
+            all_data = []
+            
+            for sheet_name in sheets_to_process:
+                try:
+                    # Get sheet data with proper header detection
+                    sheet_data = excel_processor.get_sheet_data(sheet_name, max_rows=10000)
+                    if not sheet_data or len(sheet_data) < 2:  # Need at least header + 1 row
+                        continue
+                    
+                    # Find the actual header row (skip empty rows at the top)
+                    header_row_idx = 0
+                    for i, row in enumerate(sheet_data):
+                        if any(cell and str(cell).strip() for cell in row):
+                            header_row_idx = i
+                            break
+                    
+                    # Get headers and data
+                    headers = sheet_data[header_row_idx]
+                    data_rows = sheet_data[header_row_idx + 1:]
+                    
+                    # Clean headers (remove duplicates, handle empty headers)
+                    clean_headers = []
+                    for i, header in enumerate(headers):
+                        if not header or pd.isna(header) or str(header).strip() == '':
+                            # Try to find a meaningful header from the data
+                            meaningful_header = None
+                            for data_row in data_rows[:5]:  # Check first 5 rows
+                                if i < len(data_row) and data_row[i] and str(data_row[i]).strip():
+                                    meaningful_header = f"Column_{str(data_row[i]).strip()[:20]}"
+                                    break
+                            if not meaningful_header:
+                                meaningful_header = f'Column_{i}'
+                            clean_headers.append(meaningful_header)
+                        else:
+                            clean_headers.append(str(header).strip())
+                    
+                    # Ensure unique headers
+                    unique_headers = []
+                    seen_headers = set()
+                    for header in clean_headers:
+                        if header in seen_headers:
+                            counter = 1
+                            while f"{header}_{counter}" in seen_headers:
+                                counter += 1
+                            header = f"{header}_{counter}"
+                        unique_headers.append(header)
+                        seen_headers.add(header)
+                    
+                    # Convert to DataFrame with clean headers
+                    df = pd.DataFrame(data_rows, columns=unique_headers)
+                    if df.empty:
+                        continue
+                    
+                    # Add sheet name column
+                    df['Source_Sheet'] = sheet_name
+                    
+                    # Reset index to avoid conflicts
+                    df = df.reset_index(drop=True)
+                    
+                    # Append to all data
+                    all_data.append(df)
+                    
+                    logger.debug(f"Extracted {len(df)} rows from sheet '{sheet_name}' with headers: {unique_headers[:5]}...")
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to process sheet '{sheet_name}': {e}")
+                    continue
+            
+            if not all_data:
+                messagebox.showerror("Error", "No data could be extracted from comparison file")
+                return None
+            
+            # Combine all data with proper error handling
+            try:
+                combined_df = pd.concat(all_data, ignore_index=True, sort=False)
+                logger.info(f"Combined {len(combined_df)} total rows from comparison file")
+            except Exception as e:
+                logger.error(f"Error combining DataFrames: {e}")
+                # Fallback: try with different approach
+                try:
+                    # Create a list of dictionaries and then DataFrame
+                    all_rows = []
+                    for df in all_data:
+                        for _, row in df.iterrows():
+                            all_rows.append(row.to_dict())
+                    
+                    combined_df = pd.DataFrame(all_rows)
+                    logger.info(f"Combined {len(combined_df)} total rows using fallback method")
+                except Exception as e2:
+                    logger.error(f"Fallback method also failed: {e2}")
+                    messagebox.showerror("Error", f"Failed to combine data from comparison file: {str(e)}")
+                    return None
+            
+            # Create file mapping object
+            file_mapping = type('MockFileMapping', (), {
+                'dataframe': combined_df,
+                'offer_info': offer_info,
+                'sheets': []  # Add empty sheets list for compatibility
+            })()
+            
+            # Store offer information
+            file_mapping.offer_info = offer_info
+            
+            return file_mapping
+            
+        except Exception as e:
+            logger.error(f"Error processing comparison file: {e}")
+            return None
+
+    def _process_comparison_file_with_master_mappings(self, filepath, master_file_mapping, offer_info):
+        """
+        Process comparison file using master BOQ mappings (header row index and column mapping from master)
+        Args:
+            filepath: Path to comparison file
+            master_file_mapping: Master BOQ file mapping with known structure
+            offer_info: Offer information dictionary
+        Returns:
+            FileMapping object or None if failed
+        """
+        try:
+            from core.file_processor import ExcelProcessor
+            import pandas as pd
+            
+            excel_processor = ExcelProcessor()
+            if not excel_processor.load_file(filepath):
+                return None
+            
+            # Get master mapping info
+            master_sheets = getattr(master_file_mapping, 'sheets', [])
+            if not master_sheets:
+                logger.error("Master file mapping has no sheets info")
+                return None
+            
+            visible_sheets = excel_processor.get_visible_sheets()
+            if not visible_sheets:
+                return None
+            
+            all_data = []
+            for master_sheet in master_sheets:
+                sheet_name = getattr(master_sheet, 'sheet_name', None)
+                if not sheet_name or sheet_name not in visible_sheets:
+                    continue
+                header_row_idx = getattr(master_sheet, 'header_row_index', 0)
+                column_mappings = getattr(master_sheet, 'column_mappings', [])
+                if not column_mappings:
+                    logger.warning(f"No column mappings for sheet {sheet_name}")
+                    continue
+                
+                # Get sheet data
+                sheet_data = excel_processor.get_sheet_data(sheet_name, max_rows=10000)
+                if not sheet_data or len(sheet_data) <= header_row_idx:
+                    continue
+                
+                headers = sheet_data[header_row_idx]
+                data_rows = sheet_data[header_row_idx + 1:]
+                
+                # Build mapping from original header to canonical name using master mapping
+                header_map = {}
+                for cm in column_mappings:
+                    orig = getattr(cm, 'original_header', None)
+                    canon = getattr(cm, 'mapped_type', None)
+                    if orig and canon:
+                        # mapped_type may be an Enum or str
+                        canon_val = canon.value if hasattr(canon, 'value') else str(canon)
+                        # Ensure correct case for canonical names
+                        if canon_val.lower() == 'description':
+                            canon_val = 'Description'
+                        elif canon_val.lower() == 'quantity':
+                            canon_val = 'quantity'
+                        elif canon_val.lower() == 'unit_price':
+                            canon_val = 'unit_price'
+                        elif canon_val.lower() == 'total_price':
+                            canon_val = 'total_price'
+                        elif canon_val.lower() == 'unit':
+                            canon_val = 'unit'
+                        elif canon_val.lower() == 'code':
+                            canon_val = 'code'
+                        header_map[orig] = canon_val
+                
+                # Map columns for this sheet
+                mapped_columns = []
+                for i, col in enumerate(headers):
+                    col_str = str(col).strip() if col else ''
+                    mapped_columns.append(header_map.get(col_str, col_str))
+                
+                # Ensure unique column names
+                unique_columns = []
+                seen_columns = set()
+                for col in mapped_columns:
+                    if col in seen_columns:
+                        counter = 1
+                        while f"{col}_{counter}" in seen_columns:
+                            counter += 1
+                        col = f"{col}_{counter}"
+                    unique_columns.append(col)
+                    seen_columns.add(col)
+                
+                # Build DataFrame
+                df = pd.DataFrame(data_rows, columns=unique_columns)
+                if df.empty:
+                    continue
+                
+                # Add required columns that may be missing
+                if 'Category' not in df.columns:
+                    df['Category'] = None
+                if 'Source_Sheet' not in df.columns:
+                    df['Source_Sheet'] = sheet_name
+                
+                df = df.reset_index(drop=True)
+                all_data.append(df)
+                logger.debug(f"Extracted {len(df)} rows from sheet '{sheet_name}' using master mapping")
+            
+            if not all_data:
+                logger.error("No data could be extracted from comparison file using master mappings")
+                return None
+            
+            # Combine all data
+            try:
+                combined_df = pd.concat(all_data, ignore_index=True, sort=False)
+                logger.info(f"Combined {len(combined_df)} total rows from comparison file (master mapping)")
+            except Exception as e:
+                logger.error(f"Error combining DataFrames: {e}")
+                return None
+            
+            file_mapping = type('MockFileMapping', (), {
+                'dataframe': combined_df,
+                'offer_info': offer_info,
+                'sheets': []
+            })()
+            file_mapping.offer_info = offer_info
+            return file_mapping
+        except Exception as e:
+            logger.error(f"Error processing comparison file with master mappings: {e}")
+            return None
 
     def run(self):
         """Start the main window event loop"""

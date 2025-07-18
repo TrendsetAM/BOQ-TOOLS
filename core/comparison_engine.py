@@ -441,6 +441,10 @@ class ComparisonProcessor:
                             column_mapping[i] = ColumnType.CODE
                         elif col_name.lower() in ['unit', 'uom']:
                             column_mapping[i] = ColumnType.UNIT
+                        elif col_name.lower() in ['manhours', 'ore/u.m.', 'ore', 'man hours']:
+                            column_mapping[i] = ColumnType.MANHOURS
+                        elif col_name.lower() in ['wage', 'euro/hour', 'hourly rate']:
+                            column_mapping[i] = ColumnType.WAGE
                         else:
                             # Default to DESCRIPTION for unknown columns
                             column_mapping[i] = ColumnType.DESCRIPTION
@@ -460,7 +464,7 @@ class ComparisonProcessor:
         self.row_results = results
         return results 
 
-    def process_valid_rows(self, instance_matcher=None, comparison_engine=None, key_columns=None):
+    def process_valid_rows(self, instance_matcher=None, comparison_engine=None, key_columns=None, offer_name=None):
         """
         For each valid row in the comparison data:
         - Use LIST_INSTANCES to get all instances with the same description in both master and comparison datasets
@@ -469,6 +473,7 @@ class ComparisonProcessor:
             instance_matcher: Optional, InstanceMatcher instance
             comparison_engine: Optional, ComparisonEngine instance
             key_columns: List of columns to use as row key (default: ['Description'])
+            offer_name: Name of the offer for creating offer-specific columns
         Returns:
             List of merge/add operation results
         """
@@ -516,6 +521,10 @@ class ComparisonProcessor:
                             column_mapping[i] = "CODE"
                         elif col_name.lower() in ['unit', 'uom']:
                             column_mapping[i] = "UNIT"
+                        elif col_name.lower() in ['manhours', 'ore/u.m.', 'ore', 'man hours']:
+                            column_mapping[i] = "MANHOURS"
+                        elif col_name.lower() in ['wage', 'euro/hour', 'hourly rate']:
+                            column_mapping[i] = "WAGE"
                         else:
                             # Default to DESCRIPTION for unknown columns
                             column_mapping[i] = "DESCRIPTION"
@@ -531,7 +540,7 @@ class ComparisonProcessor:
                     merge_result = comparison_engine.MERGE(
                         comp_row_values,
                         self.master_dataset,
-                        offer_name="ComparisonOffer",
+                        offer_name=offer_name or "ComparisonOffer",
                         column_mapping=column_mapping,
                         row_index=master_idx
                     )
@@ -559,6 +568,10 @@ class ComparisonProcessor:
                             column_mapping[i] = "CODE"
                         elif col_name.lower() in ['unit', 'uom']:
                             column_mapping[i] = "UNIT"
+                        elif col_name.lower() in ['manhours', 'ore/u.m.', 'ore', 'man hours']:
+                            column_mapping[i] = "MANHOURS"
+                        elif col_name.lower() in ['wage', 'euro/hour', 'hourly rate']:
+                            column_mapping[i] = "WAGE"
                         else:
                             # Default to DESCRIPTION for unknown columns
                             column_mapping[i] = "DESCRIPTION"
