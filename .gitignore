@@ -88,3 +88,5 @@ logs/boq_tools.log
 /examples
 /logs
 /logs
+logs/boq_tools.log
+*.log
