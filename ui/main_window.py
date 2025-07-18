@@ -2734,7 +2734,7 @@ Offer Information:
             raise
 
     def _export_comparison_results(self, processor, offer_info):
-        """Export comparison results to Excel"""
+        """Export comparison results to Excel with proper formatting and data validation"""
         try:
             filetypes = [("Excel files", "*.xlsx"), ("All files", "*.*")]
             filename = filedialog.asksaveasfilename(
@@ -2744,8 +2744,97 @@ Offer Information:
             )
             
             if filename:
-                # Export the updated master dataset
-                processor.master_dataset.to_excel(filename, index=False)
+                # Export the updated master dataset with proper formatting
+                with pd.ExcelWriter(filename, engine='openpyxl') as writer:
+                    processor.master_dataset.to_excel(writer, index=False, sheet_name='Comparison Results')
+                    
+                    # Get the workbook and worksheet
+                    workbook = writer.book
+                    worksheet = writer.sheets['Comparison Results']
+                    
+                    # Apply European number formatting to numeric columns
+                    from openpyxl.styles import NamedStyle
+                    from openpyxl.utils import get_column_letter
+                    
+                    # Identify numeric columns (those containing price, quantity, manhours, wage)
+                    numeric_columns = []
+                    for col_idx, col_name in enumerate(processor.master_dataset.columns, 1):
+                        col_lower = col_name.lower()
+                        if any(keyword in col_lower for keyword in ['price', 'quantity', 'manhours', 'wage']):
+                            numeric_columns.append((col_idx, col_name))
+                    
+                    # Apply formatting to numeric columns
+                    for col_idx, col_name in numeric_columns:
+                        # Create European number style
+                        euro_style = NamedStyle(name=f"euro_number_{col_name}")
+                        euro_style.number_format = '#,##0.00'
+                        
+                        # Apply to the column
+                        col_letter = get_column_letter(col_idx)
+                        for row in range(2, len(processor.master_dataset) + 2):  # Skip header row
+                            cell = worksheet[f'{col_letter}{row}']
+                            cell.style = euro_style
+                    
+                    # Add data validation for Category column if it exists
+                    if 'Category' in processor.master_dataset.columns:
+                        category_col_idx = list(processor.master_dataset.columns).index('Category') + 1
+                        category_col_letter = get_column_letter(category_col_idx)
+                        
+                        # Get available categories in the correct order (from category_order)
+                        try:
+                            category_order = ['General Costs', 'Site Costs', 'Civil Works', 'Earth Movement', 'Roads', 'OEM Building', 'Electrical Works', 'Solar Cables', 'LV Cables', 'MV Cables', 'Trenching', 'PV Mod. Installation', 'Cleaning and Cabling of PV Mod.', 'Tracker Inst.', 'Other']
+                            available_categories = category_order
+                            
+                            # Create data validation for Category column
+                            from openpyxl.worksheet.datavalidation import DataValidation
+                            
+                            # Create validation rule
+                            dv = DataValidation(
+                                type="list",
+                                formula1=f'"{",".join(available_categories)}"',
+                                allow_blank=True,
+                                showErrorMessage=True,
+                                errorTitle="Invalid Category",
+                                error="Please select a category from the dropdown list.",
+                                showInputMessage=True,
+                                promptTitle="Category Selection",
+                                prompt="Select a category from the dropdown list."
+                            )
+                            
+                            # Add validation to worksheet
+                            worksheet.add_data_validation(dv)
+                            
+                            # Apply validation to Category column (skip header row)
+                            for row in range(2, len(processor.master_dataset) + 2):
+                                dv.add(f'{category_col_letter}{row}')
+                            
+                        except Exception as e:
+                            logger.warning(f"Could not add category validation: {e}")
+                    
+                    # Auto-adjust column widths
+                    for column in worksheet.columns:
+                        max_length = 0
+                        column_letter = column[0].column_letter
+                        for cell in column:
+                            try:
+                                if len(str(cell.value)) > max_length:
+                                    max_length = len(str(cell.value))
+                            except:
+                                pass
+                        adjusted_width = min(max_length + 2, 50)  # Cap at 50 characters
+                        worksheet.column_dimensions[column_letter].width = adjusted_width
+                    
+                    # Format header row
+                    from openpyxl.styles import Font, PatternFill, Alignment
+                    header_font = Font(bold=True)
+                    header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+                    header_alignment = Alignment(horizontal="center", vertical="center")
+                    
+                    for cell in worksheet[1]:
+                        cell.font = header_font
+                        cell.fill = header_fill
+                        cell.alignment = header_alignment
+                
                 messagebox.showinfo("Export Complete", f"Comparison results exported to {filename}")
                 
         except Exception as e:
@@ -3336,7 +3425,7 @@ Offer Information:
             messagebox.showerror("Error", f"Failed to show categorized data: {str(e)}")
 
     def _export_categorized_data(self, final_dataframe):
-        """Export categorized data to Excel"""
+        """Export categorized data to Excel with proper formatting and data validation"""
         try:
             filetypes = [("Excel files", "*.xlsx"), ("All files", "*.*")]
             filename = filedialog.asksaveasfilename(
@@ -3373,7 +3462,7 @@ Offer Information:
                         # Convert to numeric, handling any formatting
                         export_df[col] = pd.to_numeric(export_df[col], errors='coerce')
                 
-                # Export with proper Excel formatting
+                # Export with proper Excel formatting and data validation
                 with pd.ExcelWriter(filename, engine='openpyxl') as writer:
                     export_df.to_excel(writer, index=False, sheet_name='BOQ Data')
                     
@@ -3389,7 +3478,7 @@ Offer Information:
                             from openpyxl.utils import get_column_letter
                             
                             # Create European number style
-                            euro_style = NamedStyle(name="euro_number")
+                            euro_style = NamedStyle(name=f"euro_number_{col_name}")
                             euro_style.number_format = '#,##0.00'
                             
                             # Apply to the column
@@ -3397,6 +3486,67 @@ Offer Information:
                             for row in range(2, len(export_df) + 2):  # Skip header row
                                 cell = worksheet[f'{col_letter}{row}']
                                 cell.style = euro_style
+                    
+                    # Add data validation for Category column
+                    if 'Category' in export_df.columns:
+                        category_col_idx = list(export_df.columns).index('Category') + 1
+                        category_col_letter = get_column_letter(category_col_idx)
+                        
+                        # Get available categories in the correct order (from category_order)
+                        try:
+                            category_order = ['General Costs', 'Site Costs', 'Civil Works', 'Earth Movement', 'Roads', 'OEM Building', 'Electrical Works', 'Solar Cables', 'LV Cables', 'MV Cables', 'Trenching', 'PV Mod. Installation', 'Cleaning and Cabling of PV Mod.', 'Tracker Inst.', 'Other']
+                            available_categories = category_order
+                            
+                            # Create data validation for Category column
+                            from openpyxl.worksheet.datavalidation import DataValidation
+                            
+                            # Create validation rule
+                            dv = DataValidation(
+                                type="list",
+                                formula1=f'"{",".join(available_categories)}"',
+                                allow_blank=True,
+                                showErrorMessage=True,
+                                errorTitle="Invalid Category",
+                                error="Please select a category from the dropdown list.",
+                                showInputMessage=True,
+                                promptTitle="Category Selection",
+                                prompt="Select a category from the dropdown list."
+                            )
+                            
+                            # Add validation to worksheet
+                            worksheet.add_data_validation(dv)
+                            
+                            # Apply validation to Category column (skip header row)
+                            for row in range(2, len(export_df) + 2):
+                                dv.add(f'{category_col_letter}{row}')
+                            
+                        except Exception as e:
+                            logger.warning(f"Could not add category validation: {e}")
+                    
+                    # Auto-adjust column widths
+                    for column in worksheet.columns:
+                        max_length = 0
+                        column_letter = column[0].column_letter
+                        for cell in column:
+                            try:
+                                if len(str(cell.value)) > max_length:
+                                    max_length = len(str(cell.value))
+                            except:
+                                pass
+                        adjusted_width = min(max_length + 2, 50)  # Cap at 50 characters
+                        worksheet.column_dimensions[column_letter].width = adjusted_width
+                    
+                    # Format header row
+                    from openpyxl.styles import Font, PatternFill, Alignment
+                    header_font = Font(bold=True)
+                    header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+                    header_alignment = Alignment(horizontal="center", vertical="center")
+                    
+                    for cell in worksheet[1]:
+                        cell.font = header_font
+                        cell.fill = header_fill
+                        cell.alignment = header_alignment
+                
                 messagebox.showinfo("Export Complete", f"Categorized data exported to {filename}")
                 
         except Exception as e:
