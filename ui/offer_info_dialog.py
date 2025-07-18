@@ -187,7 +187,7 @@ class OfferInfoDialog:
         
         # Collect all information
         self.result = {
-            'supplier_name': supplier_name,
+            'offer_name': supplier_name,  # Use supplier_name as offer_name
             'project_name': self.project_name_var.get().strip(),
             'project_size': self.project_size_var.get().strip(),
             'date': self.date_var.get().strip(),

@@ -129,7 +129,7 @@ class BOQApplicationController:
         # Setup logging
         self.logger = setup_logging(
             log_file=self.log_file,
-            level=logging.INFO,
+            level=logging.DEBUG,  # Temporarily set to DEBUG to see offer info logs
             console_output=True
         )
         
