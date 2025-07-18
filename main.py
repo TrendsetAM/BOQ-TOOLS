@@ -83,6 +83,11 @@ class BOQApplicationController:
         self.settings = {}
         self.auto_save_timer = None
         
+        # Comparison workflow state
+        self.comparison_processor = None
+        self.master_file_mapping = None
+        self.is_comparison_mode = False
+        
         # Threading
         self.processing_lock = threading.Lock()
         self.shutdown_event = threading.Event()
@@ -464,6 +469,69 @@ class BOQApplicationController:
         
         assert self.logger is not None
         self.logger.info("Application shutdown completed")
+    
+    def start_comparison_workflow(self, master_file_mapping: FileMapping):
+        """
+        Start comparison workflow with master file mapping
+        
+        Args:
+            master_file_mapping: FileMapping for the master BoQ
+        """
+        assert self.logger is not None
+        self.logger.info("Starting comparison workflow")
+        
+        self.is_comparison_mode = True
+        self.master_file_mapping = master_file_mapping
+        
+        # Initialize comparison processor
+        from core.comparison_engine import ComparisonProcessor
+        self.comparison_processor = ComparisonProcessor()
+        
+        self.logger.info("Comparison workflow initialized")
+    
+    def process_comparison_file(self, file_path: Path, offer_info: Dict[str, Any]) -> Optional[FileMapping]:
+        """
+        Process comparison file in comparison workflow
+        
+        Args:
+            file_path: Path to comparison file
+            offer_info: Offer information for comparison
+            
+        Returns:
+            FileMapping for comparison file or None if failed
+        """
+        assert self.logger is not None
+        
+        if not self.is_comparison_mode:
+            self.logger.error("Not in comparison mode")
+            return None
+        
+        try:
+            # Process the comparison file using normal file processing
+            comparison_mapping = self.process_file(file_path)
+            
+            # Store offer information
+            comparison_mapping.offer_info = offer_info
+            
+            self.logger.info(f"Comparison file processed: {file_path}")
+            return comparison_mapping
+            
+        except Exception as e:
+            self.logger.error(f"Error processing comparison file {file_path}: {e}")
+            return None
+    
+    def get_comparison_processor(self) -> Optional[Any]:
+        """Get the current comparison processor"""
+        return self.comparison_processor
+    
+    def end_comparison_workflow(self):
+        """End comparison workflow and reset state"""
+        assert self.logger is not None
+        self.logger.info("Ending comparison workflow")
+        
+        self.is_comparison_mode = False
+        self.master_file_mapping = None
+        self.comparison_processor = None
 
 
 class BOQApplication:

@@ -320,6 +320,9 @@ class MainWindow:
         self.row_review_treeviews = {}  # Initialize row review treeviews dictionary
         # ComparisonProcessor will handle comparison logic
         self.comparison_processor = None
+        # Track comparison state
+        self.is_comparison_workflow = False
+        self.master_file_mapping = None
         # Add robust tab-to-file-mapping
         self.tab_id_to_file_mapping = {}
         # Offer name for summary grid
@@ -487,7 +490,22 @@ class MainWindow:
             self._update_status("No data to export.")
 
     def open_file(self):
-        # Prompt for comprehensive offer information before opening file dialog
+        """Open file with enhanced comparison workflow support"""
+        # Check if we're in comparison workflow
+        if self.is_comparison_workflow and self.master_file_mapping:
+            # We're in comparison mode, prompt for comparison file
+            offer_info = self._prompt_offer_info(is_first_boq=False)
+            if offer_info is None:
+                self._update_status("Comparison file selection cancelled.")
+                return
+            
+            filetypes = [("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
+            comparison_file = filedialog.askopenfilename(title="Select Comparison BoQ File", filetypes=filetypes)
+            if comparison_file:
+                self._process_comparison_file(comparison_file, offer_info)
+            return
+        
+        # Normal file opening workflow
         offer_info = self._prompt_offer_info(is_first_boq=True)
         if offer_info is None:
             self._update_status("File open cancelled (no offer information provided).")
@@ -2164,26 +2182,28 @@ class MainWindow:
                 _handle_validation_failure(validation_result, "Compare Full", "mapping validation")
                 return
             
-            # Create ComparisonProcessor and load data
-            processor = ComparisonProcessor()
+            # Set comparison workflow state
+            self.is_comparison_workflow = True
+            self.master_file_mapping = master_file_mapping
+            self.comparison_processor = ComparisonProcessor()
             
             # Load master dataset (use the categorized final_dataframe)
             master_df = tab.final_dataframe.copy()
-            processor.load_master_dataset(master_df)
+            self.comparison_processor.load_master_dataset(master_df)
             
             # Load comparison data
             comparison_df = comparison_file_mapping.dataframe
-            processor.load_comparison_data(comparison_df)
+            self.comparison_processor.load_comparison_data(comparison_df)
             
             # Validate comparison data
-            is_valid, message = processor.validate_comparison_data()
+            is_valid, message = self.comparison_processor.validate_comparison_data()
             if not is_valid:
                 messagebox.showerror("Validation Error", f"Comparison data validation failed: {message}")
                 return
             
             # Process rows for validity
             self._update_status("Processing row validity...")
-            row_results = processor.process_comparison_rows()
+            row_results = self.comparison_processor.process_comparison_rows()
             
             # Show comparison row review dialog
             if COMPARISON_ROW_REVIEW_AVAILABLE:
@@ -2199,21 +2219,21 @@ class MainWindow:
                     return
                 
                 # Update processor with user modifications
-                processor.row_results = updated_results
+                self.comparison_processor.row_results = updated_results
             else:
                 # Fallback: use original results
                 updated_results = row_results
             
             # Process valid rows with MERGE/ADD logic
             self._update_status("Processing valid rows...")
-            instance_results = processor.process_valid_rows()
+            instance_results = self.comparison_processor.process_valid_rows()
             
             # Clean up data
             self._update_status("Cleaning up data...")
-            cleanup_results = processor.cleanup_comparison_data()
+            cleanup_results = self.comparison_processor.cleanup_comparison_data()
             
             # Show results
-            self._show_comparison_results(processor, comparison_offer_info)
+            self._show_comparison_results(self.comparison_processor, comparison_offer_info)
             
             self._update_status("Comparison completed successfully")
             
