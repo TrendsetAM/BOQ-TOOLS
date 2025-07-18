@@ -8,10 +8,176 @@ import re
 from typing import Dict, List, Tuple, Optional, Any, Set
 from dataclasses import dataclass
 from enum import Enum
+import json
+from pathlib import Path
 
 from utils.config import get_config, ColumnType
 
 logger = logging.getLogger(__name__)
+
+
+class InvalidRowsTracker:
+    """
+    Manages the Invalid_Rows_List for tracking manual invalidations
+    """
+    
+    def __init__(self, invalid_rows_file: Optional[Path] = None):
+        """
+        Initialize the InvalidRowsTracker
+        
+        Args:
+            invalid_rows_file: Path to the invalid rows file (default: config/invalid_rows.json)
+        """
+        if invalid_rows_file is None:
+            invalid_rows_file = Path("config/invalid_rows.json")
+        
+        self.invalid_rows_file = invalid_rows_file
+        self.invalid_rows_list = self._load_invalid_rows()
+        
+        logger.info(f"InvalidRowsTracker initialized with {len(self.invalid_rows_list)} existing invalidations")
+    
+    def _load_invalid_rows(self) -> List[Dict[str, Any]]:
+        """Load invalid rows from file"""
+        try:
+            if self.invalid_rows_file.exists():
+                with open(self.invalid_rows_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return data.get('invalid_rows', [])
+            else:
+                # Create directory if it doesn't exist
+                self.invalid_rows_file.parent.mkdir(parents=True, exist_ok=True)
+                return []
+        except Exception as e:
+            logger.error(f"Error loading invalid rows file: {e}")
+            return []
+    
+    def _save_invalid_rows(self) -> bool:
+        """Save invalid rows to file"""
+        try:
+            # Create directory if it doesn't exist
+            self.invalid_rows_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            data = {
+                'invalid_rows': self.invalid_rows_list,
+                'last_updated': str(Path().absolute())
+            }
+            
+            with open(self.invalid_rows_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"Invalid rows saved to {self.invalid_rows_file}")
+            return True
+        except Exception as e:
+            logger.error(f"Error saving invalid rows file: {e}")
+            return False
+    
+    def MANUAL_INVALID(self, description: str, instance_number: int, 
+                      source_sheet: str = "", notes: str = "") -> bool:
+        """
+        MANUAL_INVALID Function: Stores manual invalidations in the Invalid_Rows_List
+        
+        Args:
+            description: Description of the invalid row
+            instance_number: Instance number for this description
+            source_sheet: Source sheet name (optional)
+            notes: Additional notes (optional)
+            
+        Returns:
+            True if successfully added to invalid rows list, False otherwise
+        """
+        try:
+            # Create invalid row entry
+            invalid_entry = {
+                'description': description.strip(),
+                'instance_number': instance_number,
+                'source_sheet': source_sheet.strip(),
+                'notes': notes.strip(),
+                'timestamp': str(Path().absolute())
+            }
+            
+            # Check if this exact entry already exists
+            for existing_entry in self.invalid_rows_list:
+                if (existing_entry['description'] == invalid_entry['description'] and 
+                    existing_entry['instance_number'] == invalid_entry['instance_number']):
+                    logger.warning(f"Invalid entry already exists: {description} (instance {instance_number})")
+                    return False
+            
+            # Add to list
+            self.invalid_rows_list.append(invalid_entry)
+            
+            # Save to file
+            if self._save_invalid_rows():
+                logger.info(f"Added manual invalidation: {description} (instance {instance_number})")
+                return True
+            else:
+                # Remove from list if save failed
+                self.invalid_rows_list.pop()
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error adding manual invalidation: {e}")
+            return False
+    
+    def MANUAL_OVERRIDE(self, description: str, instance_number: int) -> bool:
+        """
+        MANUAL_OVERRIDE Function: Checks if a row (instance of description) was previously manually marked as invalid
+        
+        Args:
+            description: Description of the row to check
+            instance_number: Instance number for this description
+            
+        Returns:
+            True if the row should be marked as invalid (was previously manually marked), False otherwise
+        """
+        try:
+            # Create the key to search for
+            search_key = f"{description.strip()}|{instance_number}"
+            
+            # Check if this exact entry exists in the invalid rows list
+            for entry in self.invalid_rows_list:
+                entry_key = f"{entry['description']}|{entry['instance_number']}"
+                if entry_key == search_key:
+                    logger.info(f"Manual override found: {description} (instance {instance_number}) should be marked as invalid")
+                    return True
+            
+            logger.debug(f"No manual override found for: {description} (instance {instance_number})")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error checking manual override: {e}")
+            return False
+    
+    def get_invalid_rows_set(self) -> Set[str]:
+        """
+        Get set of invalid row keys for quick lookup
+        
+        Returns:
+            Set of row keys that are manually marked as invalid
+        """
+        invalid_keys = set()
+        for entry in self.invalid_rows_list:
+            # Create composite key (description|instance_number)
+            key = f"{entry['description']}|{entry['instance_number']}"
+            invalid_keys.add(key)
+        return invalid_keys
+    
+    def clear_invalid_rows(self) -> bool:
+        """Clear all invalid rows"""
+        try:
+            self.invalid_rows_list.clear()
+            return self._save_invalid_rows()
+        except Exception as e:
+            logger.error(f"Error clearing invalid rows: {e}")
+            return False
+    
+    def get_invalid_rows_count(self) -> int:
+        """Get count of invalid rows"""
+        return len(self.invalid_rows_list)
+    
+    def get_invalid_rows_by_description(self, description: str) -> List[Dict[str, Any]]:
+        """Get all invalid entries for a specific description"""
+        return [entry for entry in self.invalid_rows_list 
+                if entry['description'].lower() == description.lower()]
 
 
 class RowType(Enum):
@@ -356,21 +522,20 @@ class RowClassifier:
         
         return errors
 
-    def validate_master_row_validity(self, row_data: List[str], column_mapping: Dict[int, ColumnType]) -> bool:
+    def ROW_VALIDITY(self, row_data: List[str], column_mapping: Dict[int, ColumnType]) -> bool:
         """
-        MASTER Row Validity: Check if row meets master validation criteria
-        Conditions:
-        1. Non-empty description
-        2. Valid positive quantity (numeric) (can also be zero)
-        3. Valid positive unit price (numeric) (can also be zero)
-        4. Valid positive total price (numeric) (can also be zero)
+        ROW_VALIDITY Function: Determines if a row is valid based on the following criteria:
+        1) Non-empty Description
+        2) Numeric (>= 0) non-empty values for Quantity, Unit_Price, and Total_Price
+        
+        This function should be used in both Master BoQ and Comparison BoQ workflows.
         
         Args:
             row_data: Row data as list of cell values
             column_mapping: Dictionary mapping column index to ColumnType
             
         Returns:
-            True if row meets master validity criteria, False otherwise
+            True if row is valid, False otherwise
         """
         if not row_data or not column_mapping:
             return False
@@ -401,6 +566,25 @@ class RowClassifier:
         
         # All conditions must be met
         return has_description and has_quantity and has_unit_price and has_total_price
+
+    def validate_master_row_validity(self, row_data: List[str], column_mapping: Dict[int, ColumnType]) -> bool:
+        """
+        MASTER Row Validity: Check if row meets master validation criteria
+        Conditions:
+        1. Non-empty description
+        2. Valid positive quantity (numeric) (can also be zero)
+        3. Valid positive unit price (numeric) (can also be zero)
+        4. Valid positive total price (numeric) (can also be zero)
+        
+        Args:
+            row_data: Row data as list of cell values
+            column_mapping: Dictionary mapping column index to ColumnType
+            
+        Returns:
+            True if row meets master validity criteria, False otherwise
+        """
+        # Use the new ROW_VALIDITY function
+        return self.ROW_VALIDITY(row_data, column_mapping)
 
     def validate_comparison_row_validity(self, row_data: List[str], column_mapping: Dict[int, ColumnType], 
                                        master_valid_rows: Set[str], manual_invalid_rows: Set[str]) -> bool:
@@ -779,4 +963,121 @@ def generate_row_position(sheet_name: str, excel_row_number: int) -> str:
     """
     # Clean sheet name to avoid issues with special characters
     clean_sheet_name = re.sub(r'[^\w\-_\.]', '_', sheet_name)
-    return f"{clean_sheet_name}_{excel_row_number}" 
+    return f"{clean_sheet_name}_{excel_row_number}"
+
+
+def calculate_cumulative_row_counts(sheets_data: Dict[str, List[List[str]]], 
+                                  column_mappings: Dict[str, Dict[int, ColumnType]]) -> Dict[str, int]:
+    """
+    Calculate cumulative row counts across sheets for position assignment
+    
+    Args:
+        sheets_data: Dictionary mapping sheet names to sheet data
+        column_mappings: Dictionary mapping sheet names to column mappings
+        
+    Returns:
+        Dictionary mapping sheet names to cumulative row count before this sheet
+    """
+    cumulative_counts = {}
+    current_count = 0
+    
+    # Sort sheets by name for consistent ordering
+    sorted_sheets = sorted(sheets_data.keys())
+    
+    for sheet_name in sorted_sheets:
+        cumulative_counts[sheet_name] = current_count
+        
+        # Count valid rows in this sheet
+        sheet_data = sheets_data[sheet_name]
+        column_mapping = column_mappings.get(sheet_name, {})
+        
+        valid_rows = 0
+        for row_data in sheet_data:
+            # Use ROW_VALIDITY to check if row is valid
+            if ROW_VALIDITY_STATIC(row_data, column_mapping):
+                valid_rows += 1
+        
+        current_count += valid_rows
+    
+    return cumulative_counts
+
+
+def POSITION(sheet_name: str, excel_row_number: int, sheet_order: int, 
+             cumulative_row_count: int = 0) -> int:
+    """
+    POSITION Function: Assigns unique numbers to every row based on sheet order and row number
+    
+    If the first sheet has 50 valid rows, they get numbered 1-50.
+    If the second sheet has 30 valid rows, they get numbered 51-80, and so on.
+    
+    Args:
+        sheet_name: Name of the Excel sheet
+        excel_row_number: Actual Excel row number (1-based)
+        sheet_order: Order of the sheet in the processing sequence
+        cumulative_row_count: Cumulative count of valid rows before this sheet
+        
+    Returns:
+        Unique position number for this row
+    """
+    # For now, use a simple calculation based on sheet order and row number
+    # In a full implementation, this would be based on actual valid row counts
+    base_position = cumulative_row_count + excel_row_number
+    
+    # Ensure position is positive
+    return max(1, base_position)
+
+
+def ROW_VALIDITY_STATIC(row_data: List[str], column_mapping: Dict[int, ColumnType]) -> bool:
+    """
+    Static version of ROW_VALIDITY function for use in position calculation
+    
+    Args:
+        row_data: Row data as list of cell values
+        column_mapping: Dictionary mapping column index to ColumnType
+        
+    Returns:
+        True if row is valid, False otherwise
+    """
+    if not row_data or not column_mapping:
+        return False
+    
+    # Check for required fields
+    has_description = False
+    has_quantity = False
+    has_unit_price = False
+    has_total_price = False
+    
+    # Check each column
+    for col_idx, col_type in column_mapping.items():
+        if col_idx < len(row_data):
+            cell_value = row_data[col_idx].strip() if row_data[col_idx] else ""
+            
+            if col_type == ColumnType.DESCRIPTION:
+                if cell_value:
+                    has_description = True
+            elif col_type == ColumnType.QUANTITY:
+                if _is_positive_numeric_static(cell_value):
+                    has_quantity = True
+            elif col_type == ColumnType.UNIT_PRICE:
+                if _is_positive_numeric_static(cell_value):
+                    has_unit_price = True
+            elif col_type == ColumnType.TOTAL_PRICE:
+                if _is_positive_numeric_static(cell_value):
+                    has_total_price = True
+    
+    # All conditions must be met
+    return has_description and has_quantity and has_unit_price and has_total_price
+
+
+def _is_positive_numeric_static(value: str) -> bool:
+    """Static version of _is_positive_numeric for use in position calculation"""
+    try:
+        # Remove currency symbols, commas, and all whitespace (including non-breaking)
+        clean_value = re.sub(r'[\$€£¥₹,\s\u00A0]', '', value)
+        # Replace decimal comma with dot if present
+        if ',' in value and value.count(',') == 1 and '.' not in value:
+            clean_value = clean_value.replace(',', '.')
+        num = float(clean_value)
+        return num >= 0
+    except (ValueError, TypeError):
+        return False 

@@ -375,6 +375,117 @@ class AutoCategorizer:
         
         return result
     
+    def RECATEGORIZATION(self, dataframe: pd.DataFrame,
+                         description_column: str = 'Description',
+                         category_column: str = 'Category',
+                         confidence_threshold: float = 0.8,
+                         progress_callback: Optional[Callable] = None) -> CategorizationResult:
+        """
+        RECATEGORIZATION Function: Takes a list containing all rows (descriptions) with empty categories 
+        and follows exactly the same workflow as the Master BoQ categorization process.
+        
+        The only difference is the list of items to be categorized - instead of categorizing all rows 
+        from the Master BoQ, it categorizes only the rows that have empty categories after the comparison process.
+        
+        This includes:
+        1) Auto-detection using the existing category dictionary
+        2) Manual categorization using the Excel file for failed auto-detections
+        3) All the same UI dialogs and workflows as the Master BoQ categorization
+        
+        Args:
+            dataframe: Pandas DataFrame with rows that have empty categories
+            description_column: Name of the column containing descriptions
+            category_column: Name of the column to add for categories
+            confidence_threshold: Minimum confidence threshold for matches
+            progress_callback: Optional callback function for progress tracking
+            
+        Returns:
+            CategorizationResult with categorized DataFrame and statistics
+        """
+        logger.info(f"Starting RECATEGORIZATION for {len(dataframe)} rows with empty categories")
+        
+        # Filter DataFrame to only include rows with empty categories
+        empty_category_mask = (dataframe[category_column].isna() | 
+                             (dataframe[category_column] == '') | 
+                             (dataframe[category_column].isnull()))
+        
+        rows_to_categorize = dataframe[empty_category_mask].copy()
+        
+        if len(rows_to_categorize) == 0:
+            logger.info("No rows with empty categories found - RECATEGORIZATION not needed")
+            return CategorizationResult(
+                dataframe=dataframe,
+                unmatched_descriptions=[],
+                match_statistics={
+                    'total_rows': len(dataframe),
+                    'matched_rows': len(dataframe),
+                    'unmatched_rows': 0,
+                    'match_rate': 1.0,
+                    'match_types': {'exact': len(dataframe), 'none': 0},
+                    'confidence_threshold': confidence_threshold,
+                    'unique_categories_found': len(dataframe[category_column].dropna().unique()),
+                    'category_distribution': dataframe[category_column].value_counts().to_dict()
+                },
+                total_rows=len(dataframe),
+                matched_rows=len(dataframe),
+                unmatched_rows=0,
+                match_rate=1.0
+            )
+        
+        logger.info(f"Found {len(rows_to_categorize)} rows with empty categories to recategorize")
+        
+        # Use the same auto-categorization process as Master BoQ
+        recategorization_result = self.auto_categorize_dataset(
+            rows_to_categorize, 
+            description_column, 
+            category_column, 
+            confidence_threshold, 
+            progress_callback
+        )
+        
+        # Update the original DataFrame with the recategorized results
+        for index, row in recategorization_result.dataframe.iterrows():
+            original_index = rows_to_categorize.index[index]
+            new_category = row[category_column]
+            dataframe.at[original_index, category_column] = new_category
+        
+        # Calculate final statistics
+        final_matched_mask = dataframe[category_column].notna() & (dataframe[category_column] != '')
+        final_matched_rows = final_matched_mask.sum()
+        final_match_rate = final_matched_rows / len(dataframe) if len(dataframe) > 0 else 0.0
+        
+        # Create final result
+        final_result = CategorizationResult(
+            dataframe=dataframe,
+            unmatched_descriptions=recategorization_result.unmatched_descriptions,
+            match_statistics={
+                'total_rows': len(dataframe),
+                'matched_rows': int(final_matched_rows),
+                'unmatched_rows': len(dataframe) - int(final_matched_rows),
+                'match_rate': final_match_rate,
+                'match_types': recategorization_result.match_statistics.get('match_types', {}),
+                'unique_categories_found': len(dataframe[category_column].dropna().unique()),
+                'category_distribution': dataframe[category_column].value_counts().to_dict(),
+                'recategorization_stats': {
+                    'rows_recategorized': len(rows_to_categorize),
+                    'new_matches_found': recategorization_result.matched_rows,
+                    'still_unmatched': recategorization_result.unmatched_rows
+                }
+            },
+            total_rows=len(dataframe),
+            matched_rows=int(final_matched_rows),
+            unmatched_rows=len(dataframe) - int(final_matched_rows),
+            match_rate=final_match_rate
+        )
+        
+        logger.info(f"RECATEGORIZATION completed:")
+        logger.info(f"  Total rows: {len(dataframe)}")
+        logger.info(f"  Rows recategorized: {len(rows_to_categorize)}")
+        logger.info(f"  New matches found: {recategorization_result.matched_rows}")
+        logger.info(f"  Final match rate: {final_match_rate:.1%}")
+        
+        return final_result
+    
     def get_categorization_summary(self, result: CategorizationResult) -> str:
         """
         Generate a summary report of the categorization results
