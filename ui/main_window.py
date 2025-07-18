@@ -318,10 +318,8 @@ class MainWindow:
         self.column_mapper = None  # Will be set when processing files
         self.row_validity = {}  # Initialize row validity dictionary
         self.row_review_treeviews = {}  # Initialize row review treeviews dictionary
-        # New: Store master valid row keys and manual invalidations for comparison logic
-        self.master_valid_row_keys = set()
-        self.manual_invalid_row_keys = set()
-        self.is_comparison_mode = False  # Track if we're in comparison mode
+        # ComparisonProcessor will handle comparison logic
+        self.comparison_processor = None
         # Add robust tab-to-file-mapping
         self.tab_id_to_file_mapping = {}
         # Offer name for summary grid
@@ -523,8 +521,7 @@ class MainWindow:
         if not filepath:
             return
 
-        # Reset comparison mode flag for master BoQ processing
-        self.is_comparison_mode = False
+        # Process as master BoQ
 
         # Clear previous results, including treeview references
         self.sheet_treeviews.clear()
@@ -1727,43 +1724,7 @@ class MainWindow:
         new_valid = not is_valid
         self.row_validity[sheet_name][idx] = new_valid
         
-        # New: Update manual invalid row keys set
-        if not new_valid:
-            # Find the corresponding row data and generate key
-            from core.row_classifier import RowClassifier
-            from utils.config import ColumnType
-            row_classifier = RowClassifier()
-            
-            # Get the current file mapping to find the sheet
-            current_tab_id = self.notebook.select()
-            file_mapping = self.tab_id_to_file_mapping.get(current_tab_id)
-            if file_mapping:
-                for sheet in file_mapping.sheets:
-                    if sheet.sheet_name == sheet_name:
-                        # Find the row classification for this index
-                        for rc in sheet.row_classifications:
-                            if rc.row_index == idx:
-                                row_data = getattr(rc, 'row_data', None)
-                                if row_data is None and hasattr(sheet, 'sheet_data'):
-                                    try:
-                                        row_data = sheet.sheet_data[rc.row_index]
-                                    except Exception:
-                                        row_data = []
-                                if row_data:
-                                    # Convert column mappings
-                                    column_mapping = {}
-                                    for cm in sheet.column_mappings:
-                                        try:
-                                            col_type = ColumnType(cm.mapped_type)
-                                            column_mapping[cm.column_index] = col_type
-                                        except ValueError:
-                                            continue
-                                    
-                                    # Generate row key and add to manual invalid set
-                                    row_key = row_classifier._generate_row_key(row_data, column_mapping)
-                                    self.manual_invalid_row_keys.add(row_key)
-                                break
-                        break
+        # Update validity state (no longer need to track manual invalidations)
         
         # Update tag and status column
         tag = 'validrow' if new_valid else 'invalidrow'
@@ -1919,19 +1880,8 @@ class MainWindow:
                         except ValueError:
                             continue
                     
-                    # Generate row key for tracking
-                    row_key = row_classifier._generate_row_key(row_data, column_mapping)
-                    
-                    # Determine validity based on master vs comparison mode
-                    if not self.is_comparison_mode:
-                        # Master BoQ: use master validation criteria
-                        is_valid = row_classifier.validate_master_row_validity(row_data, column_mapping)
-                        if is_valid:
-                            self.master_valid_row_keys.add(row_key)
-                    else:
-                        # Comparison BoQ: use comparison validation criteria
-                        is_valid = row_classifier.validate_comparison_row_validity(
-                            row_data, column_mapping, self.master_valid_row_keys, self.manual_invalid_row_keys)
+                    # Use master validation criteria for all rows
+                    is_valid = row_classifier.validate_master_row_validity(row_data, column_mapping)
                     
                     self.row_validity[sheet.sheet_name][rc.row_index] = is_valid
                     status = "Valid" if is_valid else "Invalid"
