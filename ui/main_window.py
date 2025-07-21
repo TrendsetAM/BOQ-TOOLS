@@ -2006,70 +2006,55 @@ class MainWindow:
             self._hidden_column_mapping_widgets = []
 
     def _on_confirm_row_review(self):
-        """Handle row review confirmation and start categorization"""
+        """Handle row review confirmation and start categorization or export for comparison workflow"""
+        # If this was a comparison workflow, do the export and stop
+        if getattr(self, '_pending_comparison_export', False):
+            master_df = self._create_unified_dataframe(self.master_file_mapping, is_master=True)
+            comparison_df = self._create_unified_dataframe(self.file_mapping, is_master=False)
+            offer_info = getattr(self, '_pending_comparison_offer_info', None)
+            self._debug_export_datasets_before_merge(master_df, comparison_df, offer_info)
+            self._update_status("DEBUG: Export completed. Merge process stopped for debugging.")
+            from tkinter import messagebox
+            messagebox.showinfo("Debug Mode", "Datasets exported successfully. Merge process stopped for debugging.\n\nYou can now inspect the exported Excel file to verify both datasets are correct.")
+            # Reset flag
+            self._pending_comparison_export = False
+            return
+        # --- Normal master BOQ workflow ---
         self._update_status("Row review confirmed. Starting categorization process...")
-        # Get the current tab ID
         current_tab_id = self.notebook.select()
         file_mapping = self.tab_id_to_file_mapping.get(current_tab_id)
         if not file_mapping:
             messagebox.showerror("Error", "Could not find file mapping for categorization")
             return
-        # --- NEW: Create normalized DataFrame for categorization with logging, only including valid rows ---
+        
+        # CRITICAL FIX: Store row validity in file_mapping so controller can access it
+        file_mapping.row_validity = self.row_validity.copy()
+        
         try:
             import pandas as pd
             import logging
             logger = logging.getLogger(__name__)
-            # Build a DataFrame from all sheets that were selected during sheet categorization, only including valid rows
             rows = []
             sheet_count = 0
             for sheet in getattr(file_mapping, 'sheets', []):
-                # Process all sheets that were selected during sheet categorization
-                # The sheet_type should have been set during the sheet categorization process
                 if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
                     logger.debug(f"Skipping sheet {sheet.sheet_name} with type {getattr(sheet, 'sheet_type', 'Unknown')}")
                     continue
                 sheet_count += 1
-                # Use mapped_type as DataFrame columns
                 col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
                 sheet_name = sheet.sheet_name
                 validity_dict = self.row_validity.get(sheet_name, {})
-                # DEBUG: Log sheet data structure
-                print(f"[DEBUG] Processing sheet: {sheet.sheet_name}")
-                if hasattr(sheet, 'sheet_data'):
-                    print(f"[DEBUG] Sheet data length: {len(sheet.sheet_data)}")
-                    if len(sheet.sheet_data) > 0:
-                        print(f"[DEBUG] First row of sheet data: {sheet.sheet_data[0]}")
-                    if len(sheet.sheet_data) > 1:
-                        print(f"[DEBUG] Second row of sheet data: {sheet.sheet_data[1]}")
-                else:
-                    print(f"[DEBUG] No sheet_data attribute found for {sheet.sheet_name}")
-                
-                # DEBUG: Log column mappings
-                print(f"[DEBUG] Column mappings for {sheet.sheet_name}:")
-                for i, cm in enumerate(sheet.column_mappings):
-                    print(f"[DEBUG]   {i}: {cm.column_index} -> {cm.original_header} -> {cm.mapped_type}")
-                
-                # DEBUG: Log col_headers array
-                print(f"[DEBUG] col_headers array: {col_headers}")
-                
-                # For each row classification, get the row data
                 for rc in getattr(sheet, 'row_classifications', []):
-                    # Only include valid rows
                     if not validity_dict.get(rc.row_index, True):
                         continue
                     row_data = getattr(rc, 'row_data', None)
                     if row_data is None and hasattr(sheet, 'sheet_data'):
                         try:
                             row_data = sheet.sheet_data[rc.row_index]
-                            print(f"[DEBUG] Row {rc.row_index}: extracted data = {row_data}")
-                        except Exception as e:
-                            print(f"[DEBUG] Row {rc.row_index}: extraction failed = {e}")
+                        except Exception:
                             row_data = None
                     if row_data is None:
                         row_data = []
-                        print(f"[DEBUG] Row {rc.row_index}: using empty data")
-                    
-                    # Build dict for DataFrame
                     row_dict = {}
                     for cm in sheet.column_mappings:
                         mapped_type = getattr(cm, 'mapped_type', None)
@@ -2077,72 +2062,21 @@ class MainWindow:
                             continue
                         idx = cm.column_index
                         row_dict[mapped_type] = row_data[idx] if idx < len(row_data) else ''
-                    # Ensure all expected columns are present
                     for mt in col_headers:
                         if mt not in row_dict:
                             row_dict[mt] = ''
-                    
-                    # DEBUG: Log specific column values and check for data swapping
-                    if 'description' in row_dict:
-                        desc_val = row_dict['description']
-                        print(f"[DEBUG] Row {rc.row_index}: description = '{desc_val}'")
-                        # Check if description looks like a code
-                        if isinstance(desc_val, str) and len(desc_val) < 30 and ('.' in desc_val or '/' in desc_val):
-                            print(f"[DEBUG] ⚠️  Row {rc.row_index}: DESCRIPTION LOOKS LIKE CODE: '{desc_val}'")
-                    if 'code' in row_dict:
-                        code_val = row_dict['code']
-                        print(f"[DEBUG] Row {rc.row_index}: code = '{code_val}'")
-                        # Check if code looks like a description
-                        if isinstance(code_val, str) and len(code_val) > 30:
-                            print(f"[DEBUG] ⚠️  Row {rc.row_index}: CODE LOOKS LIKE DESCRIPTION: '{code_val[:50]}...'")
-                    
-                    # DEBUG: Log the full row_dict to see all values
-                    print(f"[DEBUG] Row {rc.row_index}: Full row_dict = {row_dict}")
-                    
-                    row_dict['Source_Sheet'] = sheet.sheet_name
-                    # Preserve position information for future row matching
-                    row_dict['Position'] = getattr(rc, 'position', None)
                     rows.append(row_dict)
-            logger.info(f"Categorization: Processed {sheet_count} BOQ sheets, {len(rows)} valid rows for DataFrame.")
-            if rows:
-                df = pd.DataFrame(rows)
-                # Ensure 'Description' column is present and capitalized
-                if 'description' in df.columns and 'Description' not in df.columns:
-                    df.rename(columns={'description': 'Description'}, inplace=True)
-                logger.info(f"Categorization: DataFrame columns: {list(df.columns)}")
-                logger.info(f"Categorization: First 3 rows: {df.head(3).to_dict(orient='records')}")
-                logger.info(f"Categorization: First 10 Description values: {df['Description'].head(10).tolist() if 'Description' in df.columns else 'No Description column'}")
-                
-                # DEBUG: Additional logging for categorization DataFrame
-                print(f"[DEBUG] CATEGORIZATION DataFrame created with {len(df)} rows")
-                print(f"[DEBUG] CATEGORIZATION DataFrame columns: {list(df.columns)}")
-                if 'Description' in df.columns:
-                    print(f"[DEBUG] CATEGORIZATION First 5 Description values: {df['Description'].head(5).tolist()}")
-                    # Check if descriptions look like codes
-                    desc_sample = df['Description'].head(10).tolist()
-                    code_like_count = sum(1 for desc in desc_sample if isinstance(desc, str) and len(desc) < 20 and '.' in desc)
-                    print(f"[DEBUG] CATEGORIZATION {code_like_count}/{len(desc_sample)} descriptions look like codes")
-                if 'code' in df.columns:
-                    print(f"[DEBUG] CATEGORIZATION First 5 code values: {df['code'].head(5).tolist()}")
-                print(f"[DEBUG] CATEGORIZATION First 3 complete rows:")
-                print(df.head(3).to_string())
-            else:
-                df = None
-                logger.warning("Categorization: No valid rows found for DataFrame.")
-            file_mapping.dataframe = df
-            if df is None or df.empty or 'Description' not in df.columns:
-                messagebox.showerror("Categorization Error", "No valid data found for categorization. Please check that your sheets contain valid BOQ rows and that a 'Description' column is mapped.")
+            if not rows:
+                messagebox.showerror("Error", "No valid rows found for categorization.")
                 return
+            final_dataframe = pd.DataFrame(rows)
+            self._start_categorization(file_mapping)
         except Exception as e:
             import logging
-            logging.getLogger(__name__).error(f"Failed to build DataFrame for categorization: {e}")
-            file_mapping.dataframe = None
-            messagebox.showerror("Categorization Error", f"Failed to build DataFrame for categorization: {e}")
-            return
-        # --- END NEW ---
-        # Start categorization process
-        self._start_categorization(file_mapping)
-    
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error during row review confirmation: {e}", exc_info=True)
+            messagebox.showerror("Error", f"An error occurred during row review confirmation: {str(e)}")
+
     def _start_categorization(self, file_mapping):
         """Start the categorization process"""
         if not CATEGORIZATION_AVAILABLE:
@@ -2475,6 +2409,19 @@ class MainWindow:
                 if not confirmed:
                     self._update_status("Comparison cancelled by user")
                     return
+                
+                # DEBUG: Export both datasets when user confirms row review
+                # Filter comparison data to only include valid rows
+                valid_comparison_rows = [r for r in updated_results if r['is_valid']]
+                valid_comparison_indices = [r['row_index'] for r in valid_comparison_rows]
+                filtered_comparison_df = comparison_df.iloc[valid_comparison_indices].copy()
+                
+                self._debug_export_datasets_before_merge(master_df, filtered_comparison_df, comparison_offer_info)
+                
+                # TEMPORARY STOP POINT: Don't proceed to merge, just return
+                self._update_status("DEBUG: Export completed. Merge process stopped for debugging.")
+                messagebox.showinfo("Debug Mode", "Datasets exported successfully. Merge process stopped for debugging.\n\nYou can now inspect the exported Excel file to verify both datasets are correct.")
+                return
                 
                 # Update processor with user modifications
                 self.comparison_processor.row_results = updated_results
@@ -3373,8 +3320,8 @@ Offer Information:
             
             # Keep only essential columns for comparison results
             essential_columns = [
-                'Description', 'code', 'unit', 'quantity', 'unit_price', 'total_price',
-                'Category', 'manhours', 'wage'
+                'code', 'Category', 'Description', 'unit', 'quantity', 'unit_price', 'total_price',
+                'manhours', 'wage'
             ]
             
             # Add any offer-specific columns (quantity[OfferName], etc.)
@@ -3391,7 +3338,7 @@ Offer Information:
             display_df = display_df[final_columns]
             
             # Define desired column order for comparison results
-            desired_order = ['Description', 'code', 'unit', 'quantity', 'unit_price', 'total_price', 'Category']
+            desired_order = ['code', 'Category', 'Description', 'unit', 'quantity', 'unit_price', 'total_price']
             
             # Add offer-specific columns in a logical order
             offer_columns = [col for col in display_df.columns if '[' in col and ']' in col]
@@ -3614,6 +3561,205 @@ Offer Information:
             logger.error(f"Error showing final categorized data: {e}")
             messagebox.showerror("Error", f"Failed to show categorized data: {str(e)}")
 
+    def _debug_export_datasets_before_merge(self, master_df, comparison_df, offer_info):
+        """DEBUG: Export both datasets to Excel for debugging merge process"""
+        try:
+            import pandas as pd
+            from datetime import datetime
+            import os
+            import logging
+            logger = logging.getLogger(__name__)
+            
+            # DEBUG: Log original columns
+            logger.info(f"Master DataFrame original columns: {list(master_df.columns)}")
+            logger.info(f"Comparison DataFrame original columns: {list(comparison_df.columns)}")
+            
+            # Get offer name
+            offer_name = offer_info.get('offer_name', 'Comparison')
+            
+            # Create filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"DEBUG_Datasets_Before_Merge_{offer_name}_{timestamp}.xlsx"
+            
+            # Get the directory of the current working directory
+            export_dir = os.getcwd()
+            filepath = os.path.join(export_dir, filename)
+            
+            # Prepare datasets with proper formatting (same as main export)
+            def prepare_dataset_for_export(df):
+                """Prepare dataset with same formatting as main export"""
+                export_df = df.copy()
+                
+                # DEBUG: Log columns before filtering
+                logger.info(f"Columns before filtering: {list(export_df.columns)}")
+                
+                # Remove unwanted columns - comprehensive list of internal processing columns
+                columns_to_remove = [
+                    'ignore', 'Position', 'Source_Sheet', 'Labour', 
+                    'ignore_14', 'ignore_15', '_3', 'scope'
+                ]
+                
+                # Also remove any columns that start with 'ignore_' or are just numbers
+                # AND remove any columns that are just numbers (like _1, _2, _3, etc.)
+                for col in list(export_df.columns):
+                    if (col.startswith('ignore_') or 
+                        col.isdigit() or 
+                        col in columns_to_remove or
+                        (col.startswith('_') and col[1:].isdigit())):  # Remove _1, _2, _3, etc.
+                        export_df = export_df.drop(columns=[col])
+                
+                # DEBUG: Log columns after removing unwanted columns
+                logger.info(f"Columns after removing unwanted: {list(export_df.columns)}")
+                
+                # Define the correct essential column order (same as main export)
+                essential_columns = [
+                    'code', 'Category', 'Description', 'unit', 'quantity', 'unit_price', 'total_price',
+                    'manhours', 'wage'
+                ]
+                
+                # Keep only essential columns that exist in the dataframe
+                available_essential_columns = [col for col in essential_columns if col in export_df.columns]
+                
+                # Create final column list: ONLY essential columns, no remaining columns
+                final_columns = available_essential_columns.copy()
+                
+                # DEBUG: Log final columns
+                logger.info(f"Final columns: {final_columns}")
+                logger.info(f"Remaining non-essential columns: {[col for col in export_df.columns if col not in essential_columns]}")
+                
+                # Apply the column order
+                export_df = export_df[final_columns]
+                
+                # Convert numeric columns to proper numeric values for Excel
+                numeric_columns = ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']
+                for col in numeric_columns:
+                    if col in export_df.columns:
+                        # Convert to numeric, handling any formatting
+                        export_df[col] = pd.to_numeric(export_df[col], errors='coerce')
+                
+                return export_df
+            
+            # Prepare both datasets
+            master_export_df = prepare_dataset_for_export(master_df)
+            comparison_export_df = prepare_dataset_for_export(comparison_df)
+            
+            # Create Excel writer with proper formatting
+            with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
+                # Export master dataset
+                master_export_df.to_excel(writer, sheet_name='Master_Dataset', index=False)
+                
+                # Export comparison dataset
+                comparison_export_df.to_excel(writer, sheet_name='Comparison_Dataset', index=False)
+                
+                # Get the workbook
+                workbook = writer.book
+                
+                # Apply formatting to both sheets
+                for sheet_name in ['Master_Dataset', 'Comparison_Dataset']:
+                    worksheet = writer.sheets[sheet_name]
+                    
+                    # Apply European number formatting to numeric columns
+                    numeric_columns = ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']
+                    for col_idx, col_name in enumerate(worksheet[1], 1):
+                        if col_name.value in numeric_columns:
+                            # Apply European number format (dot for thousands, comma for decimals)
+                            from openpyxl.styles import NamedStyle
+                            from openpyxl.utils import get_column_letter
+                            
+                            # Create European number style
+                            euro_style = NamedStyle(name=f"euro_number_{col_name.value}")
+                            euro_style.number_format = '#,##0.00'
+                            
+                            # Apply to the column
+                            col_letter = get_column_letter(col_idx)
+                            for row in range(2, worksheet.max_row + 1):  # Skip header row
+                                cell = worksheet[f'{col_letter}{row}']
+                                cell.style = euro_style
+                    
+                    # Add data validation for Category column
+                    if 'Category' in [cell.value for cell in worksheet[1]]:
+                        category_col_idx = None
+                        for col_idx, cell in enumerate(worksheet[1], 1):
+                            if cell.value == 'Category':
+                                category_col_idx = col_idx
+                                break
+                        
+                        if category_col_idx:
+                            category_col_letter = get_column_letter(category_col_idx)
+                            
+                            # Get available categories in the correct order
+                            try:
+                                category_order = ['General Costs', 'Site Costs', 'Civil Works', 'Earth Movement', 'Roads', 'OEM Building', 'Electrical Works', 'Solar Cables', 'LV Cables', 'MV Cables', 'Trenching', 'PV Mod. Installation', 'Cleaning and Cabling of PV Mod.', 'Tracker Inst.', 'Other']
+                                available_categories = category_order
+                                
+                                # Create data validation for Category column
+                                from openpyxl.worksheet.datavalidation import DataValidation
+                                
+                                # Create validation rule
+                                dv = DataValidation(
+                                    type="list",
+                                    formula1=f'"{",".join(available_categories)}"',
+                                    allow_blank=True,
+                                    showErrorMessage=True,
+                                    errorTitle="Invalid Category",
+                                    error="Please select a category from the dropdown list.",
+                                    showInputMessage=True,
+                                    promptTitle="Category Selection",
+                                    prompt="Select a category from the dropdown list."
+                                )
+                                
+                                # Add validation to worksheet
+                                worksheet.add_data_validation(dv)
+                                
+                                # Apply validation to Category column (skip header row)
+                                for row in range(2, worksheet.max_row + 1):
+                                    dv.add(f'{category_col_letter}{row}')
+                                
+                            except Exception as e:
+                                logger.warning(f"Could not add category validation: {e}")
+                    
+                    # Auto-adjust column widths
+                    for column in worksheet.columns:
+                        max_length = 0
+                        column_letter = column[0].column_letter
+                        for cell in column:
+                            try:
+                                if len(str(cell.value)) > max_length:
+                                    max_length = len(str(cell.value))
+                            except:
+                                pass
+                        adjusted_width = min(max_length + 2, 50)  # Cap at 50 characters
+                        worksheet.column_dimensions[column_letter].width = adjusted_width
+                    
+                    # Format header row
+                    from openpyxl.styles import Font, PatternFill, Alignment
+                    header_font = Font(bold=True)
+                    header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+                    header_alignment = Alignment(horizontal="center", vertical="center")
+                    
+                    for cell in worksheet[1]:
+                        cell.font = header_font
+                        cell.fill = header_fill
+                        cell.alignment = header_alignment
+            
+            # Log the export
+            logger.info(f"DEBUG: Exported datasets to {filepath}")
+            logger.info(f"DEBUG: Master dataset shape: {master_export_df.shape}")
+            logger.info(f"DEBUG: Comparison dataset shape: {comparison_export_df.shape}")
+            
+            # Show success message
+            messagebox.showinfo("Debug Export", f"Datasets exported for debugging:\n{filepath}")
+            
+            # Open the file automatically
+            try:
+                os.startfile(filepath)
+            except Exception as e:
+                logger.warning(f"Could not open debug file automatically: {e}")
+                
+        except Exception as e:
+            logger.error(f"Error in debug export: {e}")
+            messagebox.showerror("Debug Export Error", f"Failed to export debug data: {str(e)}")
+
     def _export_categorized_data(self, final_dataframe):
         """Export categorized data to Excel with proper formatting and data validation"""
         try:
@@ -3635,7 +3781,7 @@ Offer Information:
                         export_df = export_df.drop(columns=[col])
                 
                 # Define desired column order
-                desired_order = ['code', 'Source_Sheet', 'Category', 'Description', 'unit', 
+                desired_order = ['code', 'Category', 'Description', 'unit', 
                                'quantity', 'unit_price', 'total_price', 'manhours', 'wage']
                 
                 # Reorder columns (only include columns that exist)
@@ -4472,15 +4618,16 @@ Offer Information:
                 if not sheet_data or len(sheet_data) <= header_row_idx:
                     continue
                 
+                # Get raw headers and data (no enhancement needed - we'll use column indices)
                 headers = sheet_data[header_row_idx]
                 data_rows = sheet_data[header_row_idx + 1:]
                 
-                # Build mapping from original header to canonical name using master mapping
-                header_map = {}
+                # Build mapping from column index to canonical name using master mapping
+                column_index_map = {}
                 for cm in column_mappings:
-                    orig = getattr(cm, 'original_header', None)
+                    col_idx = getattr(cm, 'column_index', None)
                     canon = getattr(cm, 'mapped_type', None)
-                    if orig and canon:
+                    if col_idx is not None and canon:
                         # mapped_type may be an Enum or str
                         canon_val = canon.value if hasattr(canon, 'value') else str(canon)
                         # Ensure correct case for canonical names
@@ -4496,13 +4643,13 @@ Offer Information:
                             canon_val = 'unit'
                         elif canon_val.lower() == 'code':
                             canon_val = 'code'
-                        header_map[orig] = canon_val
+                        column_index_map[col_idx] = canon_val
                 
-                # Map columns for this sheet
+                # Map columns by index - only include mapped columns
                 mapped_columns = []
-                for i, col in enumerate(headers):
-                    col_str = str(col).strip() if col else ''
-                    mapped_columns.append(header_map.get(col_str, col_str))
+                for col_idx in sorted(column_index_map.keys()):
+                    if col_idx < len(headers):  # Ensure column index is valid
+                        mapped_columns.append(column_index_map[col_idx])
                 
                 # Ensure unique column names
                 unique_columns = []
@@ -4516,8 +4663,19 @@ Offer Information:
                     unique_columns.append(col)
                     seen_columns.add(col)
                 
-                # Build DataFrame
-                df = pd.DataFrame(data_rows, columns=unique_columns)
+                # Filter data rows to match only mapped columns by index
+                filtered_data_rows = []
+                for row in data_rows:
+                    filtered_row = []
+                    for col_idx in sorted(column_index_map.keys()):
+                        if col_idx < len(row):  # Ensure column index is valid
+                            filtered_row.append(row[col_idx] if row[col_idx] is not None else '')
+                        else:
+                            filtered_row.append('')  # Fill missing columns
+                    filtered_data_rows.append(filtered_row)
+                
+                # Build DataFrame with only mapped columns
+                df = pd.DataFrame(filtered_data_rows, columns=unique_columns)
                 if df.empty:
                     continue
                 
@@ -4639,3 +4797,23 @@ Offer Information:
             logger.error(f"Error in main window event loop: {e}")
             raise
     
+    def _process_comparison_file_with_sheet_structure(self, filepath, offer_info):
+        """Process comparison file with sheet structure, like master BOQ workflow."""
+        # Use the same logic as _process_file, but for the comparison file
+        file_mapping = self.controller.process_file(
+            Path(filepath),
+            progress_callback=lambda p, m: self.update_progress(p, m)
+        )
+        file_mapping.offer_info = offer_info
+        return file_mapping
+
+    def _show_comparison_row_review(self, file_mapping, offer_info):
+        """Show row review for comparison file, then create unified dataset and export after confirmation."""
+        # Show the row review dialog (reusing the master workflow)
+        self._show_row_review(file_mapping)
+        # After user confirms row review, _on_confirm_row_review will be called as usual
+        # We can hook into that to trigger the debug export for comparison
+        self._pending_comparison_export = True
+        self._pending_comparison_offer_info = offer_info
+
+    # Patch _on_confirm_row_review to handle pending comparison export

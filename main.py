@@ -405,6 +405,154 @@ class BOQApplicationController:
             ])
         }
     
+    def get_current_dataframe(self):
+        """Get the current DataFrame from the most recently processed file"""
+        try:
+            if not self.current_files:
+                return None
+            
+            # Get the most recently processed file
+            latest_file_key = max(self.current_files.keys(), 
+                                key=lambda k: self.current_files[k].get('processing_time', 0))
+            
+            file_data = self.current_files[latest_file_key]
+            file_mapping = file_data.get('file_mapping')
+            
+            if not file_mapping:
+                return None
+            
+            # Try to get DataFrame from file mapping
+            if hasattr(file_mapping, 'dataframe'):
+                return file_mapping.dataframe
+            elif hasattr(file_mapping, 'get_processed_dataframe'):
+                return file_mapping.get_processed_dataframe()
+            else:
+                # Create DataFrame from the file mapping data
+                return self._create_dataframe_from_mapping(file_mapping)
+                
+        except Exception as e:
+            assert self.logger is not None
+            self.logger.error(f"Error getting current DataFrame: {e}")
+            return None
+    
+    def _create_dataframe_from_mapping(self, file_mapping):
+        """Create a DataFrame from file mapping data"""
+        try:
+            import pandas as pd
+            import logging
+            logger = logging.getLogger(__name__)
+            
+            rows = []
+            for sheet in getattr(file_mapping, 'sheets', []):
+                if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
+                    continue
+                
+                col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
+                sheet_name = sheet.sheet_name
+                
+                # DEBUG: Log column mappings for this sheet
+                logger.info(f"Sheet '{sheet_name}' column mappings: {col_headers}")
+                logger.info(f"Sheet '{sheet_name}' ignore columns: {[cm.mapped_type for cm in getattr(sheet, 'column_mappings', []) if cm.mapped_type == 'ignore']}")
+                
+                # Get row validity for this sheet
+                sheet_validity = getattr(file_mapping, 'row_validity', {}).get(sheet_name, {})
+                
+                for rc in getattr(sheet, 'row_classifications', []):
+                    # Only include valid rows
+                    if not sheet_validity.get(rc.row_index, True):
+                        continue
+                    
+                    row_data = getattr(rc, 'row_data', None)
+                    if row_data is None and hasattr(sheet, 'sheet_data'):
+                        try:
+                            row_data = sheet.sheet_data[rc.row_index]
+                        except Exception:
+                            row_data = None
+                    
+                    if row_data is None:
+                        row_data = []
+                    
+                    row_dict = {}
+                    for cm in sheet.column_mappings:
+                        mapped_type = getattr(cm, 'mapped_type', None)
+                        if not mapped_type:
+                            continue
+                        # Skip columns mapped to 'ignore' - they shouldn't be in the DataFrame
+                        if mapped_type == 'ignore':
+                            continue
+                        idx = cm.column_index
+                        row_dict[mapped_type] = row_data[idx] if idx < len(row_data) else ''
+                    
+
+                    
+                    # Only add essential columns that are not 'ignore'
+                    essential_columns = ['description', 'quantity', 'unit_price', 'total_price', 'unit', 'code', 'scope', 'manhours', 'wage', 'category']
+                    for mt in col_headers:
+                        if mt not in row_dict and mt in essential_columns:
+                            row_dict[mt] = ''
+                    
+                    rows.append(row_dict)
+            
+            if rows:
+                df = pd.DataFrame(rows)
+                
+                # DEBUG: Log DataFrame columns before normalization
+                logger.info(f"DataFrame columns before normalization: {list(df.columns)}")
+                
+                # Normalize column names to be case-insensitive
+                # Map common variations to standard names
+                column_mapping = {
+                    'description': 'Description',
+                    'Description': 'Description',
+                    'DESCRIPTION': 'Description',
+                    'category': 'Category',
+                    'Category': 'Category',
+                    'CATEGORY': 'Category',
+                    'code': 'code',
+                    'unit': 'unit',
+                    'quantity': 'quantity',
+                    'unit_price': 'unit_price',
+                    'total_price': 'total_price'
+                }
+                
+                # Rename columns to standard names
+                df_renamed = df.copy()
+                for col in df.columns:
+                    if col.lower() in column_mapping:
+                        new_name = column_mapping[col.lower()]
+                        if col != new_name:
+                            df_renamed = df_renamed.rename(columns={col: new_name})
+                
+                # DEBUG: Log DataFrame columns after normalization
+                logger.info(f"DataFrame columns after normalization: {list(df_renamed.columns)}")
+                
+                # Reorder columns to the correct sequence (Source_Sheet is added after row review)
+                desired_order = ['code', 'Category', 'Description', 'unit', 'quantity', 'unit_price', 'total_price', 'manhours', 'wage']
+                
+                # Add any missing columns with empty values
+                for col in desired_order:
+                    if col not in df_renamed.columns:
+                        df_renamed[col] = ''
+                
+                # Reorder columns to match desired sequence
+                available_columns = [col for col in desired_order if col in df_renamed.columns]
+                remaining_columns = [col for col in df_renamed.columns if col not in desired_order]
+                final_columns = available_columns + remaining_columns
+                
+                df_renamed = df_renamed[final_columns]
+                
+                # DEBUG: Log final column order
+                logger.info(f"Final DataFrame columns in order: {list(df_renamed.columns)}")
+                
+                return df_renamed
+            else:
+                return None
+                
+        except Exception as e:
+            assert self.logger is not None
+            self.logger.error(f"Error creating DataFrame from mapping: {e}")
+            return None
+    
     def update_settings(self, new_settings: Dict[str, Any]):
         """Update application settings"""
         self.settings.update(new_settings)

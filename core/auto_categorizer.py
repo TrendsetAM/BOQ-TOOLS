@@ -161,10 +161,10 @@ def auto_categorize_dataset(dataframe: pd.DataFrame,
                           confidence_threshold: float = 0.8,
                           progress_callback: Optional[Callable] = None) -> CategorizationResult:
     """
-    Automatically categorize dataset rows using the CategoryDictionary
+    Automatically categorize a DataFrame using a CategoryDictionary
     
     Args:
-        dataframe: Pandas DataFrame that has gone through mapping process
+        dataframe: DataFrame to categorize
         category_dictionary: CategoryDictionary instance
         description_column: Name of the column containing descriptions
         category_column: Name of the column to add for categories
@@ -176,9 +176,18 @@ def auto_categorize_dataset(dataframe: pd.DataFrame,
     """
     logger.info(f"Starting automatic categorization of {len(dataframe)} rows")
     
-    # Validate inputs
-    if description_column not in dataframe.columns:
-        raise ValueError(f"Description column '{description_column}' not found in DataFrame")
+    # Handle case-insensitive column names
+    actual_description_column = None
+    for col in dataframe.columns:
+        if col.lower() == description_column.lower():
+            actual_description_column = col
+            break
+    
+    if not actual_description_column:
+        available_columns = list(dataframe.columns)
+        raise ValueError(f"Description column '{description_column}' not found in DataFrame. Available columns: {available_columns}")
+    
+    logger.info(f"Using description column: '{actual_description_column}'")
     
     # Create a copy to avoid modifying the original
     df = dataframe.copy()
@@ -197,7 +206,7 @@ def auto_categorize_dataset(dataframe: pd.DataFrame,
     # Process each row
     for index, row in df.iterrows():
         try:
-            description = str(row[description_column]).strip()
+            description = str(row[actual_description_column]).strip()
             if not description or description.lower() in ['nan', 'none', '']:
                 unmatched_rows += 1
                 continue
@@ -222,7 +231,7 @@ def auto_categorize_dataset(dataframe: pd.DataFrame,
         except Exception as e:
             logger.error(f"Error processing row {index}: {e}")
             unmatched_rows += 1
-            unmatched_descriptions.append(f"ERROR: {str(row.get(description_column, 'Unknown'))}")
+            unmatched_descriptions.append(f"ERROR: {str(row.get(actual_description_column, 'Unknown'))}")
             continue
     
     # Calculate final statistics
