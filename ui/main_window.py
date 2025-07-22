@@ -130,15 +130,7 @@ def _log_validation_failure(validation_result, context="", operation="validation
     # Log mismatched positions summary
     mismatched_positions = validation_result.get('mismatched_positions', [])
     if mismatched_positions:
-        logger.debug(f"{context} {operation}: Mismatched positions details:")
-        for position_info in mismatched_positions[:5]:  # Log first 5 for debugging
-            if 'expected_description' in position_info:
-                logger.debug(f"  Position {position_info.get('position', 'unknown')}: "
-                           f"expected '{position_info.get('expected_description', '')}', "
-                           f"got '{position_info.get('actual_description', '')}'")
-            else:
-                logger.debug(f"  Missing position {position_info.get('position', 'unknown')}: "
-                           f"expected '{position_info.get('expected_description', '')}'")
+        pass  # Debug logging removed
 
 def _handle_validation_failure(validation_result, context="", operation="validation", show_dialog=True):
     """
@@ -650,7 +642,7 @@ class MainWindow:
                                 for sheet in file_mapping.sheets:
                                     if sheet.sheet_name in self.current_sheet_categories:
                                         sheet.sheet_type = self.current_sheet_categories[sheet.sheet_name]
-                                        logger.debug(f"Applied sheet type '{sheet.sheet_type}' to sheet '{sheet.sheet_name}'")
+                                        # Debug logging removed
                             
                             # Schedule the completion callback on the main thread
                             try:
@@ -722,8 +714,7 @@ class MainWindow:
                 'project_size': offer_info.get('project_size', 'N/A'),
                 'date': offer_info.get('date', datetime.now().strftime('%Y-%m-%d'))
             }
-            logger.debug(f"Original offer_info: {offer_info}")
-            logger.debug(f"Enhanced offer_info: {offer_info_enhanced}")
+            # Debug logging removed
             
             # Store under dynamic offer name for comparison datasets
             offer_name = offer_info_enhanced['offer_name']
@@ -732,22 +723,22 @@ class MainWindow:
             self.controller.current_files[file_key]['offers'][offer_name] = offer_info_enhanced
             # For backward compatibility, also store the last offer as 'offer_info'
             self.controller.current_files[file_key]['offer_info'] = offer_info_enhanced
-            logger.debug(f"Stored offer info for offer_name '{offer_name}': {offer_info_enhanced}")
+            # Debug logging removed
         
         # Also store offer info directly in the file_mapping object for easier access
         file_mapping.offer_info = offer_info_enhanced
-        logger.debug(f"Stored offer info directly in file_mapping: {offer_info_enhanced}")
+                    # Debug logging removed
         
         # Also store in the current instance for immediate access
         self.current_file_mapping = file_mapping
-        logger.debug(f"Stored current_file_mapping reference")
+                    # Debug logging removed
         
         # Remove loading widget and populate tab
         loading_widget.destroy()
         self._populate_file_tab(tab, file_mapping)
         
         # Use centralized refresh method
-        logger.debug("Calling centralized summary grid refresh")
+                    # Debug logging removed
         self._refresh_summary_grid_centralized()
         
         # Update status
@@ -765,7 +756,7 @@ class MainWindow:
         messagebox.showerror("Processing Error", f"Failed to process file: {filename}")
         
         # Use centralized refresh method
-        logger.debug("Calling centralized summary grid refresh after error")
+                    # Debug logging removed
         self._refresh_summary_grid_centralized()
 
     def _populate_file_tab(self, tab, file_mapping):
@@ -1101,22 +1092,15 @@ class MainWindow:
                             processor_results['header_row_indices'] = {}
                         processor_results['header_row_indices'][sheet.sheet_name] = new_header_row_index
                         
-                        print(f"[DEBUG] Updated cached header row index for sheet '{sheet.sheet_name}' to {new_header_row_index}")
+                        # Debug logging removed
             
             # CRITICAL FIX: Set the sheet.sheet_data to the FULL original data
             # The row classifications contain indices that reference the original data structure
             # We should NOT remove the header row from sheet.sheet_data because the row indices
             # in the classifications are adjusted to account for the header row position
             sheet.sheet_data = sheet_data
-            print(f"[DEBUG] Set sheet.sheet_data for '{sheet.sheet_name}' with full original data")
-            print(f"[DEBUG] Data length: {len(sheet_data)}")
-            print(f"[DEBUG] Header row index: {new_header_row_index}")
-            if new_header_row_index < len(sheet_data):
-                print(f"[DEBUG] Header row content: {sheet_data[new_header_row_index]}")
-            if len(sheet_data) > 0:
-                print(f"[DEBUG] First row of sheet_data: {sheet_data[0]}")
-            if len(sheet_data) > 1:
-                print(f"[DEBUG] Second row of sheet_data: {sheet_data[1]}")
+                            # Debug logging removed
+            # Debug logging removed
             
             # Refresh the UI for this sheet
             self._refresh_single_sheet_tab(sheet)
@@ -1505,7 +1489,7 @@ class MainWindow:
                         # Use the manually set header row index if available
                         if sheet.sheet_name in header_row_indices:
                             header_row_index = header_row_indices[sheet.sheet_name]
-                            print(f"[DEBUG] Using manually set header row index {header_row_index} for sheet '{sheet.sheet_name}'")
+                            # Debug logging removed
                         elif hasattr(sheet, 'header_row_index'):
                             header_row_index = sheet.header_row_index
                 
@@ -1514,7 +1498,7 @@ class MainWindow:
                 if header_row_index < len(sheet_data):
                     # Create a copy of sheet data without the header row
                     data_rows = sheet_data[:header_row_index] + sheet_data[header_row_index + 1:]
-                    print(f"[DEBUG] Removed header row {header_row_index} from sheet '{sheet.sheet_name}' data for classification")
+                    # Debug logging removed
                 else:
                     data_rows = sheet_data
                 
@@ -1573,7 +1557,7 @@ class MainWindow:
                     if row_class.row_index >= header_row_index:
                         adjusted_row_index = row_class.row_index + 1
                     
-                    print(f"[DEBUG] Row classification: original_index={row_class.row_index}, header_row={header_row_index}, adjusted_index={adjusted_row_index}")
+                    # Debug logging removed
                     
                     row_info = RowClassificationInfo(
                         row_index=adjusted_row_index,
@@ -1782,7 +1766,7 @@ class MainWindow:
                                 break
                     if is_already_present:
                         already_present_count += 1
-                        logger.debug(f"Mapping already present: '{original_header}' -> '{mapped_type}'")
+                        # Debug logging removed
                     else:
                         try:
                             self.column_mapper.update_canonical_mapping(original_header, mapped_type)
@@ -2052,7 +2036,7 @@ class MainWindow:
             sheet_count = 0
             for sheet in getattr(file_mapping, 'sheets', []):
                 if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
-                    logger.debug(f"Skipping sheet {sheet.sheet_name} with type {getattr(sheet, 'sheet_type', 'Unknown')}")
+                    # Debug logging removed
                     continue
                 sheet_count += 1
                 col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
@@ -2118,9 +2102,7 @@ class MainWindow:
             # Get the actual tab widget using nametowidget
             current_tab = self.notebook.nametowidget(self.notebook.select())
             
-            logger.debug(f"Current tab path: {current_tab_path}")
-            logger.debug(f"Current tab widget type: {type(current_tab)}")
-            logger.debug(f"Current tab widget: {current_tab}")
+            # Debug logging removed
             
             # First, try to find the matching file data in controller's current_files
             file_data_found = False
@@ -2131,11 +2113,11 @@ class MainWindow:
                     file_data['categorization_result'] = categorization_result
                     
                     # Update the tab with the final categorized data
-                    logger.debug(f"Calling _show_final_categorized_data with tab type: {type(current_tab)}")
+                    # Debug logging removed
                     self._show_final_categorized_data(current_tab, final_dataframe, categorization_result)
                     
                     # Refresh summary grid
-                    logger.debug("Calling centralized summary grid refresh after categorization")
+                    # Debug logging removed
                     self._refresh_summary_grid_centralized()
                     file_data_found = True
                     break
@@ -2144,7 +2126,7 @@ class MainWindow:
             if not file_data_found:
                 file_mapping = self.tab_id_to_file_mapping.get(current_tab_path)
                 if file_mapping:
-                    logger.debug("Found file mapping in tab_id_to_file_mapping for Use Mapping workflow")
+                    # Debug logging removed
                     
                     # Store the final dataframe and categorization result in the file mapping
                     file_mapping.final_dataframe = final_dataframe
