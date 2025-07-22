@@ -508,10 +508,24 @@ class MainWindow:
                 self._update_status("Comparison file selection cancelled.")
                 return
             
+            # Prompt for comparison offer information FIRST (same as master workflow)
+            comparison_offer_info = self._prompt_offer_info(is_first_boq=False)
+            if comparison_offer_info is None:
+                self._update_status("Comparison cancelled (no offer information provided)")
+                return
+            
+            # Prompt for comparison file SECOND (same as master workflow)
             filetypes = [("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
-            comparison_file = filedialog.askopenfilename(title="Select Comparison BoQ File", filetypes=filetypes)
-            if comparison_file:
-                self._process_comparison_file(comparison_file, offer_info)
+            comparison_file = filedialog.askopenfilename(
+                title="Select Comparison BoQ File",
+                filetypes=filetypes
+            )
+            
+            if not comparison_file:
+                self._update_status("Comparison cancelled")
+                return
+            
+            self._process_comparison_file(comparison_file, offer_info)
             return
         
         # Normal file opening workflow
@@ -2297,7 +2311,13 @@ class MainWindow:
                 messagebox.showerror("Error", "No data available for comparison")
                 return
             
-            # Prompt for comparison file
+            # Prompt for comparison offer information FIRST (same as master workflow)
+            comparison_offer_info = self._prompt_offer_info(is_first_boq=False)
+            if comparison_offer_info is None:
+                self._update_status("Comparison cancelled (no offer information provided)")
+                return
+            
+            # Prompt for comparison file SECOND (same as master workflow)
             filetypes = [("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
             comparison_file = filedialog.askopenfilename(
                 title="Select Comparison BoQ File",
@@ -2306,12 +2326,6 @@ class MainWindow:
             
             if not comparison_file:
                 self._update_status("Comparison cancelled")
-                return
-            
-            # Prompt for comparison offer information
-            comparison_offer_info = self._prompt_offer_info(is_first_boq=False)
-            if comparison_offer_info is None:
-                self._update_status("Comparison cancelled (no offer information provided)")
                 return
             
             # Process comparison file using optimized method
@@ -2401,7 +2415,7 @@ class MainWindow:
             if COMPARISON_ROW_REVIEW_AVAILABLE:
                 confirmed, updated_results = show_comparison_row_review(
                     self.root, 
-                    comparison_df, 
+                    comparison_file_mapping,  # Pass file mapping instead of DataFrame
                     row_results, 
                     comparison_offer_info.get('offer_name', 'Comparison')
                 )
