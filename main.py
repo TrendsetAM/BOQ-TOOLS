@@ -129,7 +129,7 @@ class BOQApplicationController:
         # Setup logging
         self.logger = setup_logging(
             log_file=self.log_file,
-            level=logging.INFO,  # Set to INFO level
+            level=logging.DEBUG,  # Temporarily set to DEBUG to see offer info logs
             console_output=True
         )
         
@@ -189,7 +189,7 @@ class BOQApplicationController:
             self.config_file.parent.mkdir(parents=True, exist_ok=True)
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(self.settings, f, indent=2, ensure_ascii=False)
-            # Debug logging removed
+            self.logger.debug("Settings saved successfully")
         except Exception as e:
             self.logger.error(f"Failed to save settings: {e}")
     
@@ -339,7 +339,7 @@ class BOQApplicationController:
         processed_file_key = str(Path(file_path).resolve())
 
         if processed_file_key not in self.current_files:
-            # Debug logging removed
+            # For debugging, let's see what keys are available
             available_keys = list(self.current_files.keys())
             assert self.logger is not None
             self.logger.error(f"Export failed: '{processed_file_key}' not found. Available files: {available_keys}")
@@ -450,7 +450,7 @@ class BOQApplicationController:
                 col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
                 sheet_name = sheet.sheet_name
                 
-                # Debug logging removed
+                # DEBUG: Log column mappings for this sheet
                 logger.info(f"Sheet '{sheet_name}' column mappings: {col_headers}")
                 logger.info(f"Sheet '{sheet_name}' ignore columns: {[cm.mapped_type for cm in getattr(sheet, 'column_mappings', []) if cm.mapped_type == 'ignore']}")
                 
@@ -496,7 +496,7 @@ class BOQApplicationController:
             if rows:
                 df = pd.DataFrame(rows)
                 
-                # Debug logging removed
+                # DEBUG: Log DataFrame columns before normalization
                 logger.info(f"DataFrame columns before normalization: {list(df.columns)}")
                 
                 # Normalize column names to be case-insensitive
@@ -523,7 +523,7 @@ class BOQApplicationController:
                         if col != new_name:
                             df_renamed = df_renamed.rename(columns={col: new_name})
                 
-                # Debug logging removed
+                # DEBUG: Log DataFrame columns after normalization
                 logger.info(f"DataFrame columns after normalization: {list(df_renamed.columns)}")
                 
                 # Reorder columns to the correct sequence (Source_Sheet is added after row review)
@@ -541,7 +541,7 @@ class BOQApplicationController:
                 
                 df_renamed = df_renamed[final_columns]
                 
-                # Debug logging removed
+                # DEBUG: Log final column order
                 logger.info(f"Final DataFrame columns in order: {list(df_renamed.columns)}")
                 
                 return df_renamed
@@ -571,7 +571,7 @@ class BOQApplicationController:
         try:
             self._save_settings()
             assert self.logger is not None
-            # Debug logging removed
+            self.logger.debug("Auto-save completed")
         except Exception as e:
             assert self.logger is not None
             self.logger.error(f"Auto-save failed: {e}")
