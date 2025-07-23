@@ -2432,11 +2432,6 @@ class MainWindow:
                 
                 self._debug_export_datasets_before_merge(master_df, filtered_comparison_df, comparison_offer_info)
                 
-                # TEMPORARY STOP POINT: Don't proceed to merge, just return
-                self._update_status("DEBUG: Export completed. Merge process stopped for debugging.")
-                messagebox.showinfo("Debug Mode", "Datasets exported successfully. Merge process stopped for debugging.\n\nYou can now inspect the exported Excel file to verify both datasets are correct.")
-                return
-                
                 # Update processor with user modifications
                 self.comparison_processor.row_results = updated_results
             else:
@@ -2447,6 +2442,121 @@ class MainWindow:
             self._update_status("Processing valid rows...")
             offer_name = comparison_offer_info.get('offer_name', 'Comparison')
             instance_results = self.comparison_processor.process_valid_rows(offer_name=offer_name)
+            
+            # TEMPORARY STOP POINT: Export updated dataset after MERGE/ADD processing
+            self._update_status("DEBUG: MERGE/ADD processing completed. Exporting updated dataset for debugging.")
+            
+            # Log the results for debugging
+            merge_ops = [r for r in instance_results if r['type'] == 'MERGE']
+            add_ops = [r for r in instance_results if r['type'] == 'ADD']
+            
+            logger.info(f"DEBUG: MERGE operations: {len(merge_ops)}")
+            logger.info(f"DEBUG: ADD operations: {len(add_ops)}")
+            
+            # Show detailed results
+            result_message = f"MERGE/ADD Processing Results:\n\n"
+            result_message += f"MERGE operations: {len(merge_ops)}\n"
+            result_message += f"ADD operations: {len(add_ops)}\n\n"
+            
+            if merge_ops:
+                result_message += "MERGE Details:\n"
+                for i, merge_op in enumerate(merge_ops[:5]):  # Show first 5
+                    result_message += f"  {i+1}. Row {merge_op['comp_row_index']} → Master Row {merge_op['master_row_index']}\n"
+                if len(merge_ops) > 5:
+                    result_message += f"  ... and {len(merge_ops) - 5} more\n"
+                result_message += "\n"
+            
+            if add_ops:
+                result_message += "ADD Details:\n"
+                for i, add_op in enumerate(add_ops[:5]):  # Show first 5
+                    result_message += f"  {i+1}. Row {add_op['comp_row_index']} → New Row\n"
+                if len(add_ops) > 5:
+                    result_message += f"  ... and {len(add_ops) - 5} more\n"
+            
+            # Export the updated master dataset (which now contains the new offer-specific columns)
+            # and the filtered comparison dataset for comparison
+            updated_master_df = self.comparison_processor.master_dataset.copy()
+            
+            # Filter comparison dataset to only include valid rows (same logic as in row review)
+            valid_comparison_rows = [r for r in updated_results if r['is_valid']]
+            valid_comparison_indices = [r['row_index'] for r in valid_comparison_rows]
+            filtered_comparison_df = comparison_df.iloc[valid_comparison_indices].copy()
+            
+            # Add MERGE/ADD decision column to comparison dataset for reference
+            def determine_merge_add_decision(comparison_df, original_master_df, original_comparison_df):
+                """Determine whether each comparison row would be MERGE or ADD"""
+                decisions = []
+                
+                # Create a mapping of description to instance counts for correct ordering
+                description_instance_counts = {}
+                
+                for idx, comp_row in comparison_df.iterrows():
+                    description = str(comp_row.get('Description', '')).strip()
+                    
+                    if not description:
+                        decisions.append('INVALID - No Description')
+                        continue
+                    
+                    # Get master instances
+                    master_instances = original_master_df[original_master_df['Description'] == description]
+                    
+                    # If no matches found, try case-insensitive matching
+                    if len(master_instances) == 0:
+                        master_instances = original_master_df[
+                            original_master_df['Description'].str.lower() == description.lower()
+                        ]
+                        
+                        # If still no matches, try normalized matching
+                        if len(master_instances) == 0:
+                            normalized_desc = ' '.join(description.split())
+                            master_instances = original_master_df[
+                                original_master_df['Description'].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
+                            ]
+                    
+                    # Initialize instance count for this description if not seen before
+                    if description not in description_instance_counts:
+                        description_instance_counts[description] = 0
+                    
+                    # Get the current instance number for this description
+                    comp_instance_number = description_instance_counts[description]
+                    description_instance_counts[description] += 1
+                    
+                    # Decision logic: if instance number < master instances, MERGE; else ADD
+                    if comp_instance_number < len(master_instances):
+                        master_idx = master_instances.index[comp_instance_number]
+                        decisions.append(f'MERGE (Master Row {master_idx + 1})')
+                    else:
+                        decisions.append('ADD (New Row)')
+                
+                return decisions
+            
+            # Add decision column to filtered comparison dataset
+            merge_add_decisions = determine_merge_add_decision(filtered_comparison_df, master_df, comparison_df)
+            filtered_comparison_df['MERGE_ADD_Decision'] = merge_add_decisions
+            
+            # Export both datasets
+            self._debug_export_datasets_before_merge(updated_master_df, filtered_comparison_df, comparison_offer_info)
+            
+            # Open the exported file automatically
+            try:
+                import os
+                from datetime import datetime
+                offer_name = comparison_offer_info.get('offer_name', 'Comparison')
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"DEBUG_Datasets_Before_Merge_{offer_name}_{timestamp}.xlsx"
+                export_dir = os.getcwd()
+                filepath = os.path.join(export_dir, filename)
+                os.startfile(filepath)
+            except Exception as e:
+                logger.warning(f"Could not open debug file automatically: {e}")
+            
+            messagebox.showinfo("Debug Mode - MERGE/ADD Results", 
+                              f"{result_message}\n\nUpdated dataset exported to Excel file.\n\n"
+                              f"You can now inspect the exported file to see:\n"
+                              f"1. The updated master dataset with new offer-specific columns\n"
+                              f"2. The comparison dataset with MERGE/ADD decisions\n"
+                              f"3. How the data was actually processed")
+            return
             
             # Clean up data
             self._update_status("Cleaning up data...")
@@ -3599,6 +3709,51 @@ Offer Information:
             export_dir = os.getcwd()
             filepath = os.path.join(export_dir, filename)
             
+            # Function to determine MERGE/ADD decision for each comparison row
+            def determine_merge_add_decision(comparison_df, master_df):
+                """Determine whether each comparison row would be MERGE or ADD"""
+                decisions = []
+                
+                for idx, comp_row in comparison_df.iterrows():
+                    description = str(comp_row.get('Description', '')).strip()
+                    
+                    if not description:
+                        decisions.append('INVALID - No Description')
+                        continue
+                    
+                    # Get all instances with this description in both datasets
+                    comp_instances = comparison_df[comparison_df['Description'] == description]
+                    master_instances = master_df[master_df['Description'] == description]
+                    
+                    # If no matches found, try case-insensitive matching
+                    if len(master_instances) == 0:
+                        master_instances = master_df[
+                            master_df['Description'].str.lower() == description.lower()
+                        ]
+                        
+                        # If still no matches, try normalized matching
+                        if len(master_instances) == 0:
+                            normalized_desc = ' '.join(description.split())
+                            master_instances = master_df[
+                                master_df['Description'].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
+                            ]
+                    
+                    # Find the instance number for this specific row
+                    comp_instance_number = 0
+                    for comp_idx, comp_instance_row in comp_instances.iterrows():
+                        if comp_idx == idx:
+                            break
+                        comp_instance_number += 1
+                    
+                    # Decision logic: if instance number < master instances, MERGE; else ADD
+                    if comp_instance_number < len(master_instances):
+                        master_idx = master_instances.index[comp_instance_number]
+                        decisions.append(f'MERGE (Master Row {master_idx + 1})')
+                    else:
+                        decisions.append('ADD (New Row)')
+                
+                return decisions
+            
             # Prepare datasets with proper formatting (same as main export)
             def prepare_dataset_for_export(df):
                 """Prepare dataset with same formatting as main export"""
@@ -3656,6 +3811,10 @@ Offer Information:
             # Prepare both datasets
             master_export_df = prepare_dataset_for_export(master_df)
             comparison_export_df = prepare_dataset_for_export(comparison_df)
+            
+            # Add MERGE/ADD decision column to comparison dataset
+            merge_add_decisions = determine_merge_add_decision(comparison_export_df, master_export_df)
+            comparison_export_df['MERGE_ADD_Decision'] = merge_add_decisions
             
             # Create Excel writer with proper formatting
             with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
@@ -3764,11 +3923,7 @@ Offer Information:
             # Show success message
             messagebox.showinfo("Debug Export", f"Datasets exported for debugging:\n{filepath}")
             
-            # Open the file automatically
-            try:
-                os.startfile(filepath)
-            except Exception as e:
-                logger.warning(f"Could not open debug file automatically: {e}")
+            # Note: File will be opened by the calling function, so we don't open it here
                 
         except Exception as e:
             logger.error(f"Error in debug export: {e}")
