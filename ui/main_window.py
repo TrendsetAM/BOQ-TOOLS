@@ -2034,7 +2034,7 @@ class MainWindow:
             self._pending_comparison_export = False
             return
         # --- Normal master BOQ workflow ---
-        self._update_status("Row review confirmed. Starting categorization process...")
+        self._update_status("Row review confirmed. Filtering valid rows and starting categorization process...")
         current_tab_id = self.notebook.select()
         file_mapping = self.tab_id_to_file_mapping.get(current_tab_id)
         if not file_mapping:
@@ -2050,6 +2050,8 @@ class MainWindow:
             logger = logging.getLogger(__name__)
             rows = []
             sheet_count = 0
+            
+            # FILTER: Only process valid rows from each sheet
             for sheet in getattr(file_mapping, 'sheets', []):
                 if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
                     logger.debug(f"Skipping sheet {sheet.sheet_name} with type {getattr(sheet, 'sheet_type', 'Unknown')}")
@@ -2058,9 +2060,15 @@ class MainWindow:
                 col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
                 sheet_name = sheet.sheet_name
                 validity_dict = self.row_validity.get(sheet_name, {})
+                
+                # FILTER: Only include rows that are marked as valid
+                valid_row_classifications = []
                 for rc in getattr(sheet, 'row_classifications', []):
-                    if not validity_dict.get(rc.row_index, True):
-                        continue
+                    if validity_dict.get(rc.row_index, True):  # Only include valid rows
+                        valid_row_classifications.append(rc)
+                
+                # Process only valid rows
+                for rc in valid_row_classifications:
                     row_data = getattr(rc, 'row_data', None)
                     if row_data is None and hasattr(sheet, 'sheet_data'):
                         try:
@@ -2080,10 +2088,18 @@ class MainWindow:
                         if mt not in row_dict:
                             row_dict[mt] = ''
                     rows.append(row_dict)
+            
             if not rows:
                 messagebox.showerror("Error", "No valid rows found for categorization.")
                 return
+            
+            # Create filtered dataframe with only valid rows
             final_dataframe = pd.DataFrame(rows)
+            logger.info(f"Filtered dataset created with {len(rows)} valid rows from {sheet_count} sheets")
+            
+            # Store the filtered dataframe in file_mapping for later use
+            file_mapping.filtered_dataframe = final_dataframe
+            
             self._start_categorization(file_mapping)
         except Exception as e:
             import logging
@@ -2425,10 +2441,16 @@ class MainWindow:
                     return
                 
                 # DEBUG: Export both datasets when user confirms row review
-                # Filter comparison data to only include valid rows
+                # Create filtered comparison dataset with only valid rows
                 valid_comparison_rows = [r for r in updated_results if r['is_valid']]
                 valid_comparison_indices = [r['row_index'] for r in valid_comparison_rows]
                 filtered_comparison_df = comparison_df.iloc[valid_comparison_indices].copy()
+                
+                # Store the filtered comparison dataset for later use
+                comparison_file_mapping.filtered_dataframe = filtered_comparison_df
+                
+                # Reload comparison processor with filtered dataset (only valid rows)
+                self.comparison_processor.load_comparison_data(filtered_comparison_df)
                 
                 self._debug_export_datasets_before_merge(master_df, filtered_comparison_df, comparison_offer_info)
                 
@@ -2477,10 +2499,8 @@ class MainWindow:
             # and the filtered comparison dataset for comparison
             updated_master_df = self.comparison_processor.master_dataset.copy()
             
-            # Filter comparison dataset to only include valid rows (same logic as in row review)
-            valid_comparison_rows = [r for r in updated_results if r['is_valid']]
-            valid_comparison_indices = [r['row_index'] for r in valid_comparison_rows]
-            filtered_comparison_df = comparison_df.iloc[valid_comparison_indices].copy()
+            # Use the filtered comparison dataset that was created at row review confirmation
+            filtered_comparison_df = comparison_file_mapping.filtered_dataframe
             
             # Add MERGE/ADD decision column to comparison dataset for reference
             def determine_merge_add_decision(comparison_df, original_master_df, original_comparison_df):
@@ -3714,6 +3734,9 @@ Offer Information:
                 """Determine whether each comparison row would be MERGE or ADD"""
                 decisions = []
                 
+                # Create a mapping of description to instance counts for correct ordering
+                description_instance_counts = {}
+                
                 for idx, comp_row in comparison_df.iterrows():
                     description = str(comp_row.get('Description', '')).strip()
                     
@@ -3721,8 +3744,7 @@ Offer Information:
                         decisions.append('INVALID - No Description')
                         continue
                     
-                    # Get all instances with this description in both datasets
-                    comp_instances = comparison_df[comparison_df['Description'] == description]
+                    # Get master instances
                     master_instances = master_df[master_df['Description'] == description]
                     
                     # If no matches found, try case-insensitive matching
@@ -3738,12 +3760,13 @@ Offer Information:
                                 master_df['Description'].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
                             ]
                     
-                    # Find the instance number for this specific row
-                    comp_instance_number = 0
-                    for comp_idx, comp_instance_row in comp_instances.iterrows():
-                        if comp_idx == idx:
-                            break
-                        comp_instance_number += 1
+                    # Initialize instance count for this description if not seen before
+                    if description not in description_instance_counts:
+                        description_instance_counts[description] = 0
+                    
+                    # Get the current instance number for this description
+                    comp_instance_number = description_instance_counts[description]
+                    description_instance_counts[description] += 1
                     
                     # Decision logic: if instance number < master instances, MERGE; else ADD
                     if comp_instance_number < len(master_instances):
