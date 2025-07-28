@@ -3787,8 +3787,9 @@ Offer Information:
                 logger.info(f"Columns before filtering: {list(export_df.columns)}")
                 
                 # Remove unwanted columns - comprehensive list of internal processing columns
+                # Note: Keep Source_Sheet for debug export to show which sheet each row comes from
                 columns_to_remove = [
-                    'ignore', 'Position', 'Source_Sheet', 'Labour', 
+                    'ignore', 'Position', 'Labour', 
                     'ignore_14', 'ignore_15', '_3', 'scope'
                 ]
                 
@@ -3805,9 +3806,10 @@ Offer Information:
                 logger.info(f"Columns after removing unwanted: {list(export_df.columns)}")
                 
                 # Define the correct essential column order (same as main export)
+                # Include Source_Sheet for debug export to show which sheet each row comes from
                 essential_columns = [
                     'code', 'Category', 'Description', 'unit', 'quantity', 'unit_price', 'total_price',
-                    'manhours', 'wage'
+                    'manhours', 'wage', 'Source_Sheet'
                 ]
                 
                 # Keep only essential columns that exist in the dataframe
@@ -4936,6 +4938,43 @@ Offer Information:
                     # Add missing columns with empty values
                     for col in missing_columns:
                         df[col] = ''
+                
+                # Ensure Source_Sheet column is populated for debug export
+                if 'Source_Sheet' not in df.columns:
+                    logger.info(f"Adding Source_Sheet column to {dataset_type} dataset")
+                    # Try to populate Source_Sheet from sheet information if available
+                    if hasattr(file_mapping, 'sheets') and file_mapping.sheets:
+                        # Create a mapping of row indices to sheet names
+                        sheet_mapping = {}
+                        current_row = 0
+                        for sheet in file_mapping.sheets:
+                            if hasattr(sheet, 'sheet_data') and sheet.sheet_data:
+                                sheet_rows = len(sheet.sheet_data) - 1  # Exclude header row
+                                for i in range(sheet_rows):
+                                    sheet_mapping[current_row + i] = sheet.sheet_name
+                                current_row += sheet_rows
+                        
+                        # Populate Source_Sheet column
+                        df['Source_Sheet'] = df.index.map(lambda x: sheet_mapping.get(x, 'Unknown'))
+                    else:
+                        # Fallback: use a default value
+                        df['Source_Sheet'] = 'Unknown'
+                elif df['Source_Sheet'].isna().all() or (df['Source_Sheet'] == '').all():
+                    logger.warning(f"Source_Sheet column exists but is empty in {dataset_type} dataset")
+                    # Try to populate from sheet information
+                    if hasattr(file_mapping, 'sheets') and file_mapping.sheets:
+                        sheet_mapping = {}
+                        current_row = 0
+                        for sheet in file_mapping.sheets:
+                            if hasattr(sheet, 'sheet_data') and sheet.sheet_data:
+                                sheet_rows = len(sheet.sheet_data) - 1  # Exclude header row
+                                for i in range(sheet_rows):
+                                    sheet_mapping[current_row + i] = sheet.sheet_name
+                                current_row += sheet_rows
+                        
+                        df['Source_Sheet'] = df.index.map(lambda x: sheet_mapping.get(x, 'Unknown'))
+                    else:
+                        df['Source_Sheet'] = 'Unknown'
                 
                 # Ensure consistent column order
                 final_columns = required_columns + [col for col in df.columns if col not in required_columns]
