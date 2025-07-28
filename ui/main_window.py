@@ -2544,9 +2544,9 @@ class MainWindow:
                     # Decision logic: if instance number < master instances, MERGE; else ADD
                     if comp_instance_number < len(master_instances):
                         master_idx = master_instances.index[comp_instance_number]
-                        decisions.append(f'MERGE (Master Row {master_idx + 1})')
+                        decisions.append(f'MERGE Instance {comp_instance_number + 1} (Master Row {master_idx + 2})')
                     else:
-                        decisions.append('ADD (New Row)')
+                        decisions.append(f'ADD Instance {comp_instance_number + 1} (New Row)')
                 
                 return decisions
             
@@ -3744,20 +3744,21 @@ Offer Information:
                         decisions.append('INVALID - No Description')
                         continue
                     
-                    # Get master instances
-                    master_instances = master_df[master_df['Description'] == description]
+                    # Get master instances using normalized whitespace matching first
+                    # This handles cases where descriptions have different whitespace/newline characters
+                    normalized_desc = ' '.join(description.split())  # Normalize whitespace
+                    master_instances = master_df[
+                        master_df['Description'].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
+                    ]
                     
-                    # If no matches found, try case-insensitive matching
+                    # If no matches found with normalized matching, try exact matching as fallback
                     if len(master_instances) == 0:
-                        master_instances = master_df[
-                            master_df['Description'].str.lower() == description.lower()
-                        ]
+                        master_instances = master_df[master_df['Description'] == description]
                         
-                        # If still no matches, try normalized matching
+                        # If still no matches, try case-insensitive matching
                         if len(master_instances) == 0:
-                            normalized_desc = ' '.join(description.split())
                             master_instances = master_df[
-                                master_df['Description'].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
+                                master_df['Description'].str.lower() == description.lower()
                             ]
                     
                     # Initialize instance count for this description if not seen before
@@ -3771,9 +3772,9 @@ Offer Information:
                     # Decision logic: if instance number < master instances, MERGE; else ADD
                     if comp_instance_number < len(master_instances):
                         master_idx = master_instances.index[comp_instance_number]
-                        decisions.append(f'MERGE (Master Row {master_idx + 1})')
+                        decisions.append(f'MERGE Instance {comp_instance_number + 1} (Master Row {master_idx + 2})')
                     else:
-                        decisions.append('ADD (New Row)')
+                        decisions.append(f'ADD Instance {comp_instance_number + 1} (New Row)')
                 
                 return decisions
             

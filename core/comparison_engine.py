@@ -373,6 +373,20 @@ class ComparisonProcessor:
             self.manual_invalidations = set(manual_invalidations)
         else:
             self.manual_invalidations = set()
+        
+        logger.info(f"Master dataset loaded with {len(df)} rows")
+        logger.info(f"Master dataset columns: {list(df.columns)}")
+        logger.info(f"Master dataset shape: {df.shape}")
+        
+        # Log some sample descriptions for debugging
+        if 'Description' in df.columns:
+            sample_descriptions = df['Description'].head(5).tolist()
+            logger.info(f"Master dataset sample descriptions: {sample_descriptions}")
+            
+            # Check for any descriptions that might be problematic
+            if len(df) > 190:  # If we have enough rows to check row 195
+                row_195_desc = df.iloc[194]['Description'] if 194 < len(df) else "N/A"
+                logger.info(f"Master dataset row 195 description: '{row_195_desc}'")
 
     def load_comparison_data(self, df):
         """
@@ -381,6 +395,20 @@ class ComparisonProcessor:
             df: pandas DataFrame for the comparison BoQ
         """
         self.comparison_data = df
+        
+        logger.info(f"Comparison dataset loaded with {len(df)} rows")
+        logger.info(f"Comparison dataset columns: {list(df.columns)}")
+        logger.info(f"Comparison dataset shape: {df.shape}")
+        
+        # Log some sample descriptions for debugging
+        if 'Description' in df.columns:
+            sample_descriptions = df['Description'].head(5).tolist()
+            logger.info(f"Comparison dataset sample descriptions: {sample_descriptions}")
+            
+            # Check for any descriptions that might be problematic
+            if len(df) > 190:  # If we have enough rows to check row 195
+                row_195_desc = df.iloc[194]['Description'] if 194 < len(df) else "N/A"
+                logger.info(f"Comparison dataset row 195 description: '{row_195_desc}'")
 
     def validate_comparison_data(self):
         """
@@ -515,35 +543,60 @@ class ComparisonProcessor:
         valid_rows = [r for r in self.row_results if r['is_valid']]
         merge_results = []
         add_results = []
+        
+        # Track instance counts per description for debugging
+        description_instance_counts = {}
+        
+        logger.info(f"=== STARTING PROCESS_VALID_ROWS ===")
+        logger.info(f"Total valid rows to process: {len(valid_rows)}")
+        
         for row_info in valid_rows:
             idx = row_info['row_index']
             row = self.comparison_data.loc[idx]
+            
             # Build key for instance matching
             key = tuple(str(row.get(col, '')).strip() for col in key_columns)
             description = key[0] if key else ''
-            # Get all instances in both datasets
+            
+            # Enhanced logging for row 195 specifically
+            is_row_195 = (idx == 195)
+            if is_row_195:
+                logger.info(f"=== PROCESSING ROW 195 ===")
+                logger.info(f"Row 195 description: '{description}'")
+                logger.info(f"Row 195 key: {key}")
+                logger.info(f"Row 195 data: {dict(row)}")
+            
+            # Get all instances in both datasets using normalized whitespace matching
+            # This handles cases where descriptions have different whitespace/newline characters
+            normalized_desc = ' '.join(description.split())  # Normalize whitespace
+            
             comp_instances = self.comparison_data[self.comparison_data[key_columns[0]] == description]
-            master_instances = self.master_dataset[self.master_dataset[key_columns[0]] == description]
+            master_instances = self.master_dataset[
+                self.master_dataset[key_columns[0]].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
+            ]
             
             # Debug: Log matching information
-            logger.info(f"Description: '{description}'")
-            logger.info(f"Comparison instances found: {len(comp_instances)}")
-            logger.info(f"Master instances found: {len(master_instances)}")
+            logger.info(f"Row {idx} - Description: '{description}'")
+            logger.info(f"Row {idx} - Normalized description: '{normalized_desc}'")
+            logger.info(f"Row {idx} - Comparison instances found: {len(comp_instances)}")
+            logger.info(f"Row {idx} - Master instances found: {len(master_instances)}")
             
-            # If no matches found, try case-insensitive matching
+            if is_row_195:
+                logger.info(f"Row 195 - Comparison instance indices: {list(comp_instances.index)}")
+                logger.info(f"Row 195 - Master instance indices: {list(master_instances.index)}")
+                logger.info(f"Row 195 - Current description instance count: {description_instance_counts.get(description, 0)}")
+            
+            # If no matches found with normalized matching, try exact matching as fallback
             if len(master_instances) == 0:
-                master_instances = self.master_dataset[
-                    self.master_dataset[key_columns[0]].str.lower() == description.lower()
-                ]
-                logger.info(f"Case-insensitive master instances found: {len(master_instances)}")
+                master_instances = self.master_dataset[self.master_dataset[key_columns[0]] == description]
+                logger.info(f"Exact match master instances found: {len(master_instances)}")
                 
-                # If still no matches, try normalized matching (remove extra whitespace)
+                # If still no matches, try case-insensitive matching
                 if len(master_instances) == 0:
-                    normalized_desc = ' '.join(description.split())  # Normalize whitespace
                     master_instances = self.master_dataset[
-                        self.master_dataset[key_columns[0]].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
+                        self.master_dataset[key_columns[0]].str.lower() == description.lower()
                     ]
-                    logger.info(f"Normalized whitespace master instances found: {len(master_instances)}")
+                    logger.info(f"Case-insensitive master instances found: {len(master_instances)}")
                     
                     # If still no matches, try fuzzy matching for very similar descriptions
                     if len(master_instances) == 0:
@@ -561,8 +614,20 @@ class ComparisonProcessor:
                     # Continue processing - this row will be added in the ADD section below
             # For each nth instance, match and merge/add
             for n, (comp_idx, comp_row) in enumerate(comp_instances.iterrows()):
+                # Enhanced logging for instance processing
+                if is_row_195:
+                    logger.info(f"Row 195 - Processing instance {n} of {len(comp_instances)}")
+                    logger.info(f"Row 195 - Current instance number: {n}")
+                    logger.info(f"Row 195 - Master instances available: {len(master_instances)}")
+                    logger.info(f"Row 195 - Decision condition: {n} < {len(master_instances)} = {n < len(master_instances)}")
+                
                 if n < len(master_instances):
                     master_idx = master_instances.index[n]
+                    logger.info(f"Row {idx} - MERGE decision: instance {n} -> master row {master_idx}")
+                    
+                    if is_row_195:
+                        logger.info(f"Row 195 - MERGE: Will merge into master row {master_idx}")
+                    
                     # Call MERGE: merge comp_row into master_dataset at master_idx
                     # Map DataFrame column names to expected string values
                     column_mapping = {}
@@ -611,6 +676,12 @@ class ComparisonProcessor:
                     })
                 else:
                     # ADD: add comp_row to master_dataset
+                    logger.info(f"Row {idx} - ADD decision: instance {n} -> new row (no matching master instance)")
+                    
+                    if is_row_195:
+                        logger.info(f"Row 195 - ADD: Will add as new row (instance {n} >= {len(master_instances)} master instances)")
+                        logger.info(f"Row 195 - ADD: This is why we're seeing an ADD instead of MERGE!")
+                    
                     # Map DataFrame column names to expected string values
                     column_mapping = {}
                     for i, col_name in enumerate(self.master_dataset.columns):
@@ -656,6 +727,17 @@ class ComparisonProcessor:
                     })
         self.merge_results = merge_results
         self.add_results = add_results
+        
+        # Final logging summary
+        logger.info(f"=== PROCESS_VALID_ROWS COMPLETED ===")
+        logger.info(f"Total MERGE operations: {len(merge_results)}")
+        logger.info(f"Total ADD operations: {len(add_results)}")
+        
+        if len(add_results) > 0:
+            logger.warning(f"WARNING: Found {len(add_results)} ADD operations when processing identical datasets!")
+            for add_op in add_results:
+                logger.warning(f"ADD operation for comparison row {add_op['comp_row_index']}")
+        
         return merge_results + add_results 
 
     def cleanup_comparison_data(self, recategorize_func=None, numeric_columns=None, category_column='Category'):
