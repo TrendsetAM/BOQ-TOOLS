@@ -473,6 +473,9 @@ class BOQApplicationController:
                         row_data = []
                     
                     row_dict = {}
+                    # Add Source_Sheet column for each row
+                    row_dict['Source_Sheet'] = sheet_name
+                    
                     for cm in sheet.column_mappings:
                         mapped_type = getattr(cm, 'mapped_type', None)
                         if not mapped_type:
@@ -526,8 +529,8 @@ class BOQApplicationController:
                 # DEBUG: Log DataFrame columns after normalization
                 logger.info(f"DataFrame columns after normalization: {list(df_renamed.columns)}")
                 
-                # Reorder columns to the correct sequence (Source_Sheet is added after row review)
-                desired_order = ['code', 'Category', 'Description', 'unit', 'quantity', 'unit_price', 'total_price', 'manhours', 'wage']
+                # Reorder columns to the correct sequence (Source_Sheet is now added during DataFrame creation)
+                desired_order = ['Source_Sheet', 'code', 'Category', 'Description', 'unit', 'quantity', 'unit_price', 'total_price', 'manhours', 'wage']
                 
                 # Add any missing columns with empty values
                 for col in desired_order:

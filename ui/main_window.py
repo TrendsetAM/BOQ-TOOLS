@@ -3728,7 +3728,8 @@ Offer Information:
             main_frame.columnconfigure(0, weight=1)
             main_frame.rowconfigure(1, weight=1)
             main_frame.rowconfigure(2, weight=0)  # For summary panel
-            main_frame.rowconfigure(3, weight=0)  # For buttons
+            main_frame.rowconfigure(3, weight=0)  # For category summary (when shown)
+            main_frame.rowconfigure(4, weight=0)  # For buttons
             
             # Title
             title_label = ttk.Label(main_frame, text="Final Categorized Data", 
@@ -3740,8 +3741,8 @@ Offer Information:
             
             # Remove unwanted columns - expanded list of internal processing columns
             columns_to_remove = [
-                'ignore', 'Position', 'Source_Sheet', 'Labour', 
-                'ignore_14', 'ignore_15', '_3', 'scope'
+                'ignore', 'Position', 'Labour', 
+                'ignore_14', 'ignore_15', '_3'
             ]
             
             # Also remove any columns that start with 'ignore_' or are just numbers
@@ -3768,28 +3769,29 @@ Offer Information:
             
             display_df = display_df[final_columns]
             
-            # Define desired column order for comparison results
-            desired_order = ['code', 'Category', 'Description', 'unit', 'quantity', 'unit_price', 'total_price']
+            # Use the same column order as comparison window
+            desired_order = ['Source_Sheet', 'code', 'Category', 'Description', 'scope', 'unit', 'quantity', 'unit_price', 'total_price', 'manhours', 'wage']
             
-            # Add offer-specific columns in a logical order
-            offer_columns = [col for col in display_df.columns if '[' in col and ']' in col]
-            quantity_offers = [col for col in offer_columns if col.startswith('quantity[')]
-            price_offers = [col for col in offer_columns if col.startswith('unit_price[') or col.startswith('total_price[')]
-            
-            # Build final column order
-            final_columns = [col for col in desired_order if col in display_df.columns]
-            final_columns.extend(quantity_offers)
-            final_columns.extend(price_offers)
-            
-            # Add any remaining offer columns
-            remaining_offers = [col for col in offer_columns if col not in final_columns]
-            final_columns.extend(remaining_offers)
-            
-            # Add any other essential columns
-            other_essential = ['manhours', 'wage']
-            for col in other_essential:
-                if col in display_df.columns and col not in final_columns:
+            # Build final column order - same logic as comparison window
+            final_columns = []
+            for col in desired_order:
+                if col in display_df.columns:
                     final_columns.append(col)
+            
+            # Add any offer-specific columns (those with [offer_name] pattern)
+            offer_columns = [col for col in display_df.columns if '[' in col and ']' in col]
+            for col in offer_columns:
+                if col not in final_columns:
+                    final_columns.append(col)
+            
+            # Add any remaining columns
+            for col in display_df.columns:
+                if col not in final_columns:
+                    final_columns.append(col)
+            
+            # Source_Sheet should now be present from the initial data processing
+            if 'Source_Sheet' not in final_columns:
+                logger.warning("Source_Sheet column is still missing - this indicates a processing issue")
             
             display_df = display_df[final_columns]
             
@@ -3814,7 +3816,9 @@ Offer Information:
             default_offer_width = 120
             
             for col in columns:
-                tree.heading(col, text=col)
+                # Display pretty names in headers
+                pretty_name = self._get_pretty_column_name(col)
+                tree.heading(col, text=pretty_name)
                 # Use specific width if defined, otherwise use default for offer columns
                 if col in column_widths:
                     width = column_widths[col]
@@ -3829,33 +3833,56 @@ Offer Information:
             hsb = ttk.Scrollbar(main_frame, orient="horizontal", command=tree.xview)
             tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
             
-            # Grid layout
+            # Grid layout with proper scrollbar configuration
             tree.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
             vsb.grid(row=1, column=1, sticky=(tk.N, tk.S))
             hsb.grid(row=2, column=0, sticky=(tk.W, tk.E))
             
-            # Populate with data (show all rows)
+            # Configure grid weights to ensure scrollbars work properly
+            main_frame.columnconfigure(0, weight=1)
+            main_frame.rowconfigure(1, weight=1)
+            
+            # Create summary panel (treeview with offers)
+            summary_frame = ttk.LabelFrame(main_frame, text="Summary", padding="10")
+            summary_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), padx=5, pady=5)
+            
+            # Populate with data using exact same formatting as comparison window
             for i, row in display_df.iterrows():
                 formatted_values = []
                 for col in columns:
                     val = row[col]
-                    if pd.isna(val):
-                        formatted_values.append("")
-                    elif col in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']:
-                        # Apply European number formatting
-                        try:
-                            num_val = float(val)
-                            formatted_values.append(f"{num_val:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-                        except (ValueError, TypeError):
-                            formatted_values.append(str(val))
+                    
+                    # Apply exact same formatting as comparison window
+                    if pd.notna(val) and val != '':
+                        # Check if this is a comparison column (has [offer_name] pattern)
+                        is_comparison_col = '[' in col and ']' in col
+                        
+                        # Extract base column name for comparison columns
+                        base_col = col.split('[')[0] if is_comparison_col else col
+                        
+                        if base_col in ['unit_price', 'total_price', 'wage']:
+                            # Currency formatting (same as comparison window)
+                            val = format_number(val, is_currency=True)
+                        elif base_col in ['quantity', 'manhours']:
+                            # Number formatting (same as comparison window)
+                            val = format_number(val, is_currency=False)
+                            # Special formatting for manhours - only 2 decimals
+                            if base_col == 'manhours' and val and val != '':
+                                try:
+                                    num_val = float(str(val).replace(',', '.'))
+                                    val = f"{num_val:.2f}"
+                                except:
+                                    pass
+                        else:
+                            val = str(val)
                     else:
-                        formatted_values.append(str(val))
+                        val = ''
+                    
+                    formatted_values.append(val)
                 
                 tree.insert('', 'end', values=formatted_values)
             
-            # Create summary panel (treeview with offers)
-            summary_frame = ttk.LabelFrame(main_frame, text="Summary", padding="10")
-            summary_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), padx=5, pady=5)
+            # Configure summary frame
             summary_frame.columnconfigure(0, weight=1)
             summary_frame.rowconfigure(0, weight=1)
             
@@ -3868,13 +3895,15 @@ Offer Information:
                 summary_tree.heading(col, text=col)
                 summary_tree.column(col, width=120, minwidth=80)
             
-            # Add scrollbar for summary
+            # Add scrollbars for summary
             summary_vsb = ttk.Scrollbar(summary_frame, orient="vertical", command=summary_tree.yview)
-            summary_tree.configure(yscrollcommand=summary_vsb.set)
+            summary_hsb = ttk.Scrollbar(summary_frame, orient="horizontal", command=summary_tree.xview)
+            summary_tree.configure(yscrollcommand=summary_vsb.set, xscrollcommand=summary_hsb.set)
             
             # Grid layout for summary
             summary_tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
             summary_vsb.grid(row=0, column=1, sticky=(tk.N, tk.S))
+            summary_hsb.grid(row=1, column=0, sticky=(tk.W, tk.E))
             
             # Calculate summary data
             total_cost = 0.0
@@ -3886,8 +3915,11 @@ Offer Information:
                     logger.warning(f"Error calculating total cost: {e}")
                     total_cost = 0.0
             
-            # Format total cost with European formatting
-            formatted_total_cost = f"{total_cost:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if total_cost > 0 else "0,00"
+            # Format total cost with European formatting (no currency symbol, dot for thousands, comma for decimals)
+            if total_cost > 0:
+                formatted_total_cost = format_number(total_cost, is_currency=False)
+            else:
+                formatted_total_cost = "0,00"
             
             # Get offer information from file mapping or use defaults
             offer_name = "Current Offer"
@@ -3953,7 +3985,7 @@ Offer Information:
                 else:
                     logger.debug("No matching file data found for current tab")
             
-            summary_tree.insert('', 'end', values=(offer_name, project_name, project_size, date, f"€ {formatted_total_cost}"))
+            summary_tree.insert('', 'end', values=(offer_name, project_name, project_size, date, formatted_total_cost))
             
             # Configure grid weights for summary frame
             summary_frame.columnconfigure(0, weight=1)
@@ -3961,7 +3993,7 @@ Offer Information:
             
             # Create button frame (centered)
             button_frame = ttk.Frame(main_frame)
-            button_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), padx=5, pady=10)
+            button_frame.grid(row=5, column=0, sticky=(tk.W, tk.E), padx=5, pady=10)
             
             # Create inner frame for centering buttons
             inner_button_frame = ttk.Frame(button_frame)
@@ -4570,35 +4602,31 @@ Offer Information:
             # Don't raise the exception, just log it so the main export can continue
 
     def _summarize_categorized_data(self, dataframe):
-        """Show detailed summary of categorized data below the summary treeview"""
+        """Show detailed summary of categorized data in a new section below the summary"""
         try:
             # Get the current tab
             current_tab_path = self.notebook.select()
             current_tab = self.notebook.nametowidget(self.notebook.select())
             
-            # Find the summary frame in the current tab
-            summary_frame = None
+            # Find the main frame in the current tab
+            main_frame = None
             for widget in current_tab.winfo_children():
                 if isinstance(widget, ttk.Frame):
-                    for child in widget.winfo_children():
-                        if isinstance(child, ttk.LabelFrame) and child.cget('text') == 'Summary':
-                            summary_frame = child
-                            break
-                    if summary_frame:
-                        break
+                    main_frame = widget
+                    break
             
-            if not summary_frame:
-                logger.error("Could not find summary frame")
+            if not main_frame:
+                logger.error("Could not find main frame")
                 return
             
             # Clear existing category summary if it exists
-            for widget in summary_frame.winfo_children():
+            for widget in main_frame.winfo_children():
                 if hasattr(widget, 'category_summary'):
                     widget.destroy()
             
             # Create category summary frame
-            category_frame = ttk.LabelFrame(summary_frame, text="Category Summary", padding="5")
-            category_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), padx=5, pady=5)
+            category_frame = ttk.LabelFrame(main_frame, text="Category Summary", padding="5")
+            category_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), padx=5, pady=5)
             category_frame.columnconfigure(0, weight=1)
             category_frame.rowconfigure(0, weight=1)
             
@@ -4675,13 +4703,16 @@ Offer Information:
                     if len(category_data) > 0:
                         category_prices = pd.to_numeric(category_data['total_price'], errors='coerce')
                         category_cost = category_prices.sum()
-                        formatted_cost = f"{category_cost:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if category_cost > 0 else "0,00"
-                        row_data.append(f"€ {formatted_cost}")
+                        if category_cost > 0:
+                            formatted_cost = format_number(category_cost, is_currency=False)
+                        else:
+                            formatted_cost = "0,00"
+                        row_data.append(formatted_cost)
                     else:
-                        row_data.append("€ 0,00")
+                        row_data.append("0,00")
                 except Exception as e:
                     logger.warning(f"Error calculating cost for category {category}: {e}")
-                    row_data.append("€ 0,00")
+                    row_data.append("0,00")
             
             # Insert data
             category_tree.insert('', 'end', values=row_data)
@@ -5445,13 +5476,38 @@ Offer Information:
         # Update treeview columns if needed
         if list(treeview['columns']) != final_columns:
             treeview['columns'] = final_columns
+            
+            # Configure columns with appropriate widths (same as master window)
+            column_widths = {
+                'Source_Sheet': 120,
+                'code': 100,
+                'Category': 150,
+                'Description': 400,  # Wider for descriptions
+                'scope': 100,
+                'unit': 80,
+                'quantity': 100,
+                'unit_price': 120,
+                'total_price': 120,
+                'manhours': 100,
+                'wage': 80
+            }
+            
+            # Set default width for offer-specific columns
+            default_offer_width = 120
+            
             for col in final_columns:
-                treeview.heading(col, text=col)
-                # Set column widths based on content type (same as row review)
-                if col == "status":
-                    treeview.column(col, width=80, anchor=tk.CENTER)
+                # Display pretty names in headers
+                pretty_name = self._get_pretty_column_name(col)
+                treeview.heading(col, text=pretty_name)
+                
+                # Use specific width if defined, otherwise use default for offer columns
+                if col in column_widths:
+                    width = column_widths[col]
+                elif '[' in col and ']' in col:
+                    width = default_offer_width
                 else:
-                    treeview.column(col, width=120 if col != "#" else 40, anchor=tk.W, minwidth=50, stretch=False)
+                    width = 100
+                treeview.column(col, width=width, minwidth=80, stretch=False)
         
         # Populate with data using exact same formatting as row review
         for idx, row in updated_df.iterrows():
@@ -5491,6 +5547,42 @@ Offer Information:
         
         logger.info("Tab updated successfully with comparison data")
         
+    def _get_pretty_column_name(self, column_name):
+        """
+        Convert internal column names to pretty display names
+        
+        Args:
+            column_name: Internal column name
+            
+        Returns:
+            Pretty display name for the column
+        """
+        # Handle comparison columns (those with [offer_name] pattern)
+        if '[' in column_name and ']' in column_name:
+            base_col = column_name.split('[')[0]
+            offer_name = column_name.split('[')[1].split(']')[0]
+            pretty_base = self._get_pretty_column_name(base_col)
+            return f"{pretty_base} [{offer_name}]"
+        
+        # Map internal names to pretty names
+        pretty_names = {
+            'source_sheet': 'Source Sheet',
+            'Source_Sheet': 'Source Sheet',
+            'code': 'Code',
+            'category': 'Category',
+            'Category': 'Category',
+            'description': 'Description',
+            'Description': 'Description',
+            'scope': 'Scope',
+            'unit': 'Unit',
+            'quantity': 'Quantity',
+            'unit_price': 'Unit Price',
+            'total_price': 'Total Price',
+            'manhours': 'Man Hours',
+            'wage': 'Wage'
+        }
+        
+        return pretty_names.get(column_name, column_name)
 
 
     def _update_main_dataset_with_comparison_results(self, processor, offer_info):
