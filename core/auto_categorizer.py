@@ -217,11 +217,11 @@ def auto_categorize_dataset(dataframe: pd.DataFrame,
             if match.matched_category:
                 df.at[index, category_column] = match.matched_category
                 matched_rows += 1
-                print(f"[CATEGORIZATION] '{description}' → '{match.matched_category}' (type: {match.match_type}, confidence: {match.confidence:.2f})")
+                # print(f"[CATEGORIZATION] '{description}' → '{match.matched_category}' (type: {match.match_type}, confidence: {match.confidence:.2f})")
             else:
                 df.at[index, category_column] = ''
                 unmatched_rows += 1
-                print(f"[CATEGORIZATION] '{description}' → UNMATCHED")
+                # print(f"[CATEGORIZATION] '{description}' → UNMATCHED")
             
             # Progress callback
             if progress_callback:

@@ -697,6 +697,12 @@ class MainWindow:
         """Handle processing completion"""
         logger.info(f"Processing complete for file: {filepath}")
         
+        # Prevent setting file_mapping during comparison workflow
+        if getattr(self, 'is_comparison_workflow', False):
+            logger.info("Skipping file_mapping assignment during comparison workflow")
+            loading_widget.destroy()
+            return
+        
         # Store the file mapping and column mapper
         self.file_mapping = file_mapping
         self.column_mapper = file_mapping.column_mapper if hasattr(file_mapping, 'column_mapper') else None
@@ -771,6 +777,12 @@ class MainWindow:
     def _populate_file_tab(self, tab, file_mapping):
         # print("[DEBUG] _populate_file_tab called for tab:", tab)
         """Populates a tab with the processed data from a file mapping."""
+        
+        # Prevent tab population during comparison workflow
+        if getattr(self, 'is_comparison_workflow', False):
+            logger.info("Tab population prevented during comparison workflow")
+            return
+        
         # Debug: print all sheet names and their types
         # print('DEBUG: Sheets in file_mapping:')
         for s in file_mapping.sheets:
@@ -1419,6 +1431,11 @@ class MainWindow:
         self._update_status(f"Propagated {count} column mappings to all other sheets.")
 
     def _save_all_mappings_for_all_sheets(self):
+        # Prevent saving mappings during comparison workflow
+        if getattr(self, 'is_comparison_workflow', False):
+            logger.info("Saving mappings prevented during comparison workflow")
+            return
+            
         if not self.file_mapping or not hasattr(self.file_mapping, 'sheets'):
             messagebox.showwarning("No File", "No file loaded.")
             return
@@ -1438,6 +1455,11 @@ class MainWindow:
 
     def _trigger_row_mapping(self):
         """Trigger row mapping with the current column mappings"""
+        # Prevent row mapping during comparison workflow
+        if getattr(self, 'is_comparison_workflow', False):
+            logger.info("Row mapping prevented during comparison workflow")
+            return
+            
         if not self.file_mapping or not hasattr(self.file_mapping, 'sheets'):
             self._update_status("No file loaded for row mapping.")
             return
@@ -1846,6 +1868,17 @@ class MainWindow:
         tree.item(row_id, values=vals)
 
     def _show_row_review(self, file_mapping, original_sheet_data=None):
+        logger.info("_show_row_review called")
+        logger.info(f"File mapping type: {type(file_mapping)}")
+        logger.info(f"File mapping offer_info: {getattr(file_mapping, 'offer_info', 'No offer_info')}")
+        logger.info(f"Is comparison workflow: {getattr(self, 'is_comparison_workflow', False)}")
+        logger.info(f"Pending comparison export: {getattr(self, '_pending_comparison_export', False)}")
+        
+        # Prevent normal row review during comparison workflow
+        if getattr(self, 'is_comparison_workflow', False):
+            logger.info("Normal row review prevented during comparison workflow")
+            return
+            
         # Remove existing Row Review frame if present
         if self.row_review_frame:
             self.row_review_frame.destroy()
@@ -2021,17 +2054,31 @@ class MainWindow:
 
     def _on_confirm_row_review(self):
         """Handle row review confirmation and start categorization or export for comparison workflow"""
-        # If this was a comparison workflow, do the export and stop
+        logger.info("_on_confirm_row_review called")
+        logger.info(f"Current tab ID: {self.notebook.select()}")
+        logger.info(f"Current file mapping: {self.file_mapping}")
+        logger.info(f"Pending comparison export: {getattr(self, '_pending_comparison_export', False)}")
+        logger.info(f"Is comparison workflow: {getattr(self, 'is_comparison_workflow', False)}")
+        
+        # If this was a comparison workflow, continue with comparison processing
         if getattr(self, '_pending_comparison_export', False):
-            master_df = self._create_unified_dataframe(self.master_file_mapping, is_master=True)
-            comparison_df = self._create_unified_dataframe(self.file_mapping, is_master=False)
-            offer_info = getattr(self, '_pending_comparison_offer_info', None)
-            self._debug_export_datasets_before_merge(master_df, comparison_df, offer_info)
-            self._update_status("DEBUG: Export completed. Merge process stopped for debugging.")
-            from tkinter import messagebox
-            messagebox.showinfo("Debug Mode", "Datasets exported successfully. Merge process stopped for debugging.\n\nYou can now inspect the exported Excel file to verify both datasets are correct.")
-            # Reset flag
+            logger.info("Comparison workflow detected in _on_confirm_row_review")
+            # Reset flag immediately to prevent re-entry
             self._pending_comparison_export = False
+            offer_info = getattr(self, '_pending_comparison_offer_info', None)
+            self._pending_comparison_offer_info = None
+            
+            # Get the current tab and continue with comparison processing
+            current_tab_id = self.notebook.select()
+            if current_tab_id:
+                current_tab = self.notebook.nametowidget(current_tab_id)
+                logger.info("Calling _compare_full to continue comparison processing")
+                self._compare_full(current_tab)
+            return
+            
+        # Additional safeguard: prevent normal workflow during comparison
+        if getattr(self, 'is_comparison_workflow', False):
+            logger.info("Normal workflow prevented during comparison workflow")
             return
         # --- Normal master BOQ workflow ---
         self._update_status("Row review confirmed. Filtering valid rows and starting categorization process...")
@@ -2046,8 +2093,6 @@ class MainWindow:
         
         try:
             import pandas as pd
-            import logging
-            logger = logging.getLogger(__name__)
             rows = []
             sheet_count = 0
             
@@ -2102,8 +2147,6 @@ class MainWindow:
             
             self._start_categorization(file_mapping)
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Error during row review confirmation: {e}", exc_info=True)
             messagebox.showerror("Error", f"An error occurred during row review confirmation: {str(e)}")
 
@@ -2429,12 +2472,22 @@ class MainWindow:
             
             # Show comparison row review dialog
             if COMPARISON_ROW_REVIEW_AVAILABLE:
+                logger.info("Using comparison row review dialog")
+                logger.info(f"Comparison file mapping: {comparison_file_mapping}")
+                logger.info(f"Comparison offer info: {comparison_offer_info}")
+                # Set flag to indicate this is a comparison workflow
+                self._pending_comparison_export = True
+                self._pending_comparison_offer_info = comparison_offer_info
+                
                 confirmed, updated_results = show_comparison_row_review(
                     self.root, 
                     comparison_file_mapping,  # Pass file mapping instead of DataFrame
                     row_results, 
                     comparison_offer_info.get('offer_name', 'Comparison')
                 )
+                
+                logger.info(f"Comparison row review dialog returned: confirmed={confirmed}")
+                logger.info(f"Updated results count: {len(updated_results) if updated_results else 0}")
                 
                 if not confirmed:
                     self._update_status("Comparison cancelled by user")
@@ -2452,7 +2505,8 @@ class MainWindow:
                 # Reload comparison processor with filtered dataset (only valid rows)
                 self.comparison_processor.load_comparison_data(filtered_comparison_df)
                 
-                self._debug_export_datasets_before_merge(master_df, filtered_comparison_df, comparison_offer_info)
+                # DEBUG EXPORT (COMMENTED OUT)
+                # self._debug_export_datasets_before_merge(master_df, filtered_comparison_df, comparison_offer_info)
                 
                 # Update processor with user modifications
                 self.comparison_processor.row_results = updated_results
@@ -2465,125 +2519,130 @@ class MainWindow:
             offer_name = comparison_offer_info.get('offer_name', 'Comparison')
             instance_results = self.comparison_processor.process_valid_rows(offer_name=offer_name)
             
-            # TEMPORARY STOP POINT: Export updated dataset after MERGE/ADD processing
-            self._update_status("DEBUG: MERGE/ADD processing completed. Exporting updated dataset for debugging.")
-            
-            # Log the results for debugging
-            merge_ops = [r for r in instance_results if r['type'] == 'MERGE']
-            add_ops = [r for r in instance_results if r['type'] == 'ADD']
-            
-            logger.info(f"DEBUG: MERGE operations: {len(merge_ops)}")
-            logger.info(f"DEBUG: ADD operations: {len(add_ops)}")
-            
-            # Show detailed results
-            result_message = f"MERGE/ADD Processing Results:\n\n"
-            result_message += f"MERGE operations: {len(merge_ops)}\n"
-            result_message += f"ADD operations: {len(add_ops)}\n\n"
-            
-            if merge_ops:
-                result_message += "MERGE Details:\n"
-                for i, merge_op in enumerate(merge_ops[:5]):  # Show first 5
-                    result_message += f"  {i+1}. Row {merge_op['comp_row_index']} → Master Row {merge_op['master_row_index']}\n"
-                if len(merge_ops) > 5:
-                    result_message += f"  ... and {len(merge_ops) - 5} more\n"
-                result_message += "\n"
-            
-            if add_ops:
-                result_message += "ADD Details:\n"
-                for i, add_op in enumerate(add_ops[:5]):  # Show first 5
-                    result_message += f"  {i+1}. Row {add_op['comp_row_index']} → New Row\n"
-                if len(add_ops) > 5:
-                    result_message += f"  ... and {len(add_ops) - 5} more\n"
-            
-            # Export the updated master dataset (which now contains the new offer-specific columns)
-            # and the filtered comparison dataset for comparison
-            updated_master_df = self.comparison_processor.master_dataset.copy()
-            
-            # Use the filtered comparison dataset that was created at row review confirmation
-            filtered_comparison_df = comparison_file_mapping.filtered_dataframe
-            
-            # Add MERGE/ADD decision column to comparison dataset for reference
-            def determine_merge_add_decision(comparison_df, original_master_df, original_comparison_df):
-                """Determine whether each comparison row would be MERGE or ADD"""
-                decisions = []
-                
-                # Create a mapping of description to instance counts for correct ordering
-                description_instance_counts = {}
-                
-                for idx, comp_row in comparison_df.iterrows():
-                    description = str(comp_row.get('Description', '')).strip()
-                    
-                    if not description:
-                        decisions.append('INVALID - No Description')
-                        continue
-                    
-                    # Get master instances
-                    master_instances = original_master_df[original_master_df['Description'] == description]
-                    
-                    # If no matches found, try case-insensitive matching
-                    if len(master_instances) == 0:
-                        master_instances = original_master_df[
-                            original_master_df['Description'].str.lower() == description.lower()
-                        ]
-                        
-                        # If still no matches, try normalized matching
-                        if len(master_instances) == 0:
-                            normalized_desc = ' '.join(description.split())
-                            master_instances = original_master_df[
-                                original_master_df['Description'].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
-                            ]
-                    
-                    # Initialize instance count for this description if not seen before
-                    if description not in description_instance_counts:
-                        description_instance_counts[description] = 0
-                    
-                    # Get the current instance number for this description
-                    comp_instance_number = description_instance_counts[description]
-                    description_instance_counts[description] += 1
-                    
-                    # Decision logic: if instance number < master instances, MERGE; else ADD
-                    if comp_instance_number < len(master_instances):
-                        master_idx = master_instances.index[comp_instance_number]
-                        decisions.append(f'MERGE Instance {comp_instance_number + 1} (Master Row {master_idx + 2})')
-                    else:
-                        decisions.append(f'ADD Instance {comp_instance_number + 1} (New Row)')
-                
-                return decisions
-            
-            # Add decision column to filtered comparison dataset
-            merge_add_decisions = determine_merge_add_decision(filtered_comparison_df, master_df, comparison_df)
-            filtered_comparison_df['MERGE_ADD_Decision'] = merge_add_decisions
-            
-            # Export both datasets
-            self._debug_export_datasets_before_merge(updated_master_df, filtered_comparison_df, comparison_offer_info)
-            
-            # Open the exported file automatically
-            try:
-                import os
-                from datetime import datetime
-                offer_name = comparison_offer_info.get('offer_name', 'Comparison')
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"DEBUG_Datasets_Before_Merge_{offer_name}_{timestamp}.xlsx"
-                export_dir = os.getcwd()
-                filepath = os.path.join(export_dir, filename)
-                os.startfile(filepath)
-            except Exception as e:
-                logger.warning(f"Could not open debug file automatically: {e}")
-            
-            messagebox.showinfo("Debug Mode - MERGE/ADD Results", 
-                              f"{result_message}\n\nUpdated dataset exported to Excel file.\n\n"
-                              f"You can now inspect the exported file to see:\n"
-                              f"1. The updated master dataset with new offer-specific columns\n"
-                              f"2. The comparison dataset with MERGE/ADD decisions\n"
-                              f"3. How the data was actually processed")
-            return
+            # DEBUG EXPORT (COMMENTED OUT)
+            # self._update_status("DEBUG: MERGE/ADD processing completed. Exporting updated dataset for debugging.")
+            # 
+            # # Log the results for debugging
+            # merge_ops = [r for r in instance_results if r['type'] == 'MERGE']
+            # add_ops = [r for r in instance_results if r['type'] == 'ADD']
+            # 
+            # logger.info(f"DEBUG: MERGE operations: {len(merge_ops)}")
+            # logger.info(f"DEBUG: ADD operations: {len(add_ops)}")
+            # 
+            # # Show detailed results
+            # result_message = f"MERGE/ADD Processing Results:\n\n"
+            # result_message += f"MERGE operations: {len(merge_ops)}\n"
+            # result_message += f"ADD operations: {len(add_ops)}\n\n"
+            # 
+            # if merge_ops:
+            #     result_message += "MERGE Details:\n"
+            #     for i, merge_op in enumerate(merge_ops[:5]):  # Show first 5
+            #         result_message += f"  {i+1}. Row {merge_op['comp_row_index']} → Master Row {merge_op['master_row_index']}\n"
+            #     if len(merge_ops) > 5:
+            #         result_message += f"  ... and {len(merge_ops) - 5} more\n"
+            #     result_message += "\n"
+            # 
+            # if add_ops:
+            #     result_message += "ADD Details:\n"
+            #     for i, add_op in enumerate(add_ops[:5]):  # Show first 5
+            #         result_message += f"  {i+1}. Row {add_op['comp_row_index']} → New Row\n"
+            #     if len(add_ops) > 5:
+            #         result_message += f"  ... and {len(add_ops) - 5} more\n"
+            # 
+            # # Export the updated master dataset (which now contains the new offer-specific columns)
+            # # and the filtered comparison dataset for comparison
+            # updated_master_df = self.comparison_processor.master_dataset.copy()
+            # 
+            # # Use the filtered comparison dataset that was created at row review confirmation
+            # filtered_comparison_df = comparison_file_mapping.filtered_dataframe
+            # 
+            # # Add MERGE/ADD decision column to comparison dataset for reference
+            # def determine_merge_add_decision(comparison_df, original_master_df, original_comparison_df):
+            #     """Determine whether each comparison row would be MERGE or ADD"""
+            #     decisions = []
+            # 
+            #     # Create a mapping of description to instance counts for correct ordering
+            #     description_instance_counts = {}
+            # 
+            #     for idx, comp_row in comparison_df.iterrows():
+            #         description = str(comp_row.get('Description', '')).strip()
+            # 
+            #         if not description:
+            #             decisions.append('INVALID - No Description')
+            #             continue
+            # 
+            #         # Get master instances
+            #         master_instances = original_master_df[original_master_df['Description'] == description]
+            # 
+            #         # If no matches found, try case-insensitive matching
+            #         if len(master_instances) == 0:
+            #             master_instances = original_master_df[
+            #             original_master_df['Description'].str.lower() == description.lower()
+            #         ]
+            # 
+            #         # If still no matches, try normalized matching
+            #         if len(master_instances) == 0:
+            #             normalized_desc = ' '.join(description.split())
+            #             master_instances = original_master_df[
+            #             original_master_df['Description'].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
+            #         ]
+            # 
+            #     # Initialize instance count for this description if not seen before
+            #     if description not in description_instance_counts:
+            #         description_instance_counts[description] = 0
+            # 
+            #     # Get the current instance number for this description
+            #     comp_instance_number = description_instance_counts[description]
+            #     description_instance_counts[description] += 1
+            # 
+            #     # Decision logic: if instance number < master instances, MERGE; else ADD
+            #     if comp_instance_number < len(master_instances):
+            #         master_idx = master_instances.index[comp_instance_number]
+            #         decisions.append(f'MERGE Instance {comp_instance_number + 1} (Master Row {master_idx + 2})')
+            #     else:
+            #         decisions.append(f'ADD Instance {comp_instance_number + 1} (New Row)')
+            # 
+            # return decisions
+            # 
+            # # Add decision column to filtered comparison dataset
+            # merge_add_decisions = determine_merge_add_decision(filtered_comparison_df, master_df, comparison_df)
+            # filtered_comparison_df['MERGE_ADD_Decision'] = merge_add_decisions
+            # 
+            # # Export both datasets
+            # self._debug_export_datasets_before_merge(updated_master_df, filtered_comparison_df, comparison_offer_info)
+            # 
+            # # Open the exported file automatically
+            # try:
+            #     import os
+            #     from datetime import datetime
+            #     offer_name = comparison_offer_info.get('offer_name', 'Comparison')
+            #     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            #     filename = f"DEBUG_Datasets_Before_Merge_{offer_name}_{timestamp}.xlsx"
+            #     export_dir = os.getcwd()
+            #     filepath = os.path.join(export_dir, filename)
+            #     os.startfile(filepath)
+            # except Exception as e:
+            #     logger.warning(f"Could not open debug file automatically: {e}")
+            # 
+            # messagebox.showinfo("Debug Mode - MERGE/ADD Results", 
+            #                   f"{result_message}\n\nUpdated dataset exported to Excel file.\n\n"
+            #                   f"You can now inspect the exported file to see:\n"
+            #                   f"1. The updated master dataset with new offer-specific columns\n"
+            #                   f"2. The comparison dataset with MERGE/ADD decisions\n"
+            #                   f"3. How the data was actually processed")
+            # return
             
             # Clean up data
             self._update_status("Cleaning up data...")
             cleanup_results = self.comparison_processor.cleanup_comparison_data()
             
-            # Show results
-            self._show_comparison_results(self.comparison_processor, comparison_offer_info)
+            # Update the main dataset in place instead of showing results
+            self._update_main_dataset_with_comparison_results(self.comparison_processor, comparison_offer_info)
+            
+            # Reset comparison workflow flags
+            self.is_comparison_workflow = False
+            self._pending_comparison_export = False
+            self._pending_comparison_offer_info = None
             
             self._update_status("Comparison completed successfully")
             
@@ -2592,6 +2651,11 @@ class MainWindow:
             import traceback
             traceback.print_exc()
             messagebox.showerror("Error", f"Comparison failed: {str(e)}")
+            
+            # Reset comparison workflow flags even on error
+            self.is_comparison_workflow = False
+            self._pending_comparison_export = False
+            self._pending_comparison_offer_info = None
 
     def _process_comparison_file(self, filepath, offer_info):
         """
@@ -2753,6 +2817,218 @@ class MainWindow:
                 'summary': f'Validation error: {str(e)}',
                 'errors': [str(e)]
             }
+
+    def _update_main_dataset_with_comparison_results(self, processor, offer_info):
+        """
+        Update the main dataset in place with comparison results
+        
+        Args:
+            processor: ComparisonProcessor instance
+            offer_info: Offer information dictionary
+        """
+        try:
+            logger.info("=== STARTING _update_main_dataset_with_comparison_results ===")
+            
+            # Get the current tab (master dataset)
+            current_tab_id = self.notebook.select()
+            if not current_tab_id:
+                logger.warning("No current tab found for updating main dataset")
+                return
+            
+            logger.info(f"Current tab ID: {current_tab_id}")
+            
+            # Get the current file mapping from the tab_id_to_file_mapping dictionary
+            file_mapping = self.tab_id_to_file_mapping.get(current_tab_id)
+            
+            if not file_mapping:
+                logger.warning("No file mapping found for current tab")
+                return
+            
+            # Get the updated dataframe from the processor's master_dataset
+            updated_df = processor.master_dataset.copy()
+            
+            if updated_df is None or updated_df.empty:
+                logger.warning("No updated dataframe available from processor")
+                return
+            
+            logger.info(f"Updating master dataset with {len(updated_df)} rows and {len(updated_df.columns)} columns")
+            
+            # Update the file mapping's dataframe with the merged data
+            file_mapping.dataframe = updated_df.copy()
+            
+            # Reset comparison workflow flags to allow normal UI refresh
+            self.is_comparison_workflow = False
+            self.comparison_processor = None
+            
+            # Show success message
+            merge_count = len(processor.merge_results) if hasattr(processor, 'merge_results') else 0
+            add_count = len(processor.add_results) if hasattr(processor, 'add_results') else 0
+            status_msg = f"Comparison completed: {merge_count} merges, {add_count} adds"
+            self._update_status(status_msg)
+            logger.info(f"Status message: {status_msg}")
+            print("=== AFTER STATUS, BEFORE TRY ===")
+            
+            # Get the current tab widget
+            current_tab = self.notebook.nametowidget(current_tab_id)
+            logger.info("DEBUG: Got current tab widget successfully")
+            
+            # Debug: Log what we're about to do
+            logger.info(f"About to update tab with comparison data")
+            logger.info(f"Current tab type: {type(current_tab)}")
+            logger.info(f"Updated dataframe shape: {updated_df.shape}")
+            logger.info(f"Updated dataframe columns: {list(updated_df.columns)}")
+            
+            # Update the existing tab with comparison data, preserving formatting and column order
+            logger.info("Calling _update_tab_with_comparison_data...")
+            logger.info(f"DEBUG: current_tab type: {type(current_tab)}")
+            logger.info(f"DEBUG: updated_df shape: {updated_df.shape}")
+            logger.info(f"DEBUG: updated_df columns: {list(updated_df.columns)}")
+            logger.info(f"DEBUG: About to call _update_tab_with_comparison_data method")
+            logger.info(f"DEBUG: Method exists: {hasattr(self, '_update_tab_with_comparison_data')}")
+            try:
+                self._update_tab_with_comparison_data(current_tab, updated_df)
+                logger.info("_update_tab_with_comparison_data completed successfully")
+            except Exception as e:
+                logger.error(f"Exception in _update_tab_with_comparison_data: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                raise
+            
+            logger.info("=== COMPLETED _update_main_dataset_with_comparison_results ===")
+            print("=== END OF _update_main_dataset_with_comparison_results ===")
+            
+        except Exception as e:
+            logger.error(f"Error updating main dataset with comparison results: {e}")
+            self._update_status(f"Error updating dataset: {str(e)}")
+
+    def _refresh_tab_with_updated_data(self, tab, file_mapping):
+        """
+        Simple UI refresh that shows the updated data without triggering column mapping workflow
+        
+        Args:
+            tab: The tab widget to refresh
+            file_mapping: The updated file mapping with new data
+        """
+        try:
+            logger.info("Starting simple UI refresh for updated data")
+            
+            # Clear existing content
+            for widget in tab.winfo_children():
+                widget.destroy()
+            
+            # Create main container frame
+            main_frame = ttk.Frame(tab)
+            main_frame.grid(row=0, column=0, sticky=tk.NSEW)
+            main_frame.grid_rowconfigure(0, weight=1)
+            main_frame.grid_columnconfigure(0, weight=1)
+            
+            # Get the updated dataframe
+            df = file_mapping.dataframe
+            
+            # Filter out ignore columns and get meaningful columns
+            meaningful_columns = [col for col in df.columns if not (col.startswith('ignore') or col == 'ignore')]
+            
+            # Define the exact column order from row review (same as original)
+            display_column_order = ["code", "description", "unit", "quantity", "unit_price", "total_price", "scope", "manhours", "wage"]
+            
+            # Add any offer-specific columns (those with [offer_name] pattern)
+            offer_columns = [col for col in meaningful_columns if '[' in col and ']' in col]
+            
+            # Create final column order: standard columns first, then offer-specific columns
+            final_columns = []
+            for col in display_column_order:
+                if col in meaningful_columns:
+                    final_columns.append(col)
+            
+            # Add offer-specific columns at the end
+            for col in offer_columns:
+                if col not in final_columns:
+                    final_columns.append(col)
+            
+            # Add any remaining meaningful columns
+            for col in meaningful_columns:
+                if col not in final_columns:
+                    final_columns.append(col)
+            
+            # Create treeview for data display
+            tree = ttk.Treeview(main_frame, columns=final_columns, show="headings", height=20)
+            
+            # Configure columns with proper formatting (same as row review)
+            for col in final_columns:
+                tree.heading(col, text=col)
+                
+                # Set column widths based on content type (same as row review)
+                if col == "status":
+                    tree.column(col, width=80, anchor=tk.CENTER)
+                else:
+                    tree.column(col, width=120 if col != "#" else 40, anchor=tk.W, minwidth=50, stretch=False)
+            
+            # Add scrollbars
+            v_scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=tree.yview)
+            h_scrollbar = ttk.Scrollbar(main_frame, orient=tk.HORIZONTAL, command=tree.xview)
+            tree.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
+            
+            # Pack treeview and scrollbars
+            tree.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
+            v_scrollbar.grid(row=0, column=1, sticky=tk.NS)
+            h_scrollbar.grid(row=1, column=0, sticky=tk.EW)
+            
+            # Populate with data using exact same formatting as row review
+            for idx, row in df.iterrows():
+                values = []
+                for col in final_columns:
+                    val = row.get(col, '')
+                    
+                    # Apply exact same formatting as row review
+                    if pd.notna(val) and val != '':
+                        if col in ['unit_price', 'total_price', 'wage']:
+                            # Currency formatting (same as row review)
+                            val = format_number(val, is_currency=True)
+                        elif col in ['quantity', 'manhours']:
+                            # Number formatting (same as row review)
+                            val = format_number(val, is_currency=False)
+                            # Special formatting for manhours - only 2 decimals (same as row review)
+                            if col == 'manhours' and val and val != '':
+                                try:
+                                    num_val = float(str(val).replace(',', '.'))
+                                    val = f"{num_val:.2f}"
+                                except:
+                                    pass
+                        else:
+                            val = str(val)
+                    else:
+                        val = ''
+                    
+                    values.append(val)
+                
+                tree.insert('', 'end', values=values)
+            
+            # Add subtle success indicator at the bottom
+            status_frame = ttk.Frame(main_frame)
+            status_frame.grid(row=2, column=0, sticky=tk.EW, pady=(5, 0))
+            
+            status_label = ttk.Label(status_frame, text="✓ Dataset updated with comparison results", 
+                                   foreground="green", font=("Arial", 9))
+            status_label.pack(side=tk.LEFT)
+            
+            logger.info("Simple UI refresh completed successfully")
+            
+        except Exception as e:
+            logger.error(f"Error in simple UI refresh: {e}")
+            # Fallback: just show a simple message
+            for widget in tab.winfo_children():
+                widget.destroy()
+            
+            message_frame = ttk.Frame(tab)
+            message_frame.grid(row=0, column=0, sticky=tk.NSEW)
+            message_frame.grid_rowconfigure(0, weight=1)
+            message_frame.grid_columnconfigure(0, weight=1)
+            
+            message_label = ttk.Label(message_frame, 
+                                    text="✓ Dataset updated successfully with comparison results\n\n"
+                                         "The master dataset has been updated with the comparison data.",
+                                    font=("Arial", 12), justify=tk.CENTER)
+            message_label.grid(row=0, column=0, padx=50, pady=50)
 
     def _show_comparison_results(self, processor, offer_info):
         """
@@ -3337,6 +3613,12 @@ Offer Information:
         try:
             logger.info(f"Mapping processing complete for file: {filepath}")
             
+            # Prevent setting file_mapping during comparison workflow
+            if getattr(self, 'is_comparison_workflow', False):
+                logger.info("Skipping file_mapping assignment during comparison workflow in mapping processing")
+                loading_widget.destroy()
+                return
+            
             # Store the file mapping and column mapper
             self.file_mapping = file_mapping
             self.column_mapper = file_mapping.column_mapper if hasattr(file_mapping, 'column_mapper') else None
@@ -3383,6 +3665,11 @@ Offer Information:
     def _show_row_review_with_mapping(self, tab, file_mapping):
         """Show row review directly when using saved mapping"""
         try:
+            # Prevent row review during comparison workflow
+            if getattr(self, 'is_comparison_workflow', False):
+                logger.info("Row review with mapping prevented during comparison workflow")
+                return
+            
             # Clear existing content
             for widget in tab.winfo_children():
                 widget.destroy()
@@ -5048,4 +5335,237 @@ Offer Information:
         self._pending_comparison_export = True
         self._pending_comparison_offer_info = offer_info
 
-    # Patch _on_confirm_row_review to handle pending comparison export
+    def _update_tab_with_comparison_data(self, tab, updated_df):
+        print("=== ENTERED _update_tab_with_comparison_data ===")
+        logger.info("Updating tab with comparison data")
+        logger.info(f"Tab children count: {len(tab.winfo_children())}")
+        
+        # Find the existing treeview in the tab
+        treeview = None
+        for widget in tab.winfo_children():
+            logger.info(f"Widget type: {type(widget)}")
+            if isinstance(widget, ttk.Frame):
+                logger.info(f"Frame children count: {len(widget.winfo_children())}")
+                for child in widget.winfo_children():
+                    logger.info(f"Child type: {type(child)}")
+                    if isinstance(child, ttk.Treeview):
+                        treeview = child
+                        logger.info("Found treeview!")
+                        break
+                if treeview:
+                    break
+        
+        if not treeview:
+            logger.warning("No treeview found in tab")
+            return
+        
+        # Clear existing data
+        for item in treeview.get_children():
+            treeview.delete(item)
+        
+        # Get the current columns from the treeview
+        current_columns = treeview['columns']
+        
+        # Filter out ignore columns from the updated dataframe
+        meaningful_columns = [col for col in updated_df.columns if not (col.startswith('ignore') or col == 'ignore')]
+        
+        # Normalize column names to handle case differences
+        # Map common variations to standard names
+        column_mapping = {
+            'description': 'Description',
+            'Description': 'Description',
+            'DESCRIPTION': 'Description',
+            'category': 'Category',
+            'Category': 'Category',
+            'CATEGORY': 'Category',
+            'code': 'code',
+            'unit': 'unit',
+            'quantity': 'quantity',
+            'unit_price': 'unit_price',
+            'total_price': 'total_price',
+            'manhours': 'manhours',
+            'wage': 'wage',
+            'source_sheet': 'Source_Sheet',
+            'Source_Sheet': 'Source_Sheet',
+            'SOURCE_SHEET': 'Source_Sheet'
+        }
+        
+        # Rename columns to standard names
+        for col in updated_df.columns:
+            if col.lower() in column_mapping:
+                new_name = column_mapping[col.lower()]
+                if col != new_name:
+                    updated_df = updated_df.rename(columns={col: new_name})
+        
+        # Update meaningful_columns after renaming
+        meaningful_columns = [col for col in updated_df.columns if not (col.startswith('ignore') or col == 'ignore')]
+        
+        # Define the exact column order from original master BOQ (same as main.py)
+        # Source_Sheet should be the first column
+        # Use consistent naming - match the actual DataFrame column names
+        display_column_order = ["Source_Sheet", "code", "Category", "Description", "scope", "unit", "quantity", "unit_price", "total_price", "manhours", "wage"]
+         
+        # Debug: Log column information
+        logger.info(f"Updated dataframe columns: {list(updated_df.columns)}")
+        logger.info(f"Meaningful columns: {meaningful_columns}")
+        logger.info(f"Display column order: {display_column_order}")
+        
+        # Check which display columns are actually in meaningful_columns
+        available_display_columns = [col for col in display_column_order if col in meaningful_columns]
+        logger.info(f"Available display columns: {available_display_columns}")
+        
+        # Ensure Source_Sheet column is present
+        if 'Source_Sheet' not in meaningful_columns:
+            # Add Source_Sheet column with default value
+            updated_df['Source_Sheet'] = 'Unknown'
+            meaningful_columns.append('Source_Sheet')
+            logger.info("Added Source_Sheet column with default value")
+        
+        # Add any offer-specific columns (those with [offer_name] pattern)
+        offer_columns = [col for col in meaningful_columns if '[' in col and ']' in col]
+        
+        # Create final column order: standard columns first, then offer-specific columns
+        final_columns = []
+        for col in display_column_order:
+            if col in meaningful_columns:
+                final_columns.append(col)
+        
+        # Add offer-specific columns at the end
+        for col in offer_columns:
+            if col not in final_columns:
+                final_columns.append(col)
+        
+        # Add any remaining meaningful columns
+        for col in meaningful_columns:
+            if col not in final_columns:
+                final_columns.append(col)
+        
+        logger.info(f"Final column order: {final_columns}")
+        
+        # Update treeview columns if needed
+        if list(treeview['columns']) != final_columns:
+            treeview['columns'] = final_columns
+            for col in final_columns:
+                treeview.heading(col, text=col)
+                # Set column widths based on content type (same as row review)
+                if col == "status":
+                    treeview.column(col, width=80, anchor=tk.CENTER)
+                else:
+                    treeview.column(col, width=120 if col != "#" else 40, anchor=tk.W, minwidth=50, stretch=False)
+        
+        # Populate with data using exact same formatting as row review
+        for idx, row in updated_df.iterrows():
+            values = []
+            for col in final_columns:
+                val = row.get(col, '')
+                
+                # Apply exact same formatting as row review
+                if pd.notna(val) and val != '':
+                    # Check if this is a comparison column (has [offer_name] pattern)
+                    is_comparison_col = '[' in col and ']' in col
+                    
+                    # Extract base column name for comparison columns
+                    base_col = col.split('[')[0] if is_comparison_col else col
+                    
+                    if base_col in ['unit_price', 'total_price', 'wage']:
+                        # Currency formatting (same as row review) - applies to both master and comparison
+                        val = format_number(val, is_currency=True)
+                    elif base_col in ['quantity', 'manhours']:
+                        # Number formatting (same as row review) - applies to both master and comparison
+                        val = format_number(val, is_currency=False)
+                        # Special formatting for manhours - only 2 decimals (same as row review)
+                        if base_col == 'manhours' and val and val != '':
+                            try:
+                                num_val = float(str(val).replace(',', '.'))
+                                val = f"{num_val:.2f}"
+                            except:
+                                pass
+                    else:
+                        val = str(val)
+                else:
+                    val = ''
+                
+                values.append(val)
+            
+            treeview.insert('', 'end', values=values)
+        
+        logger.info("Tab updated successfully with comparison data")
+        
+
+
+    def _update_main_dataset_with_comparison_results(self, processor, offer_info):
+        """
+        Update the main dataset in place with comparison results
+        
+        Args:
+            processor: ComparisonProcessor instance
+            offer_info: Offer information dictionary
+        """
+        try:
+            logger.info("=== STARTING _update_main_dataset_with_comparison_results ===")
+            
+            # Get the current tab (master dataset)
+            current_tab_id = self.notebook.select()
+            if not current_tab_id:
+                logger.warning("No current tab found for updating main dataset")
+                return
+            
+            logger.info(f"Current tab ID: {current_tab_id}")
+            
+            # Get the current file mapping from the tab_id_to_file_mapping dictionary
+            file_mapping = self.tab_id_to_file_mapping.get(current_tab_id)
+            
+            if not file_mapping:
+                logger.warning("No file mapping found for current tab")
+                return
+            
+            # Get the updated dataframe from the processor's master_dataset
+            updated_df = processor.master_dataset.copy()
+            
+            if updated_df is None or updated_df.empty:
+                logger.warning("No updated dataframe available from processor")
+                return
+            
+            logger.info(f"Updating master dataset with {len(updated_df)} rows and {len(updated_df.columns)} columns")
+            
+            # Update the file mapping's dataframe with the merged data
+            file_mapping.dataframe = updated_df.copy()
+            
+            # Reset comparison workflow flags to allow normal UI refresh
+            self.is_comparison_workflow = False
+            self.comparison_processor = None
+            
+            # Show success message
+            merge_count = len(processor.merge_results) if hasattr(processor, 'merge_results') else 0
+            add_count = len(processor.add_results) if hasattr(processor, 'add_results') else 0
+            status_msg = f"Comparison completed: {merge_count} merges, {add_count} adds"
+            self._update_status(status_msg)
+            logger.info(f"Status message: {status_msg}")
+            print("=== AFTER STATUS, BEFORE TRY ===")
+            
+            # Get the current tab widget
+            current_tab = self.notebook.nametowidget(current_tab_id)
+            
+            # Update the existing tab with comparison data, preserving formatting and column order
+            logger.info("Calling _update_tab_with_comparison_data...")
+            logger.info(f"DEBUG: current_tab type: {type(current_tab)}")
+            logger.info(f"DEBUG: updated_df shape: {updated_df.shape}")
+            logger.info(f"DEBUG: updated_df columns: {list(updated_df.columns)}")
+            logger.info(f"DEBUG: About to call _update_tab_with_comparison_data method")
+            logger.info(f"DEBUG: Method exists: {hasattr(self, '_update_tab_with_comparison_data')}")
+            print("=== BEFORE TRY BLOCK ===")
+            try:
+                self._update_tab_with_comparison_data(current_tab, updated_df)
+                logger.info("_update_tab_with_comparison_data completed successfully")
+            except Exception as e:
+                logger.error(f"Exception in _update_tab_with_comparison_data: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                raise
+            
+            logger.info("=== COMPLETED _update_main_dataset_with_comparison_results ===")
+            print("=== END OF _update_main_dataset_with_comparison_results ===")
+            
+        except Exception as e:
+            logger.error(f"Error updating main dataset with comparison results: {e}")
+            self._update_status(f"Error updating dataset: {str(e)}")

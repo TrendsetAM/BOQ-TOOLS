@@ -508,5 +508,6 @@ def show_comparison_row_review(parent, file_mapping, row_results, offer_name="Co
     Returns:
         tuple: (confirmed, updated_results)
     """
+    logger.info("show_comparison_row_review called")
     dialog = ComparisonRowReviewDialog(parent, file_mapping, row_results, offer_name)
     return dialog.show() 
