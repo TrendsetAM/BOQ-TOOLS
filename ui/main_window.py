@@ -360,6 +360,8 @@ class MainWindow:
             style.theme_use('clam')
         style.configure('TNotebook.Tab', padding=[10, 5])
         style.configure('Treeview', rowheight=28)
+        style.map('Treeview', 
+                 background=[('selected', '#B3E5FC')])  # Light blue background (same as column mapping)
 
     def _create_menu(self):
         menubar = tk.Menu(self.root)
@@ -1976,9 +1978,10 @@ class MainWindow:
             v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
             h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
             self.row_review_treeviews[sheet.sheet_name] = tree
-            # Remove blue selection highlight
+            # Set selection highlight to light blue (same as column mapping)
             style = ttk.Style(tree)
-            style.map('Treeview', background=[('selected', '#FFEBEE')])  # Always red on select
+            style.map('Treeview', 
+                     background=[('selected', '#B3E5FC')])  # Light blue background
             style.layout('Treeview.Item', [('Treeitem.padding', {'sticky': 'nswe', 'children': [('Treeitem.indicator', {'side': 'left', 'sticky': ''}), ('Treeitem.image', {'side': 'left', 'sticky': ''}), ('Treeitem.text', {'side': 'left', 'sticky': ''})]})])
             # Populate rows
             self.row_validity[sheet.sheet_name] = {}
@@ -3799,6 +3802,11 @@ Offer Information:
             columns = list(display_df.columns)
             tree = ttk.Treeview(main_frame, columns=columns, show='headings', height=15)
             
+            # Apply light blue selection style to the treeview (same as column mapping)
+            style = ttk.Style(tree)
+            style.map('Treeview', 
+                     background=[('selected', '#B3E5FC')])  # Light blue background
+            
             # Configure columns with appropriate widths
             column_widths = {
                 'Description': 400,  # Wider for descriptions
@@ -3889,6 +3897,11 @@ Offer Information:
             # Create treeview for summary
             summary_columns = ['Offer Name', 'Project Name', 'Project Size', 'Date', 'Total Price']
             summary_tree = ttk.Treeview(summary_frame, columns=summary_columns, show='headings', height=3)
+            
+            # Apply light blue selection style to the summary treeview (same as column mapping)
+            summary_style = ttk.Style(summary_tree)
+            summary_style.map('Treeview', 
+                             background=[('selected', '#B3E5FC')])  # Light blue background
             
             # Configure columns
             for col in summary_columns:
@@ -4626,7 +4639,7 @@ Offer Information:
             
             # Create category summary frame
             category_frame = ttk.LabelFrame(main_frame, text="Category Summary", padding="5")
-            category_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), padx=5, pady=5)
+            category_frame.grid(row=4, column=0, sticky=(tk.W, tk.E), padx=5, pady=5)
             category_frame.columnconfigure(0, weight=1)
             category_frame.rowconfigure(0, weight=1)
             
@@ -5476,6 +5489,11 @@ Offer Information:
         # Update treeview columns if needed
         if list(treeview['columns']) != final_columns:
             treeview['columns'] = final_columns
+            
+            # Apply light blue selection style to the treeview
+            style = ttk.Style(treeview)
+            style.map('Treeview', 
+                     background=[('selected', '#B3E5FC')])  # Light blue background
             
             # Configure columns with appropriate widths (same as master window)
             column_widths = {
