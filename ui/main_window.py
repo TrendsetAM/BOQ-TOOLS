@@ -3998,7 +3998,72 @@ Offer Information:
                 else:
                     logger.debug("No matching file data found for current tab")
             
-            summary_tree.insert('', 'end', values=(offer_name, project_name, project_size, date, formatted_total_cost))
+            # Clear existing summary data
+            for item in summary_tree.get_children():
+                summary_tree.delete(item)
+            
+            # Collect all offers and their total costs
+            offers_data = []
+            
+            # Add current offer
+            current_offer_data = {
+                'offer_name': offer_name,
+                'project_name': project_name,
+                'project_size': project_size,
+                'date': date,
+                'total_cost': total_cost,
+                'formatted_total_cost': formatted_total_cost
+            }
+            offers_data.append(current_offer_data)
+            
+            # Check if this is a comparison workflow and add comparison offers
+            if hasattr(self, 'is_comparison_workflow') and self.is_comparison_workflow:
+                # Look for comparison offers in the current dataframe
+                comparison_columns = [col for col in display_df.columns if '[' in col and ']' in col and 'total_price' in col]
+                
+                for col in comparison_columns:
+                    try:
+                        # Extract offer name from column name (e.g., "total_price[OfferName]" -> "OfferName")
+                        offer_name_from_col = col.split('[')[1].split(']')[0]
+                        
+                        # Calculate total cost for this offer
+                        offer_total_cost = 0.0
+                        if col in display_df.columns:
+                            numeric_prices = pd.to_numeric(display_df[col], errors='coerce')
+                            offer_total_cost = numeric_prices.sum()
+                        
+                        # Format total cost
+                        if offer_total_cost > 0:
+                            formatted_offer_cost = format_number(offer_total_cost, is_currency=False)
+                        else:
+                            formatted_offer_cost = "0,00"
+                        
+                        # Add comparison offer data
+                        comparison_offer_data = {
+                            'offer_name': offer_name_from_col,
+                            'project_name': f"Project {offer_name_from_col}",
+                            'project_size': "N/A",
+                            'date': date,
+                            'total_cost': offer_total_cost,
+                            'formatted_total_cost': formatted_offer_cost
+                        }
+                        offers_data.append(comparison_offer_data)
+                        
+                    except Exception as e:
+                        logger.warning(f"Error processing comparison offer column {col}: {e}")
+            
+            # Sort offers by total cost (lowest first)
+            offers_data.sort(key=lambda x: x['total_cost'])
+            
+            # Insert all offers into summary treeview
+            for offer_data in offers_data:
+                summary_tree.insert('', 'end', values=(
+                    offer_data['offer_name'],
+                    offer_data['project_name'],
+                    offer_data['project_size'],
+                    offer_data['date'],
+                    offer_data['formatted_total_cost']
+                ))
             
             # Configure grid weights for summary frame
             summary_frame.columnconfigure(0, weight=1)
@@ -4685,31 +4750,33 @@ Offer Information:
             category_vsb.grid(row=0, column=1, sticky=(tk.N, tk.S))
             category_hsb.grid(row=1, column=0, sticky=(tk.W, tk.E))
             
-            # Get offer name
-            offer_name = "Current Offer"
+            # Collect all offers and their category costs
+            offers_data = []
+            
+            # Get current offer name
+            current_offer_name = "Current Offer"
             
             # First try to get from current_offer_info (for Use Mapping workflow)
             if hasattr(self, 'current_offer_info') and self.current_offer_info:
                 offer_info = self.current_offer_info
-                offer_name = offer_info.get('offer_name', offer_name)
-                logger.debug(f"Found offer name from current_offer_info: {offer_name}")
+                current_offer_name = offer_info.get('offer_name', current_offer_name)
+                logger.debug(f"Found offer name from current_offer_info: {current_offer_name}")
             else:
                 # Fallback: search through controller's current_files
                 for file_key, file_data in self.controller.current_files.items():
                     if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
                         if hasattr(file_data['file_mapping'], 'offer_info') and file_data['file_mapping'].offer_info:
                             offer_info = file_data['file_mapping'].offer_info
-                            offer_name = offer_info.get('offer_name', offer_name)
-                            logger.debug(f"Found offer name from file_mapping: {offer_name}")
+                            current_offer_name = offer_info.get('offer_name', current_offer_name)
+                            logger.debug(f"Found offer name from file_mapping: {current_offer_name}")
                         elif 'offer_info' in file_data:
                             offer_info = file_data['offer_info']
-                            offer_name = offer_info.get('offer_name', offer_name)
-                            logger.debug(f"Found offer name from current_files: {offer_name}")
+                            current_offer_name = offer_info.get('offer_name', current_offer_name)
+                            logger.debug(f"Found offer name from current_files: {current_offer_name}")
                         break
             
-            # Calculate category costs
-            row_data = [offer_name]
-            
+            # Calculate category costs for current offer
+            current_offer_data = [current_offer_name]
             for category in category_order:
                 try:
                     category_data = dataframe[dataframe['Category'] == category]
@@ -4720,15 +4787,54 @@ Offer Information:
                             formatted_cost = format_number(category_cost, is_currency=False)
                         else:
                             formatted_cost = "0,00"
-                        row_data.append(formatted_cost)
+                        current_offer_data.append(formatted_cost)
                     else:
-                        row_data.append("0,00")
+                        current_offer_data.append("0,00")
                 except Exception as e:
                     logger.warning(f"Error calculating cost for category {category}: {e}")
-                    row_data.append("0,00")
+                    current_offer_data.append("0,00")
             
-            # Insert data
-            category_tree.insert('', 'end', values=row_data)
+            offers_data.append(current_offer_data)
+            
+            # Check if this is a comparison workflow and add comparison offers
+            if hasattr(self, 'is_comparison_workflow') and self.is_comparison_workflow:
+                # Look for comparison offers in the current dataframe
+                comparison_columns = [col for col in dataframe.columns if '[' in col and ']' in col and 'total_price' in col]
+                
+                for col in comparison_columns:
+                    try:
+                        # Extract offer name from column name (e.g., "total_price[OfferName]" -> "OfferName")
+                        offer_name_from_col = col.split('[')[1].split(']')[0]
+                        
+                        # Calculate category costs for this comparison offer
+                        comparison_offer_data = [offer_name_from_col]
+                        
+                        for category in category_order:
+                            try:
+                                category_data = dataframe[dataframe['Category'] == category]
+                                if len(category_data) > 0:
+                                    # Use the comparison column for this offer
+                                    category_prices = pd.to_numeric(category_data[col], errors='coerce')
+                                    category_cost = category_prices.sum()
+                                    if category_cost > 0:
+                                        formatted_cost = format_number(category_cost, is_currency=False)
+                                    else:
+                                        formatted_cost = "0,00"
+                                    comparison_offer_data.append(formatted_cost)
+                                else:
+                                    comparison_offer_data.append("0,00")
+                            except Exception as e:
+                                logger.warning(f"Error calculating cost for category {category} in comparison offer {offer_name_from_col}: {e}")
+                                comparison_offer_data.append("0,00")
+                        
+                        offers_data.append(comparison_offer_data)
+                        
+                    except Exception as e:
+                        logger.warning(f"Error processing comparison offer column {col}: {e}")
+            
+            # Insert all offers into category treeview
+            for offer_data in offers_data:
+                category_tree.insert('', 'end', values=offer_data)
             
             # Configure grid weights
             category_frame.columnconfigure(0, weight=1)
@@ -5564,6 +5670,158 @@ Offer Information:
             treeview.insert('', 'end', values=values)
         
         logger.info("Tab updated successfully with comparison data")
+        
+        # Refresh the summary to show all offers
+        self._refresh_summary_after_comparison(tab, updated_df)
+        
+    def _refresh_summary_after_comparison(self, tab, updated_df):
+        """Refresh the summary frame to show all offers after comparison data is loaded"""
+        try:
+            # Find the summary frame in the current tab
+            main_frame = None
+            for widget in tab.winfo_children():
+                if isinstance(widget, ttk.Frame):
+                    main_frame = widget
+                    break
+            
+            if not main_frame:
+                logger.error("Could not find main frame for summary refresh")
+                return
+            
+            # Find the summary frame
+            summary_frame = None
+            for widget in main_frame.winfo_children():
+                if isinstance(widget, ttk.LabelFrame) and widget.cget('text') == 'Summary':
+                    summary_frame = widget
+                    break
+            
+            if not summary_frame:
+                logger.error("Could not find summary frame")
+                return
+            
+            # Find the summary treeview
+            summary_tree = None
+            for widget in summary_frame.winfo_children():
+                if isinstance(widget, ttk.Treeview):
+                    summary_tree = widget
+                    break
+            
+            if not summary_tree:
+                logger.error("Could not find summary treeview")
+                return
+            
+            # Clear existing summary data
+            for item in summary_tree.get_children():
+                summary_tree.delete(item)
+            
+            # Collect all offers and their total costs
+            offers_data = []
+            
+            # Get current offer info
+            current_tab_path = self.notebook.select()
+            offer_name = "Current Offer"
+            project_name = "Current Project"
+            project_size = "N/A"
+            date = datetime.now().strftime('%Y-%m-%d')
+            
+            # Try to get actual offer info
+            if hasattr(self, 'current_file_mapping') and self.current_file_mapping and hasattr(self.current_file_mapping, 'offer_info'):
+                offer_info = self.current_file_mapping.offer_info
+                offer_name = offer_info.get('offer_name', offer_name)
+                project_name = offer_info.get('project_name', project_name)
+                project_size = offer_info.get('project_size', project_size)
+                date = offer_info.get('date', date)
+            elif hasattr(self, 'file_mapping') and self.file_mapping and hasattr(self.file_mapping, 'offer_info'):
+                offer_info = self.file_mapping.offer_info
+                offer_name = offer_info.get('offer_name', offer_name)
+                project_name = offer_info.get('project_name', project_name)
+                project_size = offer_info.get('project_size', project_size)
+                date = offer_info.get('date', date)
+            elif hasattr(self, 'current_offer_info') and self.current_offer_info:
+                offer_info = self.current_offer_info
+                offer_name = offer_info.get('offer_name', offer_name)
+                project_name = offer_info.get('project_name', project_name)
+                project_size = offer_info.get('project_size', project_size)
+                date = offer_info.get('date', date)
+            
+            # Calculate total cost for current offer
+            total_cost = 0.0
+            if 'total_price' in updated_df.columns:
+                try:
+                    numeric_prices = pd.to_numeric(updated_df['total_price'], errors='coerce')
+                    total_cost = numeric_prices.sum()
+                except Exception as e:
+                    logger.warning(f"Error calculating total cost: {e}")
+                    total_cost = 0.0
+            
+            # Format total cost
+            if total_cost > 0:
+                formatted_total_cost = format_number(total_cost, is_currency=False)
+            else:
+                formatted_total_cost = "0,00"
+            
+            # Add current offer
+            current_offer_data = {
+                'offer_name': offer_name,
+                'project_name': project_name,
+                'project_size': project_size,
+                'date': date,
+                'total_cost': total_cost,
+                'formatted_total_cost': formatted_total_cost
+            }
+            offers_data.append(current_offer_data)
+            
+            # Add comparison offers
+            comparison_columns = [col for col in updated_df.columns if '[' in col and ']' in col and 'total_price' in col]
+            
+            for col in comparison_columns:
+                try:
+                    # Extract offer name from column name
+                    offer_name_from_col = col.split('[')[1].split(']')[0]
+                    
+                    # Calculate total cost for this offer
+                    offer_total_cost = 0.0
+                    if col in updated_df.columns:
+                        numeric_prices = pd.to_numeric(updated_df[col], errors='coerce')
+                        offer_total_cost = numeric_prices.sum()
+                    
+                    # Format total cost
+                    if offer_total_cost > 0:
+                        formatted_offer_cost = format_number(offer_total_cost, is_currency=False)
+                    else:
+                        formatted_offer_cost = "0,00"
+                    
+                    # Add comparison offer data
+                    comparison_offer_data = {
+                        'offer_name': offer_name_from_col,
+                        'project_name': f"Project {offer_name_from_col}",
+                        'project_size': "N/A",
+                        'date': date,
+                        'total_cost': offer_total_cost,
+                        'formatted_total_cost': formatted_offer_cost
+                    }
+                    offers_data.append(comparison_offer_data)
+                    
+                except Exception as e:
+                    logger.warning(f"Error processing comparison offer column {col}: {e}")
+            
+            # Sort offers by total cost (lowest first)
+            offers_data.sort(key=lambda x: x['total_cost'])
+            
+            # Insert all offers into summary treeview
+            for offer_data in offers_data:
+                summary_tree.insert('', 'end', values=(
+                    offer_data['offer_name'],
+                    offer_data['project_name'],
+                    offer_data['project_size'],
+                    offer_data['date'],
+                    offer_data['formatted_total_cost']
+                ))
+            
+            logger.info(f"Summary refreshed with {len(offers_data)} offers")
+            
+        except Exception as e:
+            logger.error(f"Error refreshing summary after comparison: {e}")
         
     def _get_pretty_column_name(self, column_name):
         """
