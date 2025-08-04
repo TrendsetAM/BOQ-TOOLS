@@ -99,7 +99,6 @@ class ComparisonEngine:
                         try:
                             numeric_value = self._convert_to_numeric(cell_value) if cell_value else 0
                             updated_values[offer_columns['quantity']] = numeric_value
-                            logger.debug(f"MERGE: quantity '{cell_value}' -> {numeric_value}")
                         except Exception as e:
                             errors.append(f"Error converting quantity '{cell_value}': {e}")
                             updated_values[offer_columns['quantity']] = 0
@@ -108,7 +107,6 @@ class ComparisonEngine:
                         try:
                             numeric_value = self._convert_to_numeric(cell_value) if cell_value else 0
                             updated_values[offer_columns['unit_price']] = numeric_value
-                            logger.debug(f"MERGE: unit_price '{cell_value}' -> {numeric_value}")
                         except Exception as e:
                             errors.append(f"Error converting unit price '{cell_value}': {e}")
                             updated_values[offer_columns['unit_price']] = 0
@@ -117,7 +115,6 @@ class ComparisonEngine:
                         try:
                             numeric_value = self._convert_to_numeric(cell_value) if cell_value else 0
                             updated_values[offer_columns['total_price']] = numeric_value
-                            logger.debug(f"MERGE: total_price '{cell_value}' -> {numeric_value}")
                         except Exception as e:
                             errors.append(f"Error converting total price '{cell_value}': {e}")
                             updated_values[offer_columns['total_price']] = 0
@@ -127,7 +124,6 @@ class ComparisonEngine:
                             numeric_value = self._convert_to_numeric(cell_value) if cell_value else 0.0
                             # CRITICAL FIX: Always store manhours as float to preserve decimal formatting
                             updated_values[offer_columns['manhours']] = float(numeric_value) if numeric_value != 0 else 0.0
-                            logger.debug(f"MERGE: manhours '{cell_value}' -> {numeric_value} (stored as float)")
                         except Exception as e:
                             errors.append(f"Error converting manhours '{cell_value}': {e}")
                             updated_values[offer_columns['manhours']] = 0.0
@@ -136,7 +132,6 @@ class ComparisonEngine:
                         try:
                             numeric_value = self._convert_to_numeric(cell_value) if cell_value else 0
                             updated_values[offer_columns['wage']] = numeric_value
-                            logger.debug(f"MERGE: wage '{cell_value}' -> {numeric_value}")
                         except Exception as e:
                             errors.append(f"Error converting wage '{cell_value}': {e}")
                             updated_values[offer_columns['wage']] = 0
@@ -145,7 +140,6 @@ class ComparisonEngine:
             # Update the DataFrame with the new values
             for col_name, value in updated_values.items():
                 dataset_dataframe.at[row_index, col_name] = value
-                logger.debug(f"MERGE: Set {col_name} = {value} at row {row_index}")
             
             rows_updated = 1 if updated_values else 0
             logger.info(f"MERGE: Updated row {row_index} with {len(updated_values)} offer-specific values")
@@ -163,21 +157,34 @@ class ComparisonEngine:
             return MergeResult(False, 0, [error_msg], [])
     
     def ADD(self, comparison_row_data: List[str], dataset_dataframe: pd.DataFrame,
-            column_mapping: Dict[int, Any], position: int) -> Dict[str, Any]:
+            column_mapping: Dict[int, Any], position: int, offer_name: str = None, source_sheet: str = None) -> Dict[str, Any]:
         """
         ADD Function: Appends the current Comparison BoQ row to the Dataset, providing all necessary values for all columns in the Dataset
         
-        Only Categories should be skipped as the row has not yet been categorized.
+        Populates both master columns (Description, Code, Unit, Scope, Source_Sheet) and offer-specific columns (Quantity[offer], Unit Price[offer], etc.)
         
         Args:
             comparison_row_data: Row data from Comparison BoQ
             dataset_dataframe: Pandas DataFrame representing the Dataset
             column_mapping: Dictionary mapping column index to ColumnType
             position: Position number for the new row
+            offer_name: Name of the offer for creating offer-specific columns
+            source_sheet: Name of the source sheet from comparison BoQ Excel file
             
         Returns:
             Dictionary with operation details including success status and any errors
         """
+        try:
+            logger.error("=== ENTERING ADD FUNCTION ===")
+            logger.error(f"comparison_row_data: {comparison_row_data}")
+            logger.error(f"column_mapping: {column_mapping}")
+            logger.error(f"position: {position}")
+            logger.error(f"offer_name: {offer_name}")
+            logger.error(f"source_sheet: {source_sheet}")
+        except Exception as debug_error:
+            # If even logging fails, return an error
+            return {"success": False, "errors": [f"Debug logging failed: {debug_error}"], "row_added": False}
+        
         try:
             from utils.config import ColumnType
             errors = []
@@ -192,56 +199,126 @@ class ComparisonEngine:
                 errors.append("Dataset DataFrame is None")
                 return {"success": False, "errors": errors, "row_added": False}
             
-            # Map comparison row data to dataset columns
+            # Initialize new_row_data with default values for all columns in dataset_dataframe
+            for col in dataset_dataframe.columns:
+                # Check if it's a numeric master column (not an offer-specific column)
+                if (col in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage'] and '[' not in col):
+                    new_row_data[col] = 0  # Default to 0 for numeric master columns
+                elif col == "Position":
+                    new_row_data[col] = position # Set position directly
+                elif col == "Source_Sheet" and source_sheet:
+                    new_row_data[col] = source_sheet  # Set source sheet name
+                else:
+                    new_row_data[col] = ""  # Default to empty string for other columns
+            
+            # DEBUG: Log the inputs to understand what's happening
+            logger.warning(f"ADD DEBUG: comparison_row_data = {comparison_row_data}")
+            logger.warning(f"ADD DEBUG: column_mapping = {column_mapping}")
+            logger.warning(f"ADD DEBUG: dataset_dataframe.columns = {list(dataset_dataframe.columns)}")
+            
+            # Define offer-specific columns if offer_name is provided
+            offer_columns = {}
+            if offer_name:
+                offer_columns = {
+                    'quantity': f'quantity[{offer_name}]',
+                    'unit_price': f'unit_price[{offer_name}]',
+                    'total_price': f'total_price[{offer_name}]',
+                    'manhours': f'manhours[{offer_name}]',
+                    'wage': f'wage[{offer_name}]'
+                }
+                logger.warning(f"ADD DEBUG: offer_columns = {offer_columns}")
+            
+            # Map ColumnType strings to actual DataFrame column names
+            column_type_to_df_column = {
+                "DESCRIPTION": "Description",
+                "CODE": "code",
+                "UNIT": "unit",
+                "QUANTITY": "quantity",
+                "UNIT_PRICE": "unit_price",
+                "TOTAL_PRICE": "total_price",
+                "MANHOURS": "manhours",
+                "WAGE": "wage",
+                "CATEGORY": "Category",
+                "SCOPE": "scope"
+            }
+            
+            # Process each column in the comparison data
             for col_idx, col_type in column_mapping.items():
                 if col_idx < len(comparison_row_data):
                     cell_value = str(comparison_row_data[col_idx]).strip() if comparison_row_data[col_idx] is not None else ""
                     
-                    # Skip category assignment (to be handled by RECATEGORIZATION)
-                    if col_type == "CATEGORY":  # Use string instead of ColumnType
-                        new_row_data[col_type] = ""  # Empty category
+                    # Skip unmapped columns (those without a proper column type)
+                    if not col_type or col_type not in column_type_to_df_column:
+                        logger.warning(f"ADD DEBUG: Skipped col_idx={col_idx}, col_type='{col_type}', cell_value='{cell_value}' (unmapped column)")
                         continue
                     
-                    # Handle different column types
+                    # Get the actual DataFrame column name
+                    df_column_name = column_type_to_df_column.get(col_type, col_type)
+                    
+                    logger.warning(f"ADD DEBUG: col_idx={col_idx}, col_type='{col_type}', cell_value='{cell_value}', df_column_name='{df_column_name}'")
+                    
+                    # Skip category assignment (to be handled by RECATEGORIZATION)
+                    if col_type == "CATEGORY":
+                        if df_column_name in new_row_data:
+                            new_row_data[df_column_name] = ""  # Empty category
+                            logger.warning(f"ADD DEBUG: Set {df_column_name} = '' (category)")
+                        continue
+                    
+                    # Handle numeric columns - put values in OFFER-SPECIFIC columns, keep master columns as 0
                     if col_type in ["QUANTITY", "UNIT_PRICE", "TOTAL_PRICE", "MANHOURS", "WAGE"]:
                         try:
-                            numeric_value = self._convert_to_numeric(cell_value)
-                            new_row_data[col_type] = numeric_value if numeric_value is not None else 0
+                            numeric_value = self._convert_to_numeric(cell_value) if cell_value else 0
+                            
+                            # Put numeric values in offer-specific columns if available
+                            if offer_name and col_type.lower() in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']:
+                                offer_col_name = offer_columns.get(col_type.lower())
+                                if offer_col_name and offer_col_name in new_row_data:
+                                    new_row_data[offer_col_name] = numeric_value
+                                    logger.warning(f"ADD DEBUG: Set {offer_col_name} = {numeric_value} (offer-specific)")
+                            
+                            # Keep master numeric columns as 0 (they were initialized above)
+                            logger.warning(f"ADD DEBUG: Master {df_column_name} remains 0 (numeric master)")
+                            
                         except Exception as e:
                             errors.append(f"Error converting {col_type} '{cell_value}': {e}")
-                            new_row_data[col_type] = 0
+                            logger.warning(f"ADD DEBUG: Error converting {col_type}: {e}")
                     
-                    elif col_type in ["DESCRIPTION", "CODE", "UNIT"]:
-                        # Text fields - use as is
-                        new_row_data[col_type] = cell_value
+                    # Handle text columns - put values in master columns
+                    elif col_type in ["DESCRIPTION", "CODE", "UNIT", "SCOPE"]:
+                        if df_column_name in new_row_data and cell_value:  # Only set if not empty
+                            # Special handling for DESCRIPTION - use the longest/most descriptive text
+                            if col_type == "DESCRIPTION":
+                                # Prioritize longer, more descriptive text over short category-like text
+                                current_desc = new_row_data[df_column_name] or ""
+                                if (not current_desc or
+                                    len(cell_value) > len(current_desc) or
+                                    (len(cell_value) > 10 and len(current_desc) <= 10)):  # Prefer longer descriptions
+                                    new_row_data[df_column_name] = cell_value
+                                    logger.warning(f"ADD DEBUG: Set {df_column_name} = '{cell_value}' (better description)")
+                                else:
+                                    logger.warning(f"ADD DEBUG: Skipped {df_column_name} = '{cell_value}' (keeping current: '{current_desc}')")
+                            # Special handling for SCOPE - ignore "nan" values
+                            elif col_type == "SCOPE":
+                                if cell_value.lower() != "nan":
+                                    new_row_data[df_column_name] = cell_value
+                                    logger.warning(f"ADD DEBUG: Set {df_column_name} = '{cell_value}' (scope)")
+                                else:
+                                    logger.warning(f"ADD DEBUG: Skipped {df_column_name} = '{cell_value}' (nan value)")
+                            # Handle other text columns normally
+                            else:
+                                new_row_data[df_column_name] = cell_value
+                                logger.warning(f"ADD DEBUG: Set {df_column_name} = '{cell_value}' (text)")
                     
                     else:
-                        # Unknown column type - use as is
-                        new_row_data[col_type] = cell_value
+                        # Unknown column type - skip it to avoid polluting master columns
+                        logger.warning(f"ADD DEBUG: Skipped col_idx={col_idx}, col_type='{col_type}', cell_value='{cell_value}' (unknown column type)")
             
-            # Add position to the new row data
-            new_row_data["Position"] = position
+            logger.warning(f"ADD DEBUG: Final new_row_data = {new_row_data}")
             
             # Create a new row as a dictionary
             if new_row_data:
-                # Map the data to the actual DataFrame columns
-                row_data_for_df = {}
-                for col in dataset_dataframe.columns:
-                    if col in new_row_data:
-                        row_data_for_df[col] = new_row_data[col]
-                    else:
-                        # CRITICAL FIX 2: Set master numeric columns to 0, not empty strings
-                        # Check if this is a numeric master column (not an offer-specific column)
-                        if (col in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage'] and
-                            '[' not in col):  # Master columns don't have [offer_name] suffix
-                            row_data_for_df[col] = 0  # Use 0 for numeric master columns
-                        else:
-                            row_data_for_df[col] = ""  # Use empty string for text columns
-                
                 # Append to DataFrame in place
-                dataset_dataframe.loc[len(dataset_dataframe)] = row_data_for_df
-                
-                # logger.info(f"Added new row with position {position} to dataset")
+                dataset_dataframe.loc[len(dataset_dataframe)] = new_row_data
                 
                 return {
                     "success": len(errors) == 0,
@@ -696,19 +773,41 @@ class ComparisonProcessor:
                             # Default to DESCRIPTION for unknown columns
                             column_mapping[i] = "DESCRIPTION"
                     
-                    # Create comp_row_values based on the master dataset columns
+                    # Create comp_row_values based on the comparison data columns
                     comp_row_values = []
-                    for col in self.master_dataset.columns:
+                    for col in self.comparison_data.columns:
                         if col in comp_row.index:
                             comp_row_values.append(str(comp_row[col]) if comp_row[col] is not None else '')
                         else:
                             comp_row_values.append('')  # Fill missing columns with empty string
                     
+                    # Map DataFrame column names to expected string values for the comparison row
+                    column_mapping_for_engine = {}
+                    for i, col_name in enumerate(self.comparison_data.columns):
+                        if col_name.lower() in ['description', 'desc', 'item']:
+                            column_mapping_for_engine[i] = "DESCRIPTION"
+                        elif col_name.lower() in ['quantity', 'qty', 'qty.']:
+                            column_mapping_for_engine[i] = "QUANTITY"
+                        elif col_name.lower() in ['unit_price', 'unit price', 'price', 'rate']:
+                            column_mapping_for_engine[i] = "UNIT_PRICE"
+                        elif col_name.lower() in ['total_price', 'total price', 'amount', 'total']:
+                            column_mapping_for_engine[i] = "TOTAL_PRICE"
+                        elif col_name.lower() in ['code', 'item code', 'ref']:
+                            column_mapping_for_engine[i] = "CODE"
+                        elif col_name.lower() in ['unit', 'uom']:
+                            column_mapping_for_engine[i] = "UNIT"
+                        elif col_name.lower() in ['manhours', 'ore/u.m.', 'ore', 'man hours']:
+                            column_mapping_for_engine[i] = "MANHOURS"
+                        elif col_name.lower() in ['wage', 'euro/hour', 'hourly rate']:
+                            column_mapping_for_engine[i] = "WAGE"
+                        else:
+                            column_mapping_for_engine[i] = "DESCRIPTION" # Default for unknown columns
+                    
                     merge_result = comparison_engine.MERGE(
                         comp_row_values,
                         self.master_dataset,
                         offer_name=offer_name or "ComparisonOffer",
-                        column_mapping=column_mapping,
+                        column_mapping=column_mapping_for_engine, # Use the new mapping
                         row_index=master_idx
                     )
                     merge_results.append({
@@ -749,20 +848,62 @@ class ComparisonProcessor:
                             # Default to DESCRIPTION for unknown columns
                             column_mapping[i] = "DESCRIPTION"
                     
-                    # Create comp_row_values based on the master dataset columns
+                    # Create comp_row_values based on the comparison data columns
                     comp_row_values = []
-                    for col in self.master_dataset.columns:
+                    for col in self.comparison_data.columns:
                         if col in comp_row.index:
                             comp_row_values.append(str(comp_row[col]) if comp_row[col] is not None else '')
                         else:
                             comp_row_values.append('')  # Fill missing columns with empty string
                     
-                    add_result = comparison_engine.ADD(
-                        comp_row_values,
-                        self.master_dataset,
-                        column_mapping=column_mapping,
-                        position=comp_row.get('Position', len(self.master_dataset) + 1)
-                    )
+                    # Use the SAME mapping logic as MERGE operations (lines 744-763)
+                    column_mapping_for_engine = {}
+                    for i, col_name in enumerate(self.comparison_data.columns):
+                        if col_name.lower() in ['description', 'desc', 'item']:
+                            column_mapping_for_engine[i] = "DESCRIPTION"
+                        elif col_name.lower() in ['quantity', 'qty', 'qty.']:
+                            column_mapping_for_engine[i] = "QUANTITY"
+                        elif col_name.lower() in ['unit_price', 'unit price', 'price', 'rate']:
+                            column_mapping_for_engine[i] = "UNIT_PRICE"
+                        elif col_name.lower() in ['total_price', 'total price', 'amount', 'total']:
+                            column_mapping_for_engine[i] = "TOTAL_PRICE"
+                        elif col_name.lower() in ['code', 'item code', 'ref']:
+                            column_mapping_for_engine[i] = "CODE"
+                        elif col_name.lower() in ['unit', 'uom']:
+                            column_mapping_for_engine[i] = "UNIT"
+                        elif col_name.lower() in ['manhours', 'ore/u.m.', 'ore', 'man hours']:
+                            column_mapping_for_engine[i] = "MANHOURS"
+                        elif col_name.lower() in ['wage', 'euro/hour', 'hourly rate']:
+                            column_mapping_for_engine[i] = "WAGE"
+                        elif col_name.lower() in ['scope']:
+                            column_mapping_for_engine[i] = "SCOPE"
+                        # Don't map unknown columns to DESCRIPTION - leave them unmapped
+                    
+                    logger.warning(f"PROCESS_VALID_ROWS DEBUG: About to call ADD function")
+                    logger.warning(f"PROCESS_VALID_ROWS DEBUG: comp_row_values = {comp_row_values}")
+                    logger.warning(f"PROCESS_VALID_ROWS DEBUG: column_mapping_for_engine = {column_mapping_for_engine}")
+                    logger.error(f"PROCESS_VALID_ROWS DEBUG: comparison_engine type = {type(comparison_engine)}")
+                    logger.error(f"PROCESS_VALID_ROWS DEBUG: comparison_engine.ADD method = {comparison_engine.ADD}")
+                    
+                    try:
+                        logger.error("=== ABOUT TO CALL ADD FUNCTION ===")
+                        add_result = comparison_engine.ADD(
+                            comp_row_values,
+                            self.master_dataset,
+                            column_mapping=column_mapping_for_engine, # Use the new mapping
+                            position=comp_row.get('Position', len(self.master_dataset) + 1),
+                            offer_name=offer_name,
+                            source_sheet=comp_row.get('Source_Sheet', 'Comparison')  # Get source sheet from comparison data
+                        )
+                        logger.error("=== ADD FUNCTION RETURNED ===")
+                    except Exception as e:
+                        logger.error(f"=== EXCEPTION IN ADD FUNCTION CALL: {e} ===")
+                        logger.error(f"=== EXCEPTION TYPE: {type(e)} ===")
+                        import traceback
+                        logger.error(f"=== TRACEBACK: {traceback.format_exc()} ===")
+                        raise
+                    
+                    logger.warning(f"PROCESS_VALID_ROWS DEBUG: ADD result = {add_result}")
                     add_results.append({
                         'type': 'ADD',
                         'comp_row_index': comp_idx,
