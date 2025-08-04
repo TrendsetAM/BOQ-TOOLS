@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 
 from utils.config import get_config, ColumnType
+from core.validator import ValidationIssue, ValidationLevel, ValidationType # New import
 
 logger = logging.getLogger(__name__)
 
@@ -198,7 +199,7 @@ class RowClassification:
     confidence: float
     reasoning: List[str]
     completeness_score: float
-    validation_errors: List[str]
+    validation_errors: List[ValidationIssue] # Changed from List[str] to List[ValidationIssue]
     hierarchical_level: Optional[int]
     section_title: Optional[str]
     position: Optional[str] = None  # Format: [sheet_name]_[excel_row_number]
@@ -468,8 +469,8 @@ class RowClassifier:
         
         return False
     
-    def validate_line_item(self, row_data: List[str], 
-                          column_mapping: Dict[int, ColumnType]) -> List[str]:
+    def validate_line_item(self, row_data: List[str],
+                           column_mapping: Dict[int, ColumnType]) -> List[ValidationIssue]:
         """
         Validate a line item row using simple rule: description, unit price, total price
         
@@ -478,49 +479,123 @@ class RowClassifier:
             column_mapping: Dictionary mapping column index to ColumnType
             
         Returns:
-            List of validation errors
+            List of ValidationIssue objects
         """
-        errors = []
+        issues = []
+        
+        # Convert 0-based row_index to 1-based Excel row number for messages
+        # This function is called for a single row, so row_index is 0 relative to the passed row_data
+        # We don't have the actual Excel row number here, so we'll use a placeholder or rely on caller to provide context
+        current_excel_row_number = -1 # Placeholder, will be filled by caller if needed
         
         if not row_data or not column_mapping:
-            errors.append("No data or column mapping provided")
-            return errors
+            issues.append(ValidationIssue(
+                row_index=current_excel_row_number,
+                column_index=None,
+                validation_type=ValidationType.BUSINESS_RULE,
+                level=ValidationLevel.ERROR,
+                message="No data or column mapping provided for row validation",
+                expected_value="Valid data",
+                actual_value="Missing data",
+                suggestion="Ensure row data and column mappings are correctly passed"
+            ))
+            return issues
         
         # Simple validation rule: check for description, unit price, and total price
         has_description = False
         has_unit_price = False
         has_total_price = False
         
-        # Check each column
-        for col_idx, col_type in column_mapping.items():
-            if col_idx < len(row_data):
-                cell_value = row_data[col_idx].strip() if row_data[col_idx] else ""
-                
-                if col_type == ColumnType.DESCRIPTION:
-                    if cell_value:
-                        has_description = True
-                    else:
-                        errors.append("Missing description")
-                elif col_type == ColumnType.UNIT_PRICE:
-                    if self._is_positive_numeric(cell_value):
-                        has_unit_price = True
-                    else:
-                        errors.append(f"Invalid unit price: '{cell_value}' (must be positive number)")
-                elif col_type == ColumnType.TOTAL_PRICE:
-                    if self._is_positive_numeric(cell_value):
-                        has_total_price = True
-                    else:
-                        errors.append(f"Invalid total price: '{cell_value}' (must be positive number)")
+        # Find column indices for required types
+        desc_col_idx = next((idx for idx, ctype in column_mapping.items() if ctype == ColumnType.DESCRIPTION), None)
+        unit_price_col_idx = next((idx for idx, ctype in column_mapping.items() if ctype == ColumnType.UNIT_PRICE), None)
+        total_price_col_idx = next((idx for idx, ctype in column_mapping.items() if ctype == ColumnType.TOTAL_PRICE), None)
         
-        # Check if all required fields are present
-        if not has_description:
-            errors.append("Missing description")
-        if not has_unit_price:
-            errors.append("Missing or invalid unit price")
-        if not has_total_price:
-            errors.append("Missing or invalid total price")
+        # Check description
+        if desc_col_idx is not None and desc_col_idx < len(row_data):
+            cell_value = row_data[desc_col_idx].strip()
+            if cell_value:
+                has_description = True
+            else:
+                issues.append(ValidationIssue(
+                    row_index=current_excel_row_number,
+                    column_index=desc_col_idx,
+                    validation_type=ValidationType.BUSINESS_RULE,
+                    level=ValidationLevel.ERROR,
+                    message="Missing description",
+                    expected_value="Non-empty string",
+                    actual_value=cell_value,
+                    suggestion="Enter a description for the item"
+                ))
+        else:
+            issues.append(ValidationIssue(
+                row_index=current_excel_row_number,
+                column_index=None,
+                validation_type=ValidationType.BUSINESS_RULE,
+                level=ValidationLevel.ERROR,
+                message="Description column not found or out of bounds",
+                expected_value="Mapped description column",
+                actual_value="Not found",
+                suggestion="Ensure 'Description' column is mapped and present in data"
+            ))
         
-        return errors
+        # Check unit price
+        if unit_price_col_idx is not None and unit_price_col_idx < len(row_data):
+            cell_value = row_data[unit_price_col_idx].strip()
+            if self._is_positive_numeric(cell_value):
+                has_unit_price = True
+            else:
+                issues.append(ValidationIssue(
+                    row_index=current_excel_row_number,
+                    column_index=unit_price_col_idx,
+                    validation_type=ValidationType.DATA_TYPE, # Changed to DATA_TYPE
+                    level=ValidationLevel.ERROR,
+                    message=f"Invalid unit price: '{cell_value}' (must be positive number)",
+                    expected_value="Positive numeric value",
+                    actual_value=cell_value,
+                    suggestion="Enter a valid positive number for unit price"
+                ))
+        else:
+            issues.append(ValidationIssue(
+                row_index=current_excel_row_number,
+                column_index=None,
+                validation_type=ValidationType.BUSINESS_RULE,
+                level=ValidationLevel.ERROR,
+                message="Unit Price column not found or out of bounds",
+                expected_value="Mapped unit price column",
+                actual_value="Not found",
+                suggestion="Ensure 'Unit Price' column is mapped and present in data"
+            ))
+        
+        # Check total price
+        if total_price_col_idx is not None and total_price_col_idx < len(row_data):
+            cell_value = row_data[total_price_col_idx].strip()
+            if self._is_positive_numeric(cell_value):
+                has_total_price = True
+            else:
+                issues.append(ValidationIssue(
+                    row_index=current_excel_row_number,
+                    column_index=total_price_col_idx,
+                    validation_type=ValidationType.DATA_TYPE, # Changed to DATA_TYPE
+                    level=ValidationLevel.ERROR,
+                    message=f"Invalid total price: '{cell_value}' (must be positive number)",
+                    expected_value="Positive numeric value",
+                    actual_value=cell_value,
+                    suggestion="Enter a valid positive number for total price"
+                ))
+        else:
+            issues.append(ValidationIssue(
+                row_index=current_excel_row_number,
+                column_index=None,
+                validation_type=ValidationType.BUSINESS_RULE,
+                level=ValidationLevel.ERROR,
+                message="Total Price column not found or out of bounds",
+                expected_value="Mapped total price column",
+                actual_value="Not found",
+                suggestion="Ensure 'Total Price' column is mapped and present in data"
+            ))
+        
+        return issues
 
     def ROW_VALIDITY(self, row_data: List[str], column_mapping: Dict[int, ColumnType]) -> bool:
         """
