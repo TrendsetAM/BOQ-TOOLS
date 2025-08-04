@@ -268,40 +268,7 @@ def tooltip(widget, text):
     widget.bind('<Leave>', on_leave)
 
 
-def format_number(value, is_currency=False):
-    """Format number with thousands separator and decimal formatting"""
-    if not value or value == "":
-        return ""
-    
-    try:
-        # Convert to float
-        num = float(str(value).replace(',', '').replace(' ', ''))
-        
-        if is_currency:
-            # Format as currency with 2 decimal places
-            return f"{num:,.2f}".replace(',', ' ').replace('.', ',')
-        else:
-            # Format as number with 2 decimal places if needed
-            if num == int(num):
-                return f"{int(num):,}".replace(',', ' ')
-            else:
-                return f"{num:,.2f}".replace(',', ' ').replace('.', ',')
-    except (ValueError, TypeError):
-        return str(value)
-
-def format_number_eu(val):
-    """Format a number with point as thousands separator and comma as decimal separator (e.g., 1.234.567,89)"""
-    try:
-        if val is None or val == '' or (isinstance(val, float) and (val != val)):
-            return ''
-        num = float(str(val).replace(' ', '').replace('\u202f', '').replace(',', '.'))
-        # Format with US locale, then replace separators
-        s = f"{num:,.2f}"
-        # s is like '1,234,567.89' -> want '1.234.567,89'
-        s = s.replace(',', 'X').replace('.', ',').replace('X', '.')
-        return s
-    except Exception:
-        return str(val)
+from utils.format_utils import format_number_eu
 
 class MainWindow:
     def __init__(self, controller, root=None):
@@ -2002,16 +1969,9 @@ class MainWindow:
                         
                         # Apply number formatting for specific columns
                         if col in ['unit_price', 'total_price', 'wage']:
-                            val = format_number(val, is_currency=True)
+                            val = format_number_eu(val)
                         elif col in ['quantity', 'manhours']:
-                            val = format_number(val, is_currency=False)
-                            # Special formatting for manhours - only 2 decimals
-                            if col == 'manhours' and val and val != '':
-                                try:
-                                    num_val = float(str(val).replace(',', '.'))
-                                    val = f"{num_val:.2f}"
-                                except:
-                                    pass
+                            val = format_number_eu(val)
                         
                         row_values.append(val)
                     # New: Use new row validity logic based on master vs comparison mode
@@ -2662,7 +2622,7 @@ class MainWindow:
 
     def _process_comparison_file(self, filepath, offer_info):
         """
-        Process comparison file using existing file processing logic
+        Process comparison file using the SAME logic as master file processing
         
         Args:
             filepath: Path to comparison file
@@ -2672,60 +2632,40 @@ class MainWindow:
             FileMapping object or None if failed
         """
         try:
-            # Use existing file processing logic
+            # Use the EXACT SAME processing logic as master file
+            # This ensures identical data handling and calculations
+            
+            # Get visible sheets first
             from core.file_processor import ExcelProcessor
-            from core.boq_processor import BOQProcessor
-            
-            # Create Excel processor and BOQ processor
-            excel_processor = ExcelProcessor()
-            boq_processor = BOQProcessor()
-            
-            # Load the file
-            if not excel_processor.load_file(filepath):
-                return None
-            
-            # Get visible sheets
-            visible_sheets = excel_processor.get_visible_sheets()
+            processor = ExcelProcessor()
+            processor.load_file(Path(filepath))
+            visible_sheets = processor.get_visible_sheets()
             if not visible_sheets:
                 return None
             
-            # Identify BOQ sheets to optimize processing
-            boq_sheets = boq_processor.identify_boq_sheets(visible_sheets)
-            if not boq_sheets:
-                # If no BOQ sheets identified, use all visible sheets
+            # Use the same sheet categorization logic as master
+            if SHEET_CATEGORIZATION_AVAILABLE:
+                # For comparison, we'll use the same sheet structure as master
+                # but we need to get the sheet categories from the master
+                boq_sheets = visible_sheets  # Use all visible sheets for comparison
+                categories = {sheet: "BOQ" for sheet in visible_sheets}
+            else:
+                # Fallback: treat all sheets as BOQ (same as master)
                 boq_sheets = visible_sheets
-                logger.info("No BOQ sheets identified, processing all visible sheets")
+                categories = {sheet: "BOQ" for sheet in visible_sheets}
             
-            # For comparison, treat identified sheets as BOQ to avoid sheet categorization dialog
-            sheet_categories = {sheet: "BOQ" for sheet in boq_sheets}
-            
-            # Process only BOQ sheets for better performance
-            if not boq_processor.load_excel(filepath, sheets_to_process=boq_sheets):
-                return None
-            
-            # Process only BOQ sheets
-            boq_results = boq_processor.process()
-            
-            # Filter results to only include BOQ sheets
-            if 'sheets_data' in boq_results:
-                filtered_sheets_data = {}
-                for sheet_name, sheet_data in boq_results['sheets_data'].items():
-                    if sheet_name in boq_sheets:
-                        filtered_sheets_data[sheet_name] = sheet_data
-                boq_results['sheets_data'] = filtered_sheets_data
-            
-            # Convert BOQ results to FileMapping format
-            # This is a simplified conversion - you might need to enhance it
-            file_mapping = type('MockFileMapping', (), {
-                'dataframe': self._create_dataframe_from_boq_results(boq_results),
-                'offer_info': offer_info,
-                'sheets': []  # Add empty sheets list for compatibility
-            })()
+            # Process using the SAME controller.process_file method as master
+            file_mapping = self.controller.process_file(
+                Path(filepath),
+                progress_callback=lambda p, m: None,  # No progress callback for comparison
+                sheet_filter=boq_sheets,
+                sheet_types=categories
+            )
             
             if not file_mapping:
                 return None
             
-            # Store offer information
+            # Store offer information (same as master)
             file_mapping.offer_info = offer_info
             
             return file_mapping
@@ -2986,10 +2926,10 @@ class MainWindow:
                     if pd.notna(val) and val != '':
                         if col in ['unit_price', 'total_price', 'wage']:
                             # Currency formatting (same as row review)
-                            val = format_number(val, is_currency=True)
+                            val = format_number_eu(val)
                         elif col in ['quantity', 'manhours']:
                             # Number formatting (same as row review)
-                            val = format_number(val, is_currency=False)
+                            val = format_number_eu(val)
                             # Special formatting for manhours - only 2 decimals (same as row review)
                             if col == 'manhours' and val and val != '':
                                 try:
@@ -3709,6 +3649,8 @@ Offer Information:
             logger.error(f"Error refreshing summary grid: {e}")
 
     def _show_final_categorized_data(self, tab, final_dataframe, categorization_result):
+        # Use the dataframe with comparison columns if available
+        display_df = getattr(self, '_current_dataframe_with_comparison', final_dataframe)
         """Show the final categorized data in the tab"""
         try:
             # Validate tab parameter
@@ -3870,17 +3812,10 @@ Offer Information:
                         
                         if base_col in ['unit_price', 'total_price', 'wage']:
                             # Currency formatting (same as comparison window)
-                            val = format_number(val, is_currency=True)
+                            val = format_number_eu(val)
                         elif base_col in ['quantity', 'manhours']:
                             # Number formatting (same as comparison window)
-                            val = format_number(val, is_currency=False)
-                            # Special formatting for manhours - only 2 decimals
-                            if base_col == 'manhours' and val and val != '':
-                                try:
-                                    num_val = float(str(val).replace(',', '.'))
-                                    val = f"{num_val:.2f}"
-                                except:
-                                    pass
+                            val = format_number_eu(val)
                         else:
                             val = str(val)
                     else:
@@ -3930,7 +3865,7 @@ Offer Information:
             
             # Format total cost with European formatting (no currency symbol, dot for thousands, comma for decimals)
             if total_cost > 0:
-                formatted_total_cost = format_number(total_cost, is_currency=False)
+                formatted_total_cost = format_number_eu(total_cost)
             else:
                 formatted_total_cost = "0,00"
             
@@ -4016,10 +3951,13 @@ Offer Information:
             }
             offers_data.append(current_offer_data)
             
-            # Check if this is a comparison workflow and add comparison offers
-            if hasattr(self, 'is_comparison_workflow') and self.is_comparison_workflow:
+            # Check for comparison offers in the current dataframe (regardless of workflow flag)
+            comparison_columns = [col for col in display_df.columns if '[' in col and ']' in col and 'total_price' in col]
+            logger.info(f"DEBUG: display_df columns: {list(display_df.columns)}")
+            logger.info(f"DEBUG: comparison_columns found: {comparison_columns}")
+            
+            if comparison_columns:
                 # Look for comparison offers in the current dataframe
-                comparison_columns = [col for col in display_df.columns if '[' in col and ']' in col and 'total_price' in col]
                 
                 for col in comparison_columns:
                     try:
@@ -4034,15 +3972,31 @@ Offer Information:
                         
                         # Format total cost
                         if offer_total_cost > 0:
-                            formatted_offer_cost = format_number(offer_total_cost, is_currency=False)
+                            formatted_offer_cost = format_number_eu(offer_total_cost)
                         else:
                             formatted_offer_cost = "0,00"
                         
-                        # Add comparison offer data
+                        # Add comparison offer data - use the user's entered project info
+                        # Get the comparison offer info from the controller's current_files
+                        comparison_offer_info = None
+                        for file_key, file_data in self.controller.current_files.items():
+                            if 'offers' in file_data and offer_name_from_col in file_data['offers']:
+                                comparison_offer_info = file_data['offers'][offer_name_from_col]
+                                break
+                        
+                        # Use user's entered project info if available, otherwise use defaults
+                        if comparison_offer_info:
+                            project_name = comparison_offer_info.get('project_name', f"Project {offer_name_from_col}")
+                            project_size = comparison_offer_info.get('project_size', 'N/A')
+                            date = comparison_offer_info.get('date', date)
+                        else:
+                            project_name = f"Project {offer_name_from_col}"
+                            project_size = "N/A"
+                        
                         comparison_offer_data = {
                             'offer_name': offer_name_from_col,
-                            'project_name': f"Project {offer_name_from_col}",
-                            'project_size': "N/A",
+                            'project_name': project_name,
+                            'project_size': project_size,
                             'date': date,
                             'total_cost': offer_total_cost,
                             'formatted_total_cost': formatted_offer_cost
@@ -4680,6 +4634,8 @@ Offer Information:
             # Don't raise the exception, just log it so the main export can continue
 
     def _summarize_categorized_data(self, dataframe):
+        # Use the dataframe with comparison columns if available
+        display_dataframe = getattr(self, '_current_dataframe_with_comparison', dataframe)
         """Show detailed summary of categorized data in a new section below the summary"""
         try:
             # Get the current tab
@@ -4784,7 +4740,7 @@ Offer Information:
                         category_prices = pd.to_numeric(category_data['total_price'], errors='coerce')
                         category_cost = category_prices.sum()
                         if category_cost > 0:
-                            formatted_cost = format_number(category_cost, is_currency=False)
+                            formatted_cost = format_number_eu(category_cost)
                         else:
                             formatted_cost = "0,00"
                         current_offer_data.append(formatted_cost)
@@ -4796,10 +4752,13 @@ Offer Information:
             
             offers_data.append(current_offer_data)
             
-            # Check if this is a comparison workflow and add comparison offers
-            if hasattr(self, 'is_comparison_workflow') and self.is_comparison_workflow:
+            # Check for comparison offers in the current dataframe (regardless of workflow flag)
+            comparison_columns = [col for col in display_dataframe.columns if '[' in col and ']' in col and 'total_price' in col]
+            logger.info(f"DEBUG: display_dataframe columns: {list(display_dataframe.columns)}")
+            logger.info(f"DEBUG: comparison_columns found: {comparison_columns}")
+            
+            if comparison_columns:
                 # Look for comparison offers in the current dataframe
-                comparison_columns = [col for col in dataframe.columns if '[' in col and ']' in col and 'total_price' in col]
                 
                 for col in comparison_columns:
                     try:
@@ -4811,13 +4770,13 @@ Offer Information:
                         
                         for category in category_order:
                             try:
-                                category_data = dataframe[dataframe['Category'] == category]
+                                category_data = display_dataframe[display_dataframe['Category'] == category]
                                 if len(category_data) > 0:
                                     # Use the comparison column for this offer
                                     category_prices = pd.to_numeric(category_data[col], errors='coerce')
                                     category_cost = category_prices.sum()
                                     if category_cost > 0:
-                                        formatted_cost = format_number(category_cost, is_currency=False)
+                                        formatted_cost = format_number_eu(category_cost)
                                     else:
                                         formatted_cost = "0,00"
                                     comparison_offer_data.append(formatted_cost)
@@ -5585,6 +5544,10 @@ Offer Information:
             if col not in final_columns:
                 final_columns.append(col)
         
+        # Store the updated dataframe with comparison columns for summary methods
+        # This ensures the comparison columns are available when summary methods are called
+        self._current_dataframe_with_comparison = updated_df.copy()
+        
         # Add any remaining meaningful columns
         for col in meaningful_columns:
             if col not in final_columns:
@@ -5649,10 +5612,10 @@ Offer Information:
                     
                     if base_col in ['unit_price', 'total_price', 'wage']:
                         # Currency formatting (same as row review) - applies to both master and comparison
-                        val = format_number(val, is_currency=True)
+                        val = format_number_eu(val)
                     elif base_col in ['quantity', 'manhours']:
                         # Number formatting (same as row review) - applies to both master and comparison
-                        val = format_number(val, is_currency=False)
+                        val = format_number_eu(val)
                         # Special formatting for manhours - only 2 decimals (same as row review)
                         if base_col == 'manhours' and val and val != '':
                             try:
@@ -5671,8 +5634,8 @@ Offer Information:
         
         logger.info("Tab updated successfully with comparison data")
         
-        # Refresh the summary to show all offers
-        self._refresh_summary_after_comparison(tab, updated_df)
+        # Summary is already populated by _show_final_categorized_data, no need to refresh
+        logger.info("Tab updated successfully with comparison data")
         
     def _refresh_summary_after_comparison(self, tab, updated_df):
         """Refresh the summary frame to show all offers after comparison data is loaded"""
@@ -5724,6 +5687,7 @@ Offer Information:
             project_size = "N/A"
             date = datetime.now().strftime('%Y-%m-%d')
             
+            
             # Try to get actual offer info
             if hasattr(self, 'current_file_mapping') and self.current_file_mapping and hasattr(self.current_file_mapping, 'offer_info'):
                 offer_info = self.current_file_mapping.offer_info
@@ -5756,7 +5720,7 @@ Offer Information:
             
             # Format total cost
             if total_cost > 0:
-                formatted_total_cost = format_number(total_cost, is_currency=False)
+                formatted_total_cost = format_number_eu(total_cost)
             else:
                 formatted_total_cost = "0,00"
             
@@ -5787,15 +5751,31 @@ Offer Information:
                     
                     # Format total cost
                     if offer_total_cost > 0:
-                        formatted_offer_cost = format_number(offer_total_cost, is_currency=False)
+                        formatted_offer_cost = format_number_eu(offer_total_cost)
                     else:
                         formatted_offer_cost = "0,00"
                     
-                    # Add comparison offer data
+                    # Add comparison offer data - use the user's entered project info
+                    # Get the comparison offer info from the controller's current_files
+                    comparison_offer_info = None
+                    for file_key, file_data in self.controller.current_files.items():
+                        if 'offers' in file_data and offer_name_from_col in file_data['offers']:
+                            comparison_offer_info = file_data['offers'][offer_name_from_col]
+                            break
+                    
+                    # Use user's entered project info if available, otherwise use defaults
+                    if comparison_offer_info:
+                        project_name = comparison_offer_info.get('project_name', f"Project {offer_name_from_col}")
+                        project_size = comparison_offer_info.get('project_size', 'N/A')
+                        date = comparison_offer_info.get('date', date)
+                    else:
+                        project_name = f"Project {offer_name_from_col}"
+                        project_size = "N/A"
+                    
                     comparison_offer_data = {
                         'offer_name': offer_name_from_col,
-                        'project_name': f"Project {offer_name_from_col}",
-                        'project_size': "N/A",
+                        'project_name': project_name,
+                        'project_size': project_size,
                         'date': date,
                         'total_cost': offer_total_cost,
                         'formatted_total_cost': formatted_offer_cost
@@ -5808,7 +5788,7 @@ Offer Information:
             # Sort offers by total cost (lowest first)
             offers_data.sort(key=lambda x: x['total_cost'])
             
-            # Insert all offers into summary treeview
+            # Insert all offers into summary treeview (ONLY ONCE)
             for offer_data in offers_data:
                 summary_tree.insert('', 'end', values=(
                     offer_data['offer_name'],
@@ -5822,7 +5802,8 @@ Offer Information:
             
         except Exception as e:
             logger.error(f"Error refreshing summary after comparison: {e}")
-        
+            messagebox.showerror("Error", f"Failed to refresh summary: {str(e)}")
+
     def _get_pretty_column_name(self, column_name):
         """
         Convert internal column names to pretty display names
@@ -5861,79 +5842,4 @@ Offer Information:
         return pretty_names.get(column_name, column_name)
 
 
-    def _update_main_dataset_with_comparison_results(self, processor, offer_info):
-        """
-        Update the main dataset in place with comparison results
-        
-        Args:
-            processor: ComparisonProcessor instance
-            offer_info: Offer information dictionary
-        """
-        try:
-            logger.info("=== STARTING _update_main_dataset_with_comparison_results ===")
-            
-            # Get the current tab (master dataset)
-            current_tab_id = self.notebook.select()
-            if not current_tab_id:
-                logger.warning("No current tab found for updating main dataset")
-                return
-            
-            logger.info(f"Current tab ID: {current_tab_id}")
-            
-            # Get the current file mapping from the tab_id_to_file_mapping dictionary
-            file_mapping = self.tab_id_to_file_mapping.get(current_tab_id)
-            
-            if not file_mapping:
-                logger.warning("No file mapping found for current tab")
-                return
-            
-            # Get the updated dataframe from the processor's master_dataset
-            updated_df = processor.master_dataset.copy()
-            
-            if updated_df is None or updated_df.empty:
-                logger.warning("No updated dataframe available from processor")
-                return
-            
-            logger.info(f"Updating master dataset with {len(updated_df)} rows and {len(updated_df.columns)} columns")
-            
-            # Update the file mapping's dataframe with the merged data
-            file_mapping.dataframe = updated_df.copy()
-            
-            # Reset comparison workflow flags to allow normal UI refresh
-            self.is_comparison_workflow = False
-            self.comparison_processor = None
-            
-            # Show success message
-            merge_count = len(processor.merge_results) if hasattr(processor, 'merge_results') else 0
-            add_count = len(processor.add_results) if hasattr(processor, 'add_results') else 0
-            status_msg = f"Comparison completed: {merge_count} merges, {add_count} adds"
-            self._update_status(status_msg)
-            logger.info(f"Status message: {status_msg}")
-            print("=== AFTER STATUS, BEFORE TRY ===")
-            
-            # Get the current tab widget
-            current_tab = self.notebook.nametowidget(current_tab_id)
-            
-            # Update the existing tab with comparison data, preserving formatting and column order
-            logger.info("Calling _update_tab_with_comparison_data...")
-            logger.info(f"DEBUG: current_tab type: {type(current_tab)}")
-            logger.info(f"DEBUG: updated_df shape: {updated_df.shape}")
-            logger.info(f"DEBUG: updated_df columns: {list(updated_df.columns)}")
-            logger.info(f"DEBUG: About to call _update_tab_with_comparison_data method")
-            logger.info(f"DEBUG: Method exists: {hasattr(self, '_update_tab_with_comparison_data')}")
-            print("=== BEFORE TRY BLOCK ===")
-            try:
-                self._update_tab_with_comparison_data(current_tab, updated_df)
-                logger.info("_update_tab_with_comparison_data completed successfully")
-            except Exception as e:
-                logger.error(f"Exception in _update_tab_with_comparison_data: {e}")
-                import traceback
-                logger.error(f"Traceback: {traceback.format_exc()}")
-                raise
-            
-            logger.info("=== COMPLETED _update_main_dataset_with_comparison_results ===")
-            print("=== END OF _update_main_dataset_with_comparison_results ===")
-            
-        except Exception as e:
-            logger.error(f"Error updating main dataset with comparison results: {e}")
-            self._update_status(f"Error updating dataset: {str(e)}")
+

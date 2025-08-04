@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import logging
 import pandas as pd
+from utils.format_utils import format_number_eu
 
 logger = logging.getLogger(__name__)
 
@@ -71,13 +72,13 @@ class ComparisonRowReviewDialog:
         main_frame.rowconfigure(1, weight=1)
         
         # Title label
-        title_label = ttk.Label(main_frame, text=f"Review {self.offer_name} Rows", 
-                               font=("Arial", 14, "bold"))
+        title_label = ttk.Label(main_frame, text=f"Review {self.offer_name} Rows",
+                                font=("Arial", 14, "bold"))
         title_label.grid(row=0, column=0, pady=(0, 10), sticky=tk.W)
         
         # Instructions
-        instructions = ttk.Label(main_frame, 
-                               text="Click on a row to toggle its validity. Green = Valid, Red = Invalid")
+        instructions = ttk.Label(main_frame,
+                                text="Click on a row to toggle its validity. Green = Valid, Red = Invalid")
         instructions.grid(row=1, column=0, pady=(0, 10), sticky=tk.W)
         
         # Create treeview frame
@@ -179,8 +180,8 @@ class ComparisonRowReviewDialog:
                 # Filter out unwanted columns (ignore_*, etc.)
                 filtered_columns = []
                 for col in df_columns:
-                    if not (col.startswith('ignore') or 
-                           col.startswith('_') or 
+                    if not (col.startswith('ignore') or
+                           col.startswith('_') or
                            col in ['']):
                         filtered_columns.append(col)
                 
@@ -271,9 +272,9 @@ class ComparisonRowReviewDialog:
                         
                         # Apply number formatting for specific columns
                         if col in ['unit_price', 'total_price', 'wage']:
-                            val = self._format_number(val, is_currency=True)
+                            val = format_number_eu(val)
                         elif col in ['quantity', 'manhours']:
-                            val = self._format_number(val, is_currency=False)
+                            val = format_number_eu(val)
                             # Special formatting for manhours - only 2 decimals
                             if col == 'manhours' and val and val != '':
                                 try:
@@ -368,9 +369,9 @@ class ComparisonRowReviewDialog:
                 
                 # Apply number formatting for specific columns
                 if col in ['unit_price', 'total_price', 'wage']:
-                    val = self._format_number(val, is_currency=True)
+                    val = format_number_eu(val)
                 elif col in ['quantity', 'manhours']:
-                    val = self._format_number(val, is_currency=False)
+                    val = format_number_eu(val)
                     # Special formatting for manhours - only 2 decimals
                     if col == 'manhours' and val and val != '':
                         try:
@@ -394,25 +395,6 @@ class ComparisonRowReviewDialog:
                 self.tree.item(item, tags=('validrow',))
             else:
                 self.tree.item(item, tags=('invalidrow',))
-        
-    def _format_number(self, value, is_currency=False):
-        """Format number for display"""
-        if not value or value == '':
-            return ''
-        
-        try:
-            # Convert to float
-            if isinstance(value, str):
-                value = float(value.replace(',', '.'))
-            else:
-                value = float(value)
-            
-            if is_currency:
-                return f"€ {value:,.2f}".replace(',', ' ').replace('.', ',').replace(' ', '.')
-            else:
-                return f"{value:,.2f}".replace(',', ' ').replace('.', ',').replace(' ', '.')
-        except:
-            return str(value)
         
     def _on_row_click(self, event):
         """Handle row click to toggle validity - same as master row review"""
