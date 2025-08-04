@@ -90,3 +90,4 @@ logs/boq_tools.log
 /logs
 logs/boq_tools.log
 *.log
+/test_outputs

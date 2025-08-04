@@ -2482,118 +2482,43 @@ class MainWindow:
             offer_name = comparison_offer_info.get('offer_name', 'Comparison')
             instance_results = self.comparison_processor.process_valid_rows(offer_name=offer_name)
             
-            # DEBUG EXPORT (COMMENTED OUT)
-            # self._update_status("DEBUG: MERGE/ADD processing completed. Exporting updated dataset for debugging.")
-            # 
-            # # Log the results for debugging
-            # merge_ops = [r for r in instance_results if r['type'] == 'MERGE']
-            # add_ops = [r for r in instance_results if r['type'] == 'ADD']
-            # 
-            # logger.info(f"DEBUG: MERGE operations: {len(merge_ops)}")
-            # logger.info(f"DEBUG: ADD operations: {len(add_ops)}")
-            # 
-            # # Show detailed results
-            # result_message = f"MERGE/ADD Processing Results:\n\n"
-            # result_message += f"MERGE operations: {len(merge_ops)}\n"
-            # result_message += f"ADD operations: {len(add_ops)}\n\n"
-            # 
-            # if merge_ops:
-            #     result_message += "MERGE Details:\n"
-            #     for i, merge_op in enumerate(merge_ops[:5]):  # Show first 5
-            #         result_message += f"  {i+1}. Row {merge_op['comp_row_index']} → Master Row {merge_op['master_row_index']}\n"
-            #     if len(merge_ops) > 5:
-            #         result_message += f"  ... and {len(merge_ops) - 5} more\n"
-            #     result_message += "\n"
-            # 
-            # if add_ops:
-            #     result_message += "ADD Details:\n"
-            #     for i, add_op in enumerate(add_ops[:5]):  # Show first 5
-            #         result_message += f"  {i+1}. Row {add_op['comp_row_index']} → New Row\n"
-            #     if len(add_ops) > 5:
-            #         result_message += f"  ... and {len(add_ops) - 5} more\n"
-            # 
-            # # Export the updated master dataset (which now contains the new offer-specific columns)
-            # # and the filtered comparison dataset for comparison
-            # updated_master_df = self.comparison_processor.master_dataset.copy()
-            # 
-            # # Use the filtered comparison dataset that was created at row review confirmation
-            # filtered_comparison_df = comparison_file_mapping.filtered_dataframe
-            # 
-            # # Add MERGE/ADD decision column to comparison dataset for reference
-            # def determine_merge_add_decision(comparison_df, original_master_df, original_comparison_df):
-            #     """Determine whether each comparison row would be MERGE or ADD"""
-            #     decisions = []
-            # 
-            #     # Create a mapping of description to instance counts for correct ordering
-            #     description_instance_counts = {}
-            # 
-            #     for idx, comp_row in comparison_df.iterrows():
-            #         description = str(comp_row.get('Description', '')).strip()
-            # 
-            #         if not description:
-            #             decisions.append('INVALID - No Description')
-            #             continue
-            # 
-            #         # Get master instances
-            #         master_instances = original_master_df[original_master_df['Description'] == description]
-            # 
-            #         # If no matches found, try case-insensitive matching
-            #         if len(master_instances) == 0:
-            #             master_instances = original_master_df[
-            #             original_master_df['Description'].str.lower() == description.lower()
-            #         ]
-            # 
-            #         # If still no matches, try normalized matching
-            #         if len(master_instances) == 0:
-            #             normalized_desc = ' '.join(description.split())
-            #             master_instances = original_master_df[
-            #             original_master_df['Description'].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
-            #         ]
-            # 
-            #     # Initialize instance count for this description if not seen before
-            #     if description not in description_instance_counts:
-            #         description_instance_counts[description] = 0
-            # 
-            #     # Get the current instance number for this description
-            #     comp_instance_number = description_instance_counts[description]
-            #     description_instance_counts[description] += 1
-            # 
-            #     # Decision logic: if instance number < master instances, MERGE; else ADD
-            #     if comp_instance_number < len(master_instances):
-            #         master_idx = master_instances.index[comp_instance_number]
-            #         decisions.append(f'MERGE Instance {comp_instance_number + 1} (Master Row {master_idx + 2})')
-            #     else:
-            #         decisions.append(f'ADD Instance {comp_instance_number + 1} (New Row)')
-            # 
-            # return decisions
-            # 
-            # # Add decision column to filtered comparison dataset
-            # merge_add_decisions = determine_merge_add_decision(filtered_comparison_df, master_df, comparison_df)
-            # filtered_comparison_df['MERGE_ADD_Decision'] = merge_add_decisions
-            # 
-            # # Export both datasets
-            # self._debug_export_datasets_before_merge(updated_master_df, filtered_comparison_df, comparison_offer_info)
-            # 
-            # # Open the exported file automatically
-            # try:
-            #     import os
-            #     from datetime import datetime
-            #     offer_name = comparison_offer_info.get('offer_name', 'Comparison')
-            #     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            #     filename = f"DEBUG_Datasets_Before_Merge_{offer_name}_{timestamp}.xlsx"
-            #     export_dir = os.getcwd()
-            #     filepath = os.path.join(export_dir, filename)
-            #     os.startfile(filepath)
-            # except Exception as e:
-            #     logger.warning(f"Could not open debug file automatically: {e}")
-            # 
-            # messagebox.showinfo("Debug Mode - MERGE/ADD Results", 
-            #                   f"{result_message}\n\nUpdated dataset exported to Excel file.\n\n"
-            #                   f"You can now inspect the exported file to see:\n"
-            #                   f"1. The updated master dataset with new offer-specific columns\n"
-            #                   f"2. The comparison dataset with MERGE/ADD decisions\n"
-            #                   f"3. How the data was actually processed")
-            # return
+            # Collect and display warnings
+            all_warnings = []
+            if self.comparison_processor.comparison_warnings:
+                all_warnings.extend(self.comparison_processor.comparison_warnings)
+                # Clear warnings after collecting
+                self.comparison_processor.comparison_warnings.clear()
+            
+            if all_warnings:
+                warning_messages = []
+                for warning in all_warnings:
+                    # Extract sheet name and row index from the warning object
+                    # The row_index in ValidationIssue is 0-based, convert to 1-based for display
+                    # The suggestion field might contain the sheet name for unit mismatches
+                    sheet_name = "Unknown Sheet"
+                    row_display_index = warning.row_index + 2 # Convert to Excel row number
+                    
+                    if warning.suggestion and "sheet" in warning.suggestion:
+                        try:
+                            # Extract sheet name from suggestion string
+                            match = re.search(r"sheet '([^']+)'", warning.suggestion)
+                            if match:
+                                sheet_name = match.group(1)
+                        except Exception:
+                            pass # Fallback to "Unknown Sheet"
+                    
+                    # Format message based on warning type
+                    if warning.validation_type == ValidationType.CONSISTENCY: # Unit mismatch
+                        message = f"Unit Mismatch: Sheet '{sheet_name}', Row {row_display_index}. Master unit '{warning.expected_value}' vs. Comparison unit '{warning.actual_value}'."
+                    elif warning.validation_type == ValidationType.DATA_TYPE: # Invalid data type
+                        message = f"Invalid Data: Sheet '{sheet_name}', Row {row_display_index}, Column '{warning.column_index}'. Value '{warning.actual_value}' is not valid. Suggestion: {warning.suggestion}"
+                    else:
+                        message = f"Warning: Sheet '{sheet_name}', Row {row_display_index}. {warning.message}"
+                    
+                    warning_messages.append(message)
+                
+                full_warning_message = "The comparison completed with the following warnings:\n\n" + "\n".join(warning_messages)
+                messagebox.showwarning("Comparison Warnings", full_warning_message)
             
             # Clean up data
             self._update_status("Cleaning up data...")

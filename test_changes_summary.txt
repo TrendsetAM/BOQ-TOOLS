@@ -1,0 +1,69 @@
+Summary of Changes in Generated Test Files:
+
+This document clarifies the specific changes made to the original Excel file
+("GRE.EEC.F.27.IT.P.18371.00.098.02 - PONTESTURA 9,69 MW_cBOQ PV_rev 9 giu (ENEMEK).xlsx")
+for each generated test file. The changes are designed to simulate various
+edge cases for BoQ comparison systems.
+
+**All changes are applied to the "ACCESS ROADS" sheet of the workbook.**
+**The script now dynamically determines the starting row and column for Description, Quantity, and Unit based on the `pontestura mapping.pkl` file.**
+
+Note on "All Rows Invalid" Feedback:
+Some of these tests (specifically Test 8: Missing Required Fields and
+Test 9: Invalid Data Types) are intentionally designed to introduce data
+that would be considered "invalid" by a robust validation system. This is
+to test how your comparison tool handles such scenarios. Test 7 (Split Rows)
+also modifies the structure by inserting a new row, which might impact
+systems expecting a fixed structure.
+
+---
+
+1.  **Test File:** `1_minor_text_changes.xlsx`
+    *   **Change:** Minor text change (capitalization).
+    *   **Location:** Dynamically determined Description column, first data row.
+    *   **Details:** The first letter of the text in the Description cell of the first data row was changed from uppercase to lowercase.
+
+2.  **Test File:** `2_reordered_words.xlsx`
+    *   **Change:** Reordered words within a description.
+    *   **Location:** Dynamically determined Description column, first data row.
+    *   **Details:** The first two words of the text in the Description cell of the first data row were swapped.
+
+3.  **Test File:** `3_added_removed_keywords.xlsx`
+    *   **Change:** Added a keyword to a description.
+    *   **Location:** Dynamically determined Description column, first data row.
+    *   **Details:** The phrase " (Modified Keyword)" was appended to the text in the Description cell of the first data row.
+
+4.  **Test File:** `4_different_units_of_measure.xlsx`
+    *   **Change:** Modified unit of measure.
+    *   **Location:** Dynamically determined Unit column, first data row.
+    *   **Details:** The unit in the Unit cell of the first data row was changed (e.g., "Code" to "Code (alt)"). If the original unit was "m", "sqm", or "cum", it was changed to "linear meters", "square meters", or "cubic meters" respectively. Otherwise, "(alt)" was appended.
+
+5.  **Test File:** `5_special_characters_encoding.xlsx`
+    *   **Change:** Added special characters to a description.
+    *   **Location:** Dynamically determined Description column, first data row.
+    *   **Details:** Several special characters (e.g., " - €§©®™") were appended to the text in the Description cell of the first data row.
+
+6.  **Test File:** `6_reordered_items_simplified.xlsx`
+    *   **Change:** Swapped content of two description cells.
+    *   **Location:** Dynamically determined Description column, two distinct data rows.
+    *   **Details:** The content of two dynamically determined Description cells were swapped. This test was simplified to avoid issues with merged cells and reordering entire rows.
+
+7.  **Test File:** `7_split_rows.xlsx`
+    *   **Change:** Split one item into two by modifying quantity and inserting a new row.
+    *   **Location:** Dynamically determined Quantity column, first data row with quantity > 1, and the row immediately below it.
+    *   **Details:** The quantity of the identified row was halved, and a new row was inserted below it with the remaining quantity and a modified description (e.g., " (Part 2)"). If no row with quantity > 1 was found, only a copy of the original file was created.
+
+8.  **Test File:** `8_missing_required_fields.xlsx`
+    *   **Change:** Cleared essential fields for a row.
+    *   **Location:** Dynamically determined Description, Quantity, and Unit columns, first data row.
+    *   **Details:** The values in the Description, Quantity, and Unit cells of the first data row were set to `None` (cleared). This is intended to test how the system handles missing required data.
+
+9.  **Test File:** `9_invalid_data_types.xlsx`
+    *   **Change:** Introduced invalid data types into fields.
+    *   **Location:** Dynamically determined Description and Quantity columns, first data row.
+    *   **Details:** The quantity in the Quantity cell of the first data row was changed to the string "INVALID_QUANTITY", and the description in the Description cell was changed to the number `12345`. This is intended to test how the system handles incorrect data types.
+
+10. **Test File:** `10_only_metadata_changes.xlsx`
+    *   **Change:** Modified a metadata cell.
+    *   **Location:** Cell `A1`.
+    *   **Details:** The text in cell A1 was modified by prepending "Modified Metadata - ". This change is outside the typical BoQ item data.

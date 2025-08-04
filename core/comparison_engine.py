@@ -5,9 +5,10 @@ Handles merging and adding data from Comparison BoQ to the main Dataset
 
 import logging
 import pandas as pd
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional, Union, Tuple # Added Tuple
 from dataclasses import dataclass
 import re
+from core.validator import ValidationIssue, ValidationLevel, ValidationType
 
 logger = logging.getLogger(__name__)
 
@@ -96,45 +97,99 @@ class ComparisonEngine:
                     # CRITICAL FIX: Remove the "and cell_value" condition - always attempt conversion
                     # Map to appropriate offer column based on column type
                     if col_type == "QUANTITY":
-                        try:
-                            numeric_value = self._convert_to_numeric(cell_value) if cell_value else 0
-                            updated_values[offer_columns['quantity']] = numeric_value
-                        except Exception as e:
-                            errors.append(f"Error converting quantity '{cell_value}': {e}")
-                            updated_values[offer_columns['quantity']] = 0
+                        numeric_value, is_valid, error_msg = self._convert_to_numeric(
+                            cell_value, row_index, col_type, offer_name # Using offer_name as source_sheet for MERGE context
+                        )
+                        if not is_valid:
+                            self.comparison_warnings.append(
+                                ValidationIssue(
+                                    row_index=row_index,
+                                    column_index=col_idx,
+                                    validation_type=ValidationType.DATA_TYPE,
+                                    level=ValidationLevel.WARNING,
+                                    message=error_msg,
+                                    expected_value="Numeric",
+                                    actual_value=cell_value,
+                                    suggestion=f"Correct format for '{col_type}' in sheet '{offer_name}' at row {row_index+2}"
+                                )
+                            )
+                        updated_values[offer_columns['quantity']] = numeric_value
                     
                     elif col_type == "UNIT_PRICE":
-                        try:
-                            numeric_value = self._convert_to_numeric(cell_value) if cell_value else 0
-                            updated_values[offer_columns['unit_price']] = numeric_value
-                        except Exception as e:
-                            errors.append(f"Error converting unit price '{cell_value}': {e}")
-                            updated_values[offer_columns['unit_price']] = 0
+                        numeric_value, is_valid, error_msg = self._convert_to_numeric(
+                            cell_value, row_index, col_type, offer_name
+                        )
+                        if not is_valid:
+                            self.comparison_warnings.append(
+                                ValidationIssue(
+                                    row_index=row_index,
+                                    column_index=col_idx,
+                                    validation_type=ValidationType.DATA_TYPE,
+                                    level=ValidationLevel.WARNING,
+                                    message=error_msg,
+                                    expected_value="Numeric",
+                                    actual_value=cell_value,
+                                    suggestion=f"Correct format for '{col_type}' in sheet '{offer_name}' at row {row_index+2}"
+                                )
+                            )
+                        updated_values[offer_columns['unit_price']] = numeric_value
                     
                     elif col_type == "TOTAL_PRICE":
-                        try:
-                            numeric_value = self._convert_to_numeric(cell_value) if cell_value else 0
-                            updated_values[offer_columns['total_price']] = numeric_value
-                        except Exception as e:
-                            errors.append(f"Error converting total price '{cell_value}': {e}")
-                            updated_values[offer_columns['total_price']] = 0
+                        numeric_value, is_valid, error_msg = self._convert_to_numeric(
+                            cell_value, row_index, col_type, offer_name
+                        )
+                        if not is_valid:
+                            self.comparison_warnings.append(
+                                ValidationIssue(
+                                    row_index=row_index,
+                                    column_index=col_idx,
+                                    validation_type=ValidationType.DATA_TYPE,
+                                    level=ValidationLevel.WARNING,
+                                    message=error_msg,
+                                    expected_value="Numeric",
+                                    actual_value=cell_value,
+                                    suggestion=f"Correct format for '{col_type}' in sheet '{offer_name}' at row {row_index+2}"
+                                )
+                            )
+                        updated_values[offer_columns['total_price']] = numeric_value
                     
                     elif col_type == "MANHOURS":
-                        try:
-                            numeric_value = self._convert_to_numeric(cell_value) if cell_value else 0.0
-                            # CRITICAL FIX: Always store manhours as float to preserve decimal formatting
-                            updated_values[offer_columns['manhours']] = float(numeric_value) if numeric_value != 0 else 0.0
-                        except Exception as e:
-                            errors.append(f"Error converting manhours '{cell_value}': {e}")
-                            updated_values[offer_columns['manhours']] = 0.0
+                        numeric_value, is_valid, error_msg = self._convert_to_numeric(
+                            cell_value, row_index, col_type, offer_name
+                        )
+                        if not is_valid:
+                            self.comparison_warnings.append(
+                                ValidationIssue(
+                                    row_index=row_index,
+                                    column_index=col_idx,
+                                    validation_type=ValidationType.DATA_TYPE,
+                                    level=ValidationLevel.WARNING,
+                                    message=error_msg,
+                                    expected_value="Numeric",
+                                    actual_value=cell_value,
+                                    suggestion=f"Correct format for '{col_type}' in sheet '{offer_name}' at row {row_index+2}"
+                                )
+                            )
+                        updated_values[offer_columns['manhours']] = float(numeric_value) if numeric_value != 0 else 0.0
                     
                     elif col_type == "WAGE":
-                        try:
-                            numeric_value = self._convert_to_numeric(cell_value) if cell_value else 0
-                            updated_values[offer_columns['wage']] = numeric_value
-                        except Exception as e:
-                            errors.append(f"Error converting wage '{cell_value}': {e}")
-                            updated_values[offer_columns['wage']] = 0
+                        numeric_value, is_valid, error_msg = self._convert_to_numeric(
+                            cell_value, row_index, col_type, offer_name
+                        )
+                        if not is_valid:
+                            self.comparison_warnings.append(
+                                ValidationIssue(
+                                    row_index=row_index,
+                                    column_index=col_idx,
+                                    validation_type=ValidationType.DATA_TYPE,
+                                    level=ValidationLevel.WARNING,
+                                    message=error_msg,
+                                    expected_value="Numeric",
+                                    actual_value=cell_value,
+                                    suggestion=f"Correct format for '{col_type}' in sheet '{offer_name}' at row {row_index+2}"
+                                )
+                            )
+                        updated_values[offer_columns['wage']] = numeric_value
             
             # CRITICAL FIX: Always update the DataFrame, even with zero values
             # Update the DataFrame with the new values
@@ -266,37 +321,42 @@ class ComparisonEngine:
                     
                     # Handle numeric columns - put values in OFFER-SPECIFIC columns, keep master columns as 0
                     if col_type in ["QUANTITY", "UNIT_PRICE", "TOTAL_PRICE", "MANHOURS", "WAGE"]:
-                        try:
-                            numeric_value = self._convert_to_numeric(cell_value) if cell_value else 0
-                            
-                            # Put numeric values in offer-specific columns if available
-                            if offer_name and col_type.lower() in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']:
-                                offer_col_name = offer_columns.get(col_type.lower())
-                                if offer_col_name and offer_col_name in new_row_data:
-                                    new_row_data[offer_col_name] = numeric_value
-                                    logger.warning(f"ADD DEBUG: Set {offer_col_name} = {numeric_value} (offer-specific)")
-                            
-                            # Keep master numeric columns as 0 (they were initialized above)
-                            logger.warning(f"ADD DEBUG: Master {df_column_name} remains 0 (numeric master)")
-                            
-                        except Exception as e:
-                            errors.append(f"Error converting {col_type} '{cell_value}': {e}")
-                            logger.warning(f"ADD DEBUG: Error converting {col_type}: {e}")
+                        numeric_value, is_valid, error_msg = self._convert_to_numeric(
+                            cell_value, position, col_type, source_sheet # Using position as row_index for ADD context
+                        )
+                        if not is_valid:
+                            errors.append(error_msg) # Add to ADD function's errors
+                            self.comparison_warnings.append(
+                                ValidationIssue(
+                                    row_index=position,
+                                    column_index=col_idx,
+                                    validation_type=ValidationType.DATA_TYPE,
+                                    level=ValidationLevel.WARNING,
+                                    message=error_msg,
+                                    expected_value="Numeric",
+                                    actual_value=cell_value,
+                                    suggestion=f"Correct format for '{col_type}' in sheet '{source_sheet}' at row {position+2}"
+                                )
+                            )
+                        
+                        # Put numeric values in offer-specific columns if available
+                        if offer_name and col_type.lower() in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']:
+                            offer_col_name = offer_columns.get(col_type.lower())
+                            if offer_col_name and offer_col_name in new_row_data:
+                                new_row_data[offer_col_name] = numeric_value
+                                logger.warning(f"ADD DEBUG: Set {offer_col_name} = {numeric_value} (offer-specific)")
+                        
+                        # Keep master numeric columns as 0 (they were initialized above)
+                        logger.warning(f"ADD DEBUG: Master {df_column_name} remains 0 (numeric master)")
                     
                     # Handle text columns - put values in master columns
                     elif col_type in ["DESCRIPTION", "CODE", "UNIT", "SCOPE"]:
                         if df_column_name in new_row_data and cell_value:  # Only set if not empty
                             # Special handling for DESCRIPTION - use the longest/most descriptive text
                             if col_type == "DESCRIPTION":
-                                # Prioritize longer, more descriptive text over short category-like text
-                                current_desc = new_row_data[df_column_name] or ""
-                                if (not current_desc or
-                                    len(cell_value) > len(current_desc) or
-                                    (len(cell_value) > 10 and len(current_desc) <= 10)):  # Prefer longer descriptions
-                                    new_row_data[df_column_name] = cell_value
-                                    logger.warning(f"ADD DEBUG: Set {df_column_name} = '{cell_value}' (better description)")
-                                else:
-                                    logger.warning(f"ADD DEBUG: Skipped {df_column_name} = '{cell_value}' (keeping current: '{current_desc}')")
+                                # For ADD rows, always use the description from the comparison data
+                                new_row_data[df_column_name] = cell_value
+                                logger.warning(f"ADD DEBUG: Set {df_column_name} = '{cell_value}' (from comparison data)")
                             # Special handling for SCOPE - ignore "nan" values
                             elif col_type == "SCOPE":
                                 if cell_value.lower() != "nan":
@@ -336,21 +396,15 @@ class ComparisonEngine:
             logger.error(error_msg)
             return {"success": False, "errors": [error_msg], "row_added": False}
     
-    def _convert_to_numeric(self, value: str) -> Optional[Union[int, float]]:
+    def _convert_to_numeric(self, value: str, row_index: int, column_name: str, source_sheet: str) -> Tuple[float, bool, Optional[str]]:
         """
-        Convert string value to numeric, handling various formats
-        
-        Args:
-            value: String value to convert
-            
-        Returns:
-            Numeric value (int or float) or 0 if conversion fails
+        Convert string value to numeric, handling various formats.
+        Returns a tuple: (numeric_value, success_flag, error_message_or_None)
         """
         try:
-            if not value or value.strip() == "":
-                return 0.0  # Return 0.0 instead of 0 to preserve float type
+            if not value or str(value).strip() == "":
+                return 0.0, True, None  # Empty value is valid, treated as 0.0
             
-            # Handle string representation of numbers
             value_str = str(value).strip()
             
             # Remove currency symbols, commas, and whitespace
@@ -365,16 +419,13 @@ class ComparisonEngine:
                 parts = clean_value.split('.')
                 clean_value = ''.join(parts[:-1]) + '.' + parts[-1]
             
-            # Convert to float first
             numeric_value = float(clean_value)
-            
-            # CRITICAL FIX: Always return float for better formatting consistency
-            # The UI formatting logic expects float values for proper decimal handling
-            return round(numeric_value, 6)  # Use 6 decimal places internally, UI will format to 2
+            return round(numeric_value, 6), True, None
                 
         except (ValueError, TypeError) as e:
-            logger.warning(f"Failed to convert '{value}' to numeric: {e}")
-            return 0.0  # Return 0.0 instead of 0 for failed conversions
+            error_msg = f"Invalid numeric format for '{column_name}' at row {row_index+2} (Sheet: '{source_sheet}'): '{value}' - {e}"
+            logger.warning(error_msg)
+            return 0.0, False, error_msg # Return 0.0, False, and error message
     
     def validate_merge_operation(self, dataset_dataframe: pd.DataFrame, 
                                offer_name: str, row_index: int) -> bool:
@@ -447,6 +498,7 @@ class ComparisonProcessor:
         self.instance_matches = []
         self.merge_results = []
         self.add_results = []
+        self.comparison_warnings = [] # New: To collect warnings during comparison
 
     def load_master_dataset(self, df, manual_invalidations=None):
         """
@@ -546,7 +598,7 @@ class ComparisonProcessor:
         if key_columns is None:
             key_columns = ['Description']
         if row_classifier is None:
-            from core.row_classifier import RowClassifier
+            from core.row_classifier import RowClassifier, RowType # Added RowType
             row_classifier = RowClassifier()
         results = []
         for idx, row in self.comparison_data.iterrows():
@@ -593,8 +645,42 @@ class ComparisonProcessor:
                         column_mapping[i] = ColumnType.DESCRIPTION
                 
                 row_values = [str(row[col]) if row[col] is not None else '' for col in self.comparison_data.columns]
-                is_valid = row_classifier.ROW_VALIDITY(row_values, column_mapping)
-                reason = 'ROW_VALIDITY' if is_valid else 'ROW_VALIDITY_FAIL'
+                
+                # Call classify_rows to get detailed validation results
+                # Pass the sheet name for better context in warnings
+                row_classification_result = row_classifier.classify_rows(
+                    [row_values], # Pass as a list of one row
+                    column_mapping,
+                    sheet_name=row.get('Source_Sheet', 'Comparison') # Get source sheet from row data
+                )
+                
+                # Extract validity and reason from the classification result
+                if row_classification_result.classifications:
+                    classification = row_classification_result.classifications[0]
+                    # A row is considered valid if it's a PRIMARY_LINE_ITEM and has no ERROR level validation issues
+                    is_valid = (classification.row_type == RowType.PRIMARY_LINE_ITEM and
+                                not any(issue.level == ValidationLevel.ERROR for issue in classification.validation_errors))
+                    reason = classification.row_type.value # Use row_type as reason
+                    
+                    # Collect all validation issues (errors and warnings)
+                    for issue in classification.validation_errors:
+                        self.comparison_warnings.append(issue)
+                else:
+                    is_valid = False
+                    reason = 'NO_CLASSIFICATION'
+                    self.comparison_warnings.append(
+                        ValidationIssue(
+                            row_index=idx,
+                            column_index=None,
+                            validation_type=ValidationType.BUSINESS_RULE,
+                            level=ValidationLevel.ERROR,
+                            message="Row could not be classified",
+                            expected_value="Valid row data",
+                            actual_value="No classification",
+                            suggestion="Review row content and column mappings"
+                        )
+                    )
+                
             results.append({
                 'row_index': idx,
                 'key': key_str,
@@ -602,7 +688,7 @@ class ComparisonProcessor:
                 'reason': reason
             })
         self.row_results = results
-        return results 
+        return results
 
     def process_valid_rows(self, instance_matcher=None, comparison_engine=None, key_columns=None, offer_name=None):
         """
@@ -749,6 +835,26 @@ class ComparisonProcessor:
                         pass
                     
                     # Call MERGE: merge comp_row into master_dataset at master_idx
+                    # Get units for comparison
+                    master_unit = self.master_dataset.loc[master_idx, 'unit']
+                    comp_unit = comp_row.get('unit', '') # Get unit from comparison row
+
+                    # Check for unit mismatch (Test 4)
+                    if str(master_unit).strip().lower() != str(comp_unit).strip().lower():
+                        self.comparison_warnings.append(
+                            ValidationIssue(
+                                row_index=master_idx, # Master row index
+                                column_index=None, # Unit column index is not fixed here
+                                validation_type=ValidationType.CONSISTENCY, # Or a new UNIT_MISMATCH type
+                                level=ValidationLevel.WARNING,
+                                message=f"Unit mismatch for item: Master unit '{master_unit}' vs. Comparison unit '{comp_unit}'",
+                                expected_value=master_unit,
+                                actual_value=comp_unit,
+                                suggestion=f"Review unit for item in sheet '{comp_row.get('Source_Sheet', 'Unknown')}' at row {comp_idx+2}" # +2 for Excel row number
+                            )
+                        )
+                        logger.warning(f"UNIT MISMATCH WARNING: Master row {master_idx} (unit: {master_unit}) vs. Comparison row {comp_idx} (unit: {comp_unit})")
+
                     # Map DataFrame column names to expected string values
                     column_mapping = {}
                     for i, col_name in enumerate(self.master_dataset.columns):
@@ -800,8 +906,9 @@ class ComparisonProcessor:
                             column_mapping_for_engine[i] = "MANHOURS"
                         elif col_name.lower() in ['wage', 'euro/hour', 'hourly rate']:
                             column_mapping_for_engine[i] = "WAGE"
-                        else:
-                            column_mapping_for_engine[i] = "DESCRIPTION" # Default for unknown columns
+                        elif col_name.lower() in ['scope']:
+                            column_mapping_for_engine[i] = "SCOPE"
+                        # Don't map unknown columns to DESCRIPTION - leave them unmapped
                     
                     merge_result = comparison_engine.MERGE(
                         comp_row_values,
