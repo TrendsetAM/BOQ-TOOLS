@@ -2799,6 +2799,30 @@ class MainWindow:
             # Update the file mapping's dataframe with the merged data
             file_mapping.dataframe = updated_df.copy()
             
+            # CRITICAL FIX: Store comparison offer info in controller's current_files
+            # This ensures the comparison offer info is available for summary display
+            if offer_info:
+                offer_name = offer_info.get('offer_name', 'Comparison')
+                logger.info(f"Storing comparison offer info for offer: {offer_name}")
+                
+                # Find the file key for the current tab
+                file_key = None
+                for key, file_data in self.controller.current_files.items():
+                    if hasattr(file_data.get('file_mapping'), 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_id):
+                        file_key = key
+                        break
+                
+                if file_key:
+                    # Ensure offers dictionary exists
+                    if 'offers' not in self.controller.current_files[file_key]:
+                        self.controller.current_files[file_key]['offers'] = {}
+                    
+                    # Store the comparison offer info
+                    self.controller.current_files[file_key]['offers'][offer_name] = offer_info
+                    logger.info(f"Stored comparison offer info: {offer_info}")
+                else:
+                    logger.warning("Could not find file key to store comparison offer info")
+            
             # Reset comparison workflow flags to allow normal UI refresh
             self.is_comparison_workflow = False
             self.comparison_processor = None
@@ -2929,14 +2953,8 @@ class MainWindow:
                             val = format_number_eu(val)
                         elif col in ['quantity', 'manhours']:
                             # Number formatting (same as row review)
+                            # Use standard European number formatting for all numeric columns
                             val = format_number_eu(val)
-                            # Special formatting for manhours - only 2 decimals (same as row review)
-                            if col == 'manhours' and val and val != '':
-                                try:
-                                    num_val = float(str(val).replace(',', '.'))
-                                    val = f"{num_val:.2f}"
-                                except:
-                                    pass
                         else:
                             val = str(val)
                     else:
@@ -5614,15 +5632,8 @@ Offer Information:
                         # Currency formatting (same as row review) - applies to both master and comparison
                         val = format_number_eu(val)
                     elif base_col in ['quantity', 'manhours']:
-                        # Number formatting (same as row review) - applies to both master and comparison
+                        # Use standard European number formatting for both quantity and manhours
                         val = format_number_eu(val)
-                        # Special formatting for manhours - only 2 decimals (same as row review)
-                        if base_col == 'manhours' and val and val != '':
-                            try:
-                                num_val = float(str(val).replace(',', '.'))
-                                val = f"{num_val:.2f}"
-                            except:
-                                pass
                     else:
                         val = str(val)
                 else:
@@ -5634,8 +5645,12 @@ Offer Information:
         
         logger.info("Tab updated successfully with comparison data")
         
-        # Summary is already populated by _show_final_categorized_data, no need to refresh
-        logger.info("Tab updated successfully with comparison data")
+        # Refresh the summary to show all offers including comparison offers
+        try:
+            self._refresh_summary_after_comparison(tab, updated_df)
+            logger.info("Summary refreshed after comparison data update")
+        except Exception as e:
+            logger.error(f"Error refreshing summary after comparison: {e}")
         
     def _refresh_summary_after_comparison(self, tab, updated_df):
         """Refresh the summary frame to show all offers after comparison data is loaded"""

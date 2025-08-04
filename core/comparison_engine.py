@@ -77,23 +77,15 @@ class ComparisonEngine:
                 'wage': f'wage[{offer_name}]'
             }
             
-            # Only create offer-specific columns if we have actual values to merge
-            has_values_to_merge = False
-            for col_idx, col_type in column_mapping.items():
-                if col_idx < len(comparison_row_data):
-                    cell_value = str(comparison_row_data[col_idx]).strip() if comparison_row_data[col_idx] is not None else ""
-                    if cell_value and col_type in ["QUANTITY", "UNIT_PRICE", "TOTAL_PRICE", "MANHOURS", "WAGE"]:
-                        has_values_to_merge = True
-                        break
+            # CRITICAL FIX: Always create offer-specific columns and transfer data
+            # Remove conditional logic that was preventing data transfer for empty/zero values
+            for col_name, offer_col_name in offer_columns.items():
+                if offer_col_name not in dataset_dataframe.columns:
+                    dataset_dataframe[offer_col_name] = 0  # Initialize with 0 instead of None
+                    offer_columns_created.append(offer_col_name)
+                    logger.info(f"Created new offer column: {offer_col_name}")
             
-            # Create offer-specific columns only if we have values to merge
-            if has_values_to_merge:
-                for col_name, offer_col_name in offer_columns.items():
-                    if offer_col_name not in dataset_dataframe.columns:
-                        dataset_dataframe[offer_col_name] = None
-                        offer_columns_created.append(offer_col_name)
-                        # logger.info(f"Created new column: {offer_col_name}")
-            
+            # CRITICAL FIX: Always attempt to map and transfer data, regardless of empty values
             # Map comparison row data to offer columns
             updated_values = {}
             
@@ -101,56 +93,62 @@ class ComparisonEngine:
                 if col_idx < len(comparison_row_data):
                     cell_value = str(comparison_row_data[col_idx]).strip() if comparison_row_data[col_idx] is not None else ""
                     
+                    # CRITICAL FIX: Remove the "and cell_value" condition - always attempt conversion
                     # Map to appropriate offer column based on column type
-                    if col_type == "QUANTITY" and cell_value:
+                    if col_type == "QUANTITY":
                         try:
-                            numeric_value = self._convert_to_numeric(cell_value)
-                            if numeric_value is not None:
-                                updated_values[offer_columns['quantity']] = numeric_value
+                            numeric_value = self._convert_to_numeric(cell_value) if cell_value else 0
+                            updated_values[offer_columns['quantity']] = numeric_value
+                            logger.debug(f"MERGE: quantity '{cell_value}' -> {numeric_value}")
                         except Exception as e:
                             errors.append(f"Error converting quantity '{cell_value}': {e}")
+                            updated_values[offer_columns['quantity']] = 0
                     
-                    elif col_type == "UNIT_PRICE" and cell_value:
+                    elif col_type == "UNIT_PRICE":
                         try:
-                            numeric_value = self._convert_to_numeric(cell_value)
-                            if numeric_value is not None:
-                                updated_values[offer_columns['unit_price']] = numeric_value
+                            numeric_value = self._convert_to_numeric(cell_value) if cell_value else 0
+                            updated_values[offer_columns['unit_price']] = numeric_value
+                            logger.debug(f"MERGE: unit_price '{cell_value}' -> {numeric_value}")
                         except Exception as e:
                             errors.append(f"Error converting unit price '{cell_value}': {e}")
+                            updated_values[offer_columns['unit_price']] = 0
                     
-                    elif col_type == "TOTAL_PRICE" and cell_value:
+                    elif col_type == "TOTAL_PRICE":
                         try:
-                            numeric_value = self._convert_to_numeric(cell_value)
-                            if numeric_value is not None:
-                                updated_values[offer_columns['total_price']] = numeric_value
+                            numeric_value = self._convert_to_numeric(cell_value) if cell_value else 0
+                            updated_values[offer_columns['total_price']] = numeric_value
+                            logger.debug(f"MERGE: total_price '{cell_value}' -> {numeric_value}")
                         except Exception as e:
                             errors.append(f"Error converting total price '{cell_value}': {e}")
+                            updated_values[offer_columns['total_price']] = 0
                     
-                    elif col_type == "MANHOURS" and cell_value:
+                    elif col_type == "MANHOURS":
                         try:
-                            numeric_value = self._convert_to_numeric(cell_value)
-                            if numeric_value is not None:
-                                updated_values[offer_columns['manhours']] = numeric_value
+                            numeric_value = self._convert_to_numeric(cell_value) if cell_value else 0.0
+                            # CRITICAL FIX: Always store manhours as float to preserve decimal formatting
+                            updated_values[offer_columns['manhours']] = float(numeric_value) if numeric_value != 0 else 0.0
+                            logger.debug(f"MERGE: manhours '{cell_value}' -> {numeric_value} (stored as float)")
                         except Exception as e:
                             errors.append(f"Error converting manhours '{cell_value}': {e}")
+                            updated_values[offer_columns['manhours']] = 0.0
                     
-                    elif col_type == "WAGE" and cell_value:
+                    elif col_type == "WAGE":
                         try:
-                            numeric_value = self._convert_to_numeric(cell_value)
-                            if numeric_value is not None:
-                                updated_values[offer_columns['wage']] = numeric_value
+                            numeric_value = self._convert_to_numeric(cell_value) if cell_value else 0
+                            updated_values[offer_columns['wage']] = numeric_value
+                            logger.debug(f"MERGE: wage '{cell_value}' -> {numeric_value}")
                         except Exception as e:
                             errors.append(f"Error converting wage '{cell_value}': {e}")
+                            updated_values[offer_columns['wage']] = 0
             
+            # CRITICAL FIX: Always update the DataFrame, even with zero values
             # Update the DataFrame with the new values
-            if updated_values:
-                for col_name, value in updated_values.items():
-                    dataset_dataframe.at[row_index, col_name] = value
-                
-                rows_updated = 1
-                # logger.info(f"Updated row {row_index} with {len(updated_values)} offer-specific values")
-            else:
-                logger.warning(f"No valid values found to merge for row {row_index}")
+            for col_name, value in updated_values.items():
+                dataset_dataframe.at[row_index, col_name] = value
+                logger.debug(f"MERGE: Set {col_name} = {value} at row {row_index}")
+            
+            rows_updated = 1 if updated_values else 0
+            logger.info(f"MERGE: Updated row {row_index} with {len(updated_values)} offer-specific values")
             
             return MergeResult(
                 success=len(errors) == 0,
@@ -208,10 +206,10 @@ class ComparisonEngine:
                     if col_type in ["QUANTITY", "UNIT_PRICE", "TOTAL_PRICE", "MANHOURS", "WAGE"]:
                         try:
                             numeric_value = self._convert_to_numeric(cell_value)
-                            new_row_data[col_type] = numeric_value if numeric_value is not None else ""
+                            new_row_data[col_type] = numeric_value if numeric_value is not None else 0
                         except Exception as e:
                             errors.append(f"Error converting {col_type} '{cell_value}': {e}")
-                            new_row_data[col_type] = ""
+                            new_row_data[col_type] = 0
                     
                     elif col_type in ["DESCRIPTION", "CODE", "UNIT"]:
                         # Text fields - use as is
@@ -232,7 +230,13 @@ class ComparisonEngine:
                     if col in new_row_data:
                         row_data_for_df[col] = new_row_data[col]
                     else:
-                        row_data_for_df[col] = ""  # Fill missing columns with empty string
+                        # CRITICAL FIX 2: Set master numeric columns to 0, not empty strings
+                        # Check if this is a numeric master column (not an offer-specific column)
+                        if (col in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage'] and
+                            '[' not in col):  # Master columns don't have [offer_name] suffix
+                            row_data_for_df[col] = 0  # Use 0 for numeric master columns
+                        else:
+                            row_data_for_df[col] = ""  # Use empty string for text columns
                 
                 # Append to DataFrame in place
                 dataset_dataframe.loc[len(dataset_dataframe)] = row_data_for_df
@@ -263,31 +267,37 @@ class ComparisonEngine:
             value: String value to convert
             
         Returns:
-            Numeric value (int or float) or None if conversion fails
+            Numeric value (int or float) or 0 if conversion fails
         """
         try:
             if not value or value.strip() == "":
-                return None
+                return 0.0  # Return 0.0 instead of 0 to preserve float type
+            
+            # Handle string representation of numbers
+            value_str = str(value).strip()
             
             # Remove currency symbols, commas, and whitespace
-            clean_value = re.sub(r'[\$€£¥₹,\s\u00A0]', '', value.strip())
+            clean_value = re.sub(r'[\$€£¥₹,\s\u00A0]', '', value_str)
             
             # Handle European decimal format (comma as decimal separator)
             if ',' in clean_value and clean_value.count(',') == 1 and '.' not in clean_value:
                 clean_value = clean_value.replace(',', '.')
             
+            # Handle multiple dots (thousands separators) - keep only the last one as decimal
+            if clean_value.count('.') > 1:
+                parts = clean_value.split('.')
+                clean_value = ''.join(parts[:-1]) + '.' + parts[-1]
+            
             # Convert to float first
             numeric_value = float(clean_value)
             
-            # Return as int if it's a whole number, otherwise as float
-            if numeric_value.is_integer():
-                return int(numeric_value)
-            else:
-                return numeric_value
+            # CRITICAL FIX: Always return float for better formatting consistency
+            # The UI formatting logic expects float values for proper decimal handling
+            return round(numeric_value, 6)  # Use 6 decimal places internally, UI will format to 2
                 
         except (ValueError, TypeError) as e:
             logger.warning(f"Failed to convert '{value}' to numeric: {e}")
-            return None
+            return 0.0  # Return 0.0 instead of 0 for failed conversions
     
     def validate_merge_operation(self, dataset_dataframe: pd.DataFrame, 
                                offer_name: str, row_index: int) -> bool:
@@ -540,6 +550,24 @@ class ComparisonProcessor:
             instance_matcher = InstanceMatcher()
         if comparison_engine is None:
             comparison_engine = ComparisonEngine()
+        
+        # CRITICAL FIX 1: Ensure offer-specific columns are always created at the beginning
+        # This guarantees columns exist even in 100% ADD scenarios
+        if offer_name:
+            offer_columns = {
+                'quantity': f'quantity[{offer_name}]',
+                'unit_price': f'unit_price[{offer_name}]',
+                'total_price': f'total_price[{offer_name}]',
+                'manhours': f'manhours[{offer_name}]',
+                'wage': f'wage[{offer_name}]'
+            }
+            
+            # Create offer columns if they don't exist, initialize with 0
+            for col_name, offer_col_name in offer_columns.items():
+                if offer_col_name not in self.master_dataset.columns:
+                    self.master_dataset[offer_col_name] = 0
+                    logger.info(f"Created offer column: {offer_col_name}")
+        
         # Filter valid rows from previous step
         valid_rows = [r for r in self.row_results if r['is_valid']]
         merge_results = []
@@ -568,11 +596,14 @@ class ComparisonProcessor:
             #     logger.info(f"Row 195 data: {dict(row)}")
                 pass
             
-            # Get all instances in both datasets using normalized whitespace matching
+            # CRITICAL FIX: Use consistent normalized whitespace matching for both datasets
             # This handles cases where descriptions have different whitespace/newline characters
             normalized_desc = ' '.join(description.split())  # Normalize whitespace
             
-            comp_instances = self.comparison_data[self.comparison_data[key_columns[0]] == description]
+            # Apply same normalization to both comparison and master datasets
+            comp_instances = self.comparison_data[
+                self.comparison_data[key_columns[0]].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
+            ]
             master_instances = self.master_dataset[
                 self.master_dataset[key_columns[0]].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
             ]

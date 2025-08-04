@@ -274,14 +274,8 @@ class ComparisonRowReviewDialog:
                         if col in ['unit_price', 'total_price', 'wage']:
                             val = format_number_eu(val)
                         elif col in ['quantity', 'manhours']:
+                            # Use standard European number formatting for all numeric columns
                             val = format_number_eu(val)
-                            # Special formatting for manhours - only 2 decimals
-                            if col == 'manhours' and val and val != '':
-                                try:
-                                    num_val = float(str(val).replace(',', '.'))
-                                    val = f"{num_val:.2f}"
-                                except:
-                                    pass
                         
                         row_dict[col] = val
                     
@@ -371,14 +365,8 @@ class ComparisonRowReviewDialog:
                 if col in ['unit_price', 'total_price', 'wage']:
                     val = format_number_eu(val)
                 elif col in ['quantity', 'manhours']:
+                    # Use standard European number formatting for all numeric columns
                     val = format_number_eu(val)
-                    # Special formatting for manhours - only 2 decimals
-                    if col == 'manhours' and val and val != '':
-                        try:
-                            num_val = float(str(val).replace(',', '.'))
-                            val = f"{num_val:.2f}"
-                        except:
-                            pass
                 
                 row_values.append(val)
             
