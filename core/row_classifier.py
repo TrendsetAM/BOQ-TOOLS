@@ -1156,3 +1156,4 @@ def _is_positive_numeric_static(value: str) -> bool:
         return num >= 0
     except (ValueError, TypeError):
         return False 
+        
