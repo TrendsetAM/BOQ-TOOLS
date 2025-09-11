@@ -7415,31 +7415,93 @@
       "created_date": null,
       "usage_count": 0,
       "notes": null
+    },
+    {
+      "description": "cleanup of explosive remnants of war",
+      "category": "Civil Works",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "fence and gate",
+      "category": "Civil Works",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "other civil works",
+      "category": "Civil Works",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "fields sensors and meteo station supply, transportation, delivery and commissioning",
+      "category": "Electrical Works",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "active anti-rodent system [l] -  supply",
+      "category": "Electrical Works",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "supply and installat of the structural pre-fabricated box of the delivery cabin in vibrated reinforced concrete (cabina di consegna) in accordance with the local regulation of tso (in italy is e-distribuzione technical specification dg 2061) - consisting of two rooms: mv room, measurement room. all electrical internal equipment is excluded. \n\nincludes elevation structure and foundation (including excavation, backfilling, disposal, and concretes), ground zero slab all fully completed at civil level as indicated in the specification.\nearthworks and drainages for platform and area finishing (e.g. sidewalk if needed) excluded.",
+      "category": "Other",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "installation and interconnection of user cabin (cabina utente) -  including plant scada cabinet (out of scope of sup) and all types of connections from outside the cabin: mv cables, lv cables, communication and control, primary earth grid, i&c communication panel.",
+      "category": "Other",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "mechanical assembly of trackers  structures (pv panels installation excluded) -1x120\nincluding all materials (e.g. coupling nuts and bolts, anchor bolts with specially provided inserts, expansion bolts, welding materials, shims, etc.) and activities necessary to carry out the mechanical installation (e.g. drillings; renovation of hot-dip galvanizing according to the structure manufacturer, if removed/damaged during installation; installation of motor, drive arm mechanism, dampers, spring and any other device necessary for the perfect functioning of the structure; implementation of defense procedures during construction phasis; etc.)",
+      "category": "Tracker Inst.",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
     }
   ],
   "categories": [
-    "Site Costs",
-    "LV Cables",
-    "Cleaning and Cabling of PV Mod.",
-    "General Costs",
-    "MV Cables",
-    "Solar Cables",
-    "Trenching",
+    "OEM Building",
     "Earth Movement",
+    "Roads",
+    "Trenching",
+    "PV Mod. Installation",
+    "Other",
+    "Cleaning and Cabling of PV Mod.",
     "Tracker Inst.",
     "Equipment",
+    "Solar Cables",
+    "Site Costs",
+    "MV Cables",
+    "LV Cables",
     "Electrical Works",
-    "Other",
-    "Roads",
-    "PV Mod. Installation",
-    "OEM Building",
+    "General Costs",
     "Civil Works"
   ],
   "metadata": {
-    "total_mappings": 927,
+    "total_mappings": 935,
     "total_categories": 16,
-    "last_updated": "C:\\Users\\Admin\\Documents\\GitHub\\BOQ-TOOLS",
-    "migrated_to_pretty_categories": true,
-    "migration_backup": "config\\category_dictionary.backup.json"
+    "last_updated": "C:\\Users\\Admin\\Documents\\GitHub\\BOQ-TOOLS"
   }
 }
