@@ -19,7 +19,8 @@
     "count",
     "nos",
     "Quantity",
-    "QUANTITY"
+    "QUANTITY",
+    "ESTIMATED \nQUANTITY"
   ],
   "unit_price": [
     "unit price",
@@ -30,7 +31,9 @@
     "unit rate",
     "price per unit",
     "Unit Price",
-    "UNIT\nPRICE"
+    "UNIT\nPRICE",
+    "UNITARY \nPRICE",
+    "UNIT PRICE"
   ],
   "total_price": [
     "total price",
@@ -43,7 +46,8 @@
     "value",
     "Total Price",
     "TOTAL \nPRICE",
-    "TOTAL PRICE"
+    "TOTAL PRICE",
+    "TOTAL"
   ],
   "unit": [
     "unit",
@@ -53,7 +57,8 @@
     "units",
     "measurement",
     "Unit of measure",
-    "UNIT\n(SI)"
+    "UNIT\n(SI)",
+    "Measurement \nUnit"
   ],
   "code": [
     "code",
@@ -65,13 +70,17 @@
     "boq code",
     "schedule no",
     "Code",
-    "CODE"
+    "CODE",
+    "Item",
+    "Cod. REFERENCE"
   ],
   "scope": [
     "scope",
-    "SCOPE"
+    "SCOPE",
+    "B=Base Contract\nO=optional"
   ],
   "manhours": [
+    "ore",
     "manhours",
     "man hours",
     "labour ore/u.m.",
