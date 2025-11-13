@@ -53,9 +53,10 @@ class CategorizationDialog:
         self.dialog.geometry("800x600")
         self.dialog.minsize(700, 500)
         
-        # Make dialog modal
+        # Make dialog modal without enforcing a global grab
         self.dialog.transient(self.parent)
-        self.dialog.grab_set()
+        self.dialog.focus_set()
+        self.dialog.lift()
         
         # Center dialog on parent
         self.dialog.update_idletasks()

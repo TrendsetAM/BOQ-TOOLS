@@ -268,7 +268,7 @@ def tooltip(widget, text):
     widget.bind('<Leave>', on_leave)
 
 
-from utils.format_utils import format_number_eu
+from utils.format_utils import format_number_eu, excel_column_letter
 
 class MainWindow:
     def __init__(self, controller, root=None):
@@ -850,12 +850,15 @@ class MainWindow:
         propagate_btn.grid(row=99, column=0, sticky=tk.W, padx=5, pady=(0, 5))
         
         # Create treeview for column mappings
-        columns = ("Original Header", "Mapped Type", "Confidence", "Required", "Actions")
+        columns = ("Column", "Original Header", "Mapped Type", "Confidence", "Required", "Actions")
         tree = ttk.Treeview(mappings_frame, columns=columns, show="headings", height=10)
         
         for col in columns:
             tree.heading(col, text=col)
-            tree.column(col, width=150)
+            if col == "Column":
+                tree.column(col, width=60, anchor=tk.CENTER)
+            else:
+                tree.column(col, width=150)
         
         # Add scrollbars
         v_scrollbar = ttk.Scrollbar(mappings_frame, orient=tk.VERTICAL, command=tree.yview)
@@ -886,6 +889,9 @@ class MainWindow:
         # Populate treeview with column mappings
         if hasattr(sheet, 'column_mappings'):
             for mapping in sheet.column_mappings:
+                col_index = getattr(mapping, 'column_index', None)
+                # Column indices supplied by MappingGenerator are zero-based.
+                column_letter = excel_column_letter(col_index) if col_index is not None else "--"
                 confidence = getattr(mapping, 'confidence', 0)
                 mapped_type = getattr(mapping, 'mapped_type', 'unknown')
                 required = mapped_type in required_types
@@ -900,6 +906,7 @@ class MainWindow:
                 if required:
                     tags.append('required')
                 tree.insert("", tk.END, values=(
+                    column_letter,
                     original_header,
                     mapped_type,
                     f"{confidence:.1%}",
