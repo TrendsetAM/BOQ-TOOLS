@@ -27,44 +27,67 @@ class BOQProcessor:
         
         logger.info("BOQ Processor initialized")
     
-    def load_excel(self, file_path: Path) -> bool:
+    def load_excel(self, file_path: Path, sheets_to_process: Optional[List[str]] = None) -> bool:
         """
-        Load and analyze an Excel file
+        Load an Excel file and extract metadata
         
         Args:
             file_path: Path to the Excel file
+            sheets_to_process: Optional list of sheet names to process. If None, processes all visible sheets.
             
         Returns:
             True if file loaded successfully, False otherwise
         """
         try:
-            logger.info(f"Loading Excel file: {file_path}")
-            
             # Initialize file processor
             self.file_processor = ExcelProcessor(
                 max_memory_mb=self.config.processing_limits.memory_limit_mb
             )
             
-            # Load file
+            # Load the file
             if not self.file_processor.load_file(file_path):
                 logger.error("Failed to load Excel file")
                 return False
             
             self.current_file = file_path
             
-            # Extract metadata for all sheets
-            self.sheets_metadata = self.file_processor.get_all_sheets_metadata()
-            
-            # Sample content from each sheet
+            # Get visible sheets
             visible_sheets = self.file_processor.get_visible_sheets()
-            for sheet_name in visible_sheets:
+            if not visible_sheets:
+                logger.warning("No visible sheets found in file")
+                return False
+            
+            # Filter sheets to process
+            if sheets_to_process:
+                # Only process specified sheets that are visible
+                sheets_to_process = [sheet for sheet in sheets_to_process if sheet in visible_sheets]
+                if not sheets_to_process:
+                    logger.warning("None of the specified sheets are visible in the file")
+                    return False
+                logger.info(f"Processing {len(sheets_to_process)} specified sheets out of {len(visible_sheets)} visible sheets")
+            else:
+                # Process all visible sheets
+                sheets_to_process = visible_sheets
+                logger.info(f"Processing all {len(sheets_to_process)} visible sheets")
+            
+            # Extract metadata for specified sheets only
+            self.sheets_metadata = {}
+            for sheet_name in sheets_to_process:
+                try:
+                    metadata = self.file_processor.get_sheet_metadata(sheet_name)
+                    self.sheets_metadata[sheet_name] = metadata
+                except Exception as e:
+                    logger.warning(f"Failed to extract metadata for sheet '{sheet_name}': {e}")
+            
+            # Sample content from specified sheets only
+            for sheet_name in sheets_to_process:
                 try:
                     sample = self.file_processor.sample_sheet_content(sheet_name, rows=20)
                     self.sheets_content[sheet_name] = sample
                 except Exception as e:
                     logger.warning(f"Failed to sample content from sheet '{sheet_name}': {e}")
             
-            logger.info(f"Successfully loaded {len(visible_sheets)} sheets")
+            logger.info(f"Successfully loaded {len(sheets_to_process)} sheets")
             return True
             
         except Exception as e:
@@ -94,9 +117,10 @@ class BOQProcessor:
             "summary": {}
         }
         
-        visible_sheets = self.file_processor.get_visible_sheets()
+        # Process only the sheets that were loaded
+        sheets_to_process = list(self.sheets_metadata.keys())
         
-        for sheet_name in visible_sheets:
+        for sheet_name in sheets_to_process:
             try:
                 sheet_data = self._process_sheet(sheet_name)
                 if sheet_data:
@@ -394,3 +418,39 @@ class BOQProcessor:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit"""
         self.close() 
+
+    def identify_boq_sheets(self, sheet_names: List[str]) -> List[str]:
+        """
+        Identify which sheets are likely to be BOQ sheets based on naming patterns
+        
+        Args:
+            sheet_names: List of sheet names to analyze
+            
+        Returns:
+            List of sheet names that are likely BOQ sheets
+        """
+        boq_sheets = []
+        
+        # Common BOQ sheet name patterns
+        boq_patterns = [
+            'boq', 'bill', 'quantity', 'schedule', 'item', 'work', 'construction',
+            'civil', 'electrical', 'mechanical', 'structural', 'finishes',
+            'earthwork', 'concrete', 'steel', 'masonry', 'carpentry',
+            'plumbing', 'hvac', 'roofing', 'painting', 'landscaping'
+        ]
+        
+        for sheet_name in sheet_names:
+            sheet_lower = sheet_name.lower()
+            
+            # Check if sheet name contains BOQ-related keywords
+            is_boq_sheet = any(pattern in sheet_lower for pattern in boq_patterns)
+            
+            # Also include sheets that are not clearly non-BOQ
+            non_boq_patterns = ['summary', 'index', 'contents', 'toc', 'cover', 'title']
+            is_non_boq = any(pattern in sheet_lower for pattern in non_boq_patterns)
+            
+            if is_boq_sheet or not is_non_boq:
+                boq_sheets.append(sheet_name)
+        
+        logger.info(f"Identified {len(boq_sheets)} BOQ sheets out of {len(sheet_names)} total sheets")
+        return boq_sheets 

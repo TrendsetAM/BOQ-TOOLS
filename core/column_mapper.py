@@ -27,7 +27,6 @@ class HeaderDetectionMethod(Enum):
     KEYWORD_MATCH = "keyword_match"
     DATA_TYPE_PATTERN = "data_type_pattern"
     POSITIONAL_LOGIC = "positional_logic"
-    MERGED_CELLS = "merged_cells"
 
 
 @dataclass
@@ -70,20 +69,23 @@ class ColumnMapper:
     
     # Default canonical required type mapping
     DEFAULT_CANONICAL_HEADER_MAP = {
-        'description': ["description", "desc", "item description", "work description", "scope", "item", "activity", "task"],
+        'description': ["description", "desc", "item description", "work description", "item", "activity", "task"],
         'quantity': ["quantity", "qty", "quant", "qty.", "number", "count", "nos"],
         'unit_price': ["unit price", "unit_price", "price/unit", "unitprice", "rate", "unit rate", "price per unit"],
         'total_price': ["total price", "total_price", "amount", "price", "total", "sum", "cost", "value"],
         'unit': ["unit", "uom", "measure", "unit of measure", "units", "measurement"],
-        'code': ["code", "item code", "ref code", "reference code", "item no", "item number", "boq code", "schedule no"]
+        'code': ["code", "item code", "ref code", "reference code", "item no", "item number", "boq code", "schedule no"],
+        'scope': ["scope"],
+        'manhours': ["manhours", "man hours", "labour ore/u.m.", "labor ore/u.m."],
+        'wage': ["euro/hour", "wage", "hourly rate", "labour euro/hour", "labor euro/hour"]
     }
     
-    def __init__(self, max_header_rows: int = 10):
+    def __init__(self, max_header_rows: int = 20):
         """
         Initialize the column mapper
         
         Args:
-            max_header_rows: Maximum number of rows to check for headers
+            max_header_rows: Maximum number of rows to check for headers (default: 20)
         """
         self.config = get_config()
         self.max_header_rows = max_header_rows
@@ -224,6 +226,8 @@ class ColumnMapper:
         """Get current canonical mappings"""
         return self.CANONICAL_HEADER_MAP.copy()
     
+
+    
     def find_header_row(self, sheet_data: List[List[str]]) -> HeaderRowInfo:
         """
         Find the header row in sheet data
@@ -248,8 +252,7 @@ class ColumnMapper:
             methods = [
                 self._detect_by_keywords,
                 self._detect_by_data_patterns,
-                self._detect_by_positional_logic,
-                self._detect_by_merged_cells
+                self._detect_by_positional_logic
             ]
             for method in methods:
                 try:
@@ -267,15 +270,8 @@ class ColumnMapper:
                         if method == self._detect_by_keywords:
                             keyword_candidates.append(result)
                         
-                        # Apply tie-breaker logic: prefer keyword matches when scores are close
+                        # Simple scoring: highest confidence wins
                         if result.confidence > best_score:
-                            best_score = result.confidence
-                            best_header = result
-                        elif (result.confidence >= best_score - 0.1 and  # Within 0.1 of best score
-                              method == self._detect_by_keywords and 
-                              best_header and 
-                              best_header.method == HeaderDetectionMethod.MERGED_CELLS):
-                            # Prefer keyword matches over merged cells when scores are close
                             best_score = result.confidence
                             best_header = result
                             
@@ -314,6 +310,19 @@ class ColumnMapper:
                     )
                     break
         
+        # After finding the best header row, check for hierarchical headers
+        if best_header:
+            # Check if there are parent headers above it
+            if best_header.row_index > 0:
+                enhanced_header = self._enhance_header_with_parent_row(best_header, sheet_data)
+                if enhanced_header:
+                    best_header = enhanced_header
+            
+            # Check if the header row itself has merged cells and subheaders below it
+            enhanced_header = self._enhance_header_with_subheader_row(best_header, sheet_data)
+            if enhanced_header:
+                best_header = enhanced_header
+        
         if best_header:
             logger.info(f"Header row found at index {best_header.row_index} "
                        f"with confidence {best_header.confidence:.2f}")
@@ -329,9 +338,309 @@ class ColumnMapper:
             )
         return best_header
     
+    def _enhance_header_with_parent_row(self, header_info: HeaderRowInfo, sheet_data: List[List[str]]) -> Optional[HeaderRowInfo]:
+        """
+        Check if there's a parent row above the header row that contains merged cells
+        Enhanced with logic from former Method 4 for better hierarchical detection
+        Only applies enhancement if current headers are not already well-recognized
+        
+        Args:
+            header_info: The detected header row info
+            sheet_data: Complete sheet data
+            
+        Returns:
+            Enhanced HeaderRowInfo if parent row with merged cells detected, None otherwise
+        """
+        row_index = header_info.row_index
+        current_row = sheet_data[row_index]  # This is the detected header row (subheaders)
+        
+        # Check if there's a previous row to use as parent headers
+        if row_index == 0:
+            return None
+        
+
+        
+        parent_row = sheet_data[row_index - 1]  # This could be the parent header row
+        
+        # Enhanced detection logic (migrated from Method 4)
+        enhancement_confidence = 0.0
+        enhancement_reasoning = []
+        
+        # Check for merged cell indicators (empty cells between content)
+        empty_cells = sum(1 for cell in parent_row if not cell or not str(cell).strip())
+        total_cells = len(parent_row)
+        
+        if empty_cells > 0 and empty_cells < total_cells:
+            enhancement_confidence = 0.2
+            enhancement_reasoning.append(f"Potential merged cells: {empty_cells}/{total_cells} empty cells")
+        
+        # Check if parent row has some content (indicating it's a header row)
+        parent_content = sum(1 for cell in parent_row if cell and str(cell).strip())
+        
+        if parent_content == 0:
+            # No content in parent row
+            return None
+        
+        # Enhanced parent-subheader relationship detection (from Method 4)
+        parent_non_empty = [i for i, cell in enumerate(parent_row) if cell and str(cell).strip()]
+        current_non_empty = [i for i, cell in enumerate(current_row) if cell and str(cell).strip()]
+        
+        # Look for patterns where parent row has fewer cells that might span multiple columns
+        if len(parent_non_empty) > 0 and len(current_non_empty) > len(parent_non_empty):
+            # Check if parent row cells could be parent headers
+            for i, cell in enumerate(parent_row):
+                if cell and str(cell).strip():
+                    cell_lower = str(cell).strip().lower()
+                    # Look for common parent header terms
+                    if any(term in cell_lower for term in ['labour', 'labor', 'material', 'equipment', 'cost', 'price', 'analysis']):
+                        enhancement_confidence = max(enhancement_confidence, 0.4)
+                        enhancement_reasoning.append(f"Potential parent header '{cell}' with subheaders below")
+            
+            # Enhanced detection for labor-related hierarchical headers (from Method 4)
+            combined_headers = self._create_hierarchical_headers(parent_row, current_row)
+            labor_matches = 0
+            for combined_header in combined_headers:
+                if combined_header:
+                    combined_lower = combined_header.lower()
+                    if any(term in combined_lower for term in ['ore/u.m.', 'euro/hour', 'manhours', 'wage']):
+                        labor_matches += 1
+            
+            if labor_matches > 0:
+                # Boost confidence significantly for labor hierarchical headers
+                enhancement_confidence = max(enhancement_confidence, 0.9)
+                enhancement_reasoning.append(f"Found {labor_matches} labor-related hierarchical headers")
+                
+                # Use the enhanced headers
+                enhanced_headers = combined_headers
+            else:
+                # Use selective hierarchical headers
+                enhanced_headers = self._create_selective_hierarchical_headers(parent_row, current_row)
+        else:
+            # Use selective hierarchical headers
+            enhanced_headers = self._create_selective_hierarchical_headers(parent_row, current_row)
+        
+        # Check if we actually created any hierarchical headers
+        has_hierarchical = any(' ' in header for header in enhanced_headers if header)
+        
+        if has_hierarchical or enhancement_confidence >= 0.25:
+            # Boost the original confidence with enhancement confidence
+            boosted_confidence = min(1.0, header_info.confidence + (enhancement_confidence * 0.3))
+            
+            # Add reasoning about the enhancement
+            enhanced_reasoning = header_info.reasoning.copy()
+            enhanced_reasoning.extend(enhancement_reasoning)
+            enhanced_reasoning.append("Enhanced with hierarchical headers from parent row merged cells")
+            
+            return HeaderRowInfo(
+                row_index=header_info.row_index,
+                confidence=boosted_confidence,
+                method=header_info.method,
+                reasoning=enhanced_reasoning,
+                headers=enhanced_headers,
+                is_merged=True
+            )
+        
+        return None
+    
+    def _enhance_header_with_subheader_row(self, header_info: HeaderRowInfo, sheet_data: List[List[str]]) -> Optional[HeaderRowInfo]:
+        """
+        Check if the header row itself has merged cells and subheaders below it
+        Enhanced with logic from former Method 4 for better hierarchical detection
+        Only applies enhancement if current headers are not already well-recognized
+        
+        Args:
+            header_info: The detected header row info
+            sheet_data: Complete sheet data
+            
+        Returns:
+            Enhanced HeaderRowInfo if subheader row with merged cells detected, None otherwise
+        """
+        row_index = header_info.row_index
+        current_row = sheet_data[row_index]  # This is the detected header row (parent headers)
+        
+        # Check if there's a next row to use as subheaders
+        if row_index >= len(sheet_data) - 1:
+            return None
+        
+
+        
+        subheader_row = sheet_data[row_index + 1]  # This could be the subheader row
+        
+        # Enhanced detection logic (migrated from Method 4)
+        enhancement_confidence = 0.0
+        enhancement_reasoning = []
+        
+        # Check for merged cell indicators (empty cells between content)
+        empty_cells = sum(1 for cell in current_row if not cell or not str(cell).strip())
+        total_cells = len(current_row)
+        
+        if empty_cells > 0 and empty_cells < total_cells:
+            enhancement_confidence = 0.2
+            enhancement_reasoning.append(f"Potential merged cells: {empty_cells}/{total_cells} empty cells")
+        
+        # Check if current row has some content (indicating it's a header row)
+        current_content = sum(1 for cell in current_row if cell and str(cell).strip())
+        
+        if current_content == 0:
+            # No content in current row
+            return None
+        
+        # Check if subheader row has content
+        subheader_content = sum(1 for cell in subheader_row if cell and str(cell).strip())
+        
+        if subheader_content == 0:
+            # No content in subheader row
+            return None
+        
+        # Enhanced parent-subheader relationship detection (from Method 4)
+        current_non_empty = [i for i, cell in enumerate(current_row) if cell and str(cell).strip()]
+        next_non_empty = [i for i, cell in enumerate(subheader_row) if cell and str(cell).strip()]
+        
+        # Look for patterns where current row has fewer cells that might span multiple columns
+        if len(current_non_empty) > 0 and len(next_non_empty) > len(current_non_empty):
+            # Check if current row cells could be parent headers
+            for i, cell in enumerate(current_row):
+                if cell and str(cell).strip():
+                    cell_lower = str(cell).strip().lower()
+                    # Look for common parent header terms
+                    if any(term in cell_lower for term in ['labour', 'labor', 'material', 'equipment', 'cost', 'price', 'analysis']):
+                        enhancement_confidence = max(enhancement_confidence, 0.4)
+                        enhancement_reasoning.append(f"Potential parent header '{cell}' with subheaders below")
+            
+            # Enhanced detection for labor-related hierarchical headers (from Method 4)
+            combined_headers = self._create_hierarchical_headers(current_row, subheader_row)
+            labor_matches = 0
+            for combined_header in combined_headers:
+                if combined_header:
+                    combined_lower = combined_header.lower()
+                    if any(term in combined_lower for term in ['ore/u.m.', 'euro/hour', 'manhours', 'wage']):
+                        labor_matches += 1
+            
+            if labor_matches > 0:
+                # Boost confidence significantly for labor hierarchical headers
+                enhancement_confidence = max(enhancement_confidence, 0.9)
+                enhancement_reasoning.append(f"Found {labor_matches} labor-related hierarchical headers")
+                
+                # Use the enhanced headers
+                enhanced_headers = combined_headers
+            else:
+                # Use selective hierarchical headers
+                enhanced_headers = self._create_selective_hierarchical_headers(current_row, subheader_row)
+        else:
+            # Use selective hierarchical headers
+            enhanced_headers = self._create_selective_hierarchical_headers(current_row, subheader_row)
+        
+        # Check if we actually created any hierarchical headers
+        has_hierarchical = any(' ' in header for header in enhanced_headers if header)
+        
+        if has_hierarchical or enhancement_confidence >= 0.25:
+            # Boost the original confidence with enhancement confidence
+            boosted_confidence = min(1.0, header_info.confidence + (enhancement_confidence * 0.3))
+            
+            # Add reasoning about the enhancement
+            enhanced_reasoning = header_info.reasoning.copy()
+            enhanced_reasoning.extend(enhancement_reasoning)
+            enhanced_reasoning.append("Enhanced with hierarchical headers from subheader row merged cells")
+            
+            return HeaderRowInfo(
+                row_index=header_info.row_index,  # Keep the same row index
+                confidence=boosted_confidence,
+                method=header_info.method,
+                reasoning=enhanced_reasoning,
+                headers=enhanced_headers,
+                is_merged=True
+            )
+        
+        return None
+    
+    def _create_selective_hierarchical_headers(self, parent_row: List[str], subheader_row: List[str]) -> List[str]:
+        """
+        Create hierarchical headers only for merged cell sections, keep original headers for others
+        Enhanced to preserve individual well-recognized headers even during enhancement
+        
+        Args:
+            parent_row: Parent header row (may have empty cells indicating merged cells)
+            subheader_row: Subheader row
+            
+        Returns:
+            List of headers with hierarchical structure only where needed
+        """
+        enhanced_headers = []
+        
+        # Ensure both rows have the same length
+        max_length = max(len(parent_row), len(subheader_row))
+        parent_row = parent_row + [""] * (max_length - len(parent_row))
+        subheader_row = subheader_row + [""] * (max_length - len(subheader_row))
+        
+        # Identify parent header spans
+        parent_spans = self._identify_parent_spans(parent_row, subheader_row)
+        
+        for i, subheader in enumerate(subheader_row):
+            # Check if the subheader is already a well-recognized keyword
+            subheader_recognized = False
+            if subheader and str(subheader).strip():
+                subheader_lower = str(subheader).strip().lower()
+                for column_type, keywords in self.CANONICAL_HEADER_MAP.items():
+                    for keyword in keywords:
+                        if keyword.lower() == subheader_lower:
+                            subheader_recognized = True
+                            break
+                    if subheader_recognized:
+                        break
+            
+            # Check if the parent header is already a well-recognized keyword
+            parent_recognized = False
+            if i < len(parent_row) and parent_row[i] and str(parent_row[i]).strip():
+                parent_lower = str(parent_row[i]).strip().lower()
+                for column_type, keywords in self.CANONICAL_HEADER_MAP.items():
+                    for keyword in keywords:
+                        if keyword.lower() == parent_lower:
+                            parent_recognized = True
+                            break
+                    if parent_recognized:
+                        break
+            
+            # Check if this column is part of a merged cell span
+            parent_header = ""
+            is_in_span = False
+            
+            for span_start, span_end, span_header in parent_spans:
+                if span_start <= i <= span_end and span_end > span_start:  # Only for multi-column spans
+                    parent_header = span_header
+                    is_in_span = True
+                    break
+            
+            # SMART HEADER SELECTION: Preserve recognized headers
+            if subheader_recognized:
+                # Subheader is recognized - use it as-is, don't enhance
+                enhanced_header = str(subheader).strip()
+            elif parent_recognized and not is_in_span:
+                # Parent header is recognized and not in merged span - use it as-is
+                enhanced_header = str(parent_row[i]).strip()
+            elif is_in_span and subheader and str(subheader).strip():
+                # This is part of a merged cell span and subheader is not recognized, create hierarchical header
+                subheader_str = str(subheader).strip()
+                enhanced_header = f"{parent_header} {subheader_str}"
+            elif not is_in_span and parent_row[i] and str(parent_row[i]).strip():
+                # This is not in a merged span, use the original parent header
+                enhanced_header = str(parent_row[i]).strip()
+            elif subheader and str(subheader).strip():
+                # Fallback to subheader if available
+                enhanced_header = str(subheader).strip()
+            elif parent_header:
+                # No subheader but has parent header
+                enhanced_header = parent_header
+            else:
+                # Empty
+                enhanced_header = ""
+            
+            enhanced_headers.append(enhanced_header)
+        
+        return enhanced_headers
+    
     def _detect_by_keywords(self, row: List[str], row_index: int, 
                            sheet_data: List[List[str]]) -> Optional[HeaderRowInfo]:
-        """Detect header row by keyword matching"""
+        """Detect header row by exact keyword matching using canonical mappings dictionary"""
         if not row:
             return None
         
@@ -346,15 +655,27 @@ class ColumnMapper:
             
             cell_lower = str(cell).lower().strip()
             
-            # Check against all column type keywords
-            for col_type in self.config.get_all_column_types():
-                mapping = self.config.get_column_mapping(col_type)
-                if mapping:
-                    for keyword in mapping.keywords:
-                        if keyword.lower() in cell_lower:
-                            score += mapping.weight
-                            keyword_count += 1
-                            matches.append(f"'{cell}' matches {col_type.value}")
+            # Check against canonical mappings dictionary (learned keywords)
+            for column_type, keywords in self.CANONICAL_HEADER_MAP.items():
+                for keyword in keywords:
+                    # Changed from substring matching to exact matching
+                    if keyword.lower() == cell_lower:
+                        # Get weight from config for this column type
+                        col_type_enum = None
+                        for ct in self.config.get_all_column_types():
+                            if ct.value == column_type:
+                                col_type_enum = ct
+                                break
+                        
+                        if col_type_enum:
+                            mapping = self.config.get_column_mapping(col_type_enum)
+                            weight = mapping.weight if mapping else 1.0
+                        else:
+                            weight = 1.0  # Default weight for unknown types
+                        
+                        score += weight
+                        keyword_count += 1
+                        matches.append(f"'{cell}' exactly matches {column_type}")
         
         # Improved scoring algorithm that prioritizes multiple keyword matches
         if keyword_count > 0:
@@ -374,9 +695,9 @@ class ColumnMapper:
             score = max(0.0, min(score, 1.0))
         
         if score > 0.3:  # Threshold for keyword detection
-            reasoning = [f"Keyword matches: {', '.join(matches[:3])}"]
+            reasoning = [f"Exact keyword matches: {', '.join(matches[:3])}"]
             if keyword_count > 3:
-                reasoning.append(f"Multiple keyword matches: {keyword_count} keywords found")
+                reasoning.append(f"Multiple exact keyword matches: {keyword_count} keywords found")
             
             return HeaderRowInfo(
                 row_index=row_index,
@@ -491,39 +812,106 @@ class ColumnMapper:
         
         return None
     
-    def _detect_by_merged_cells(self, row: List[str], row_index: int,
-                               sheet_data: List[List[str]]) -> Optional[HeaderRowInfo]:
-        """Detect header row by looking for merged cells patterns"""
-        if not row:
-            return None
+
+    
+    def _create_hierarchical_headers(self, parent_row: List[str], subheader_row: List[str]) -> List[str]:
+        """
+        Create combined headers from parent and subheader rows, simulating merged cell behavior
         
-        # Check for merged cell indicators (empty cells between content)
-        empty_cells = sum(1 for cell in row if not cell or not str(cell).strip())
-        total_cells = len(row)
-        
-        if empty_cells > 0 and empty_cells < total_cells:
-            # Check if this looks like a merged header
-            score = 0.2  # Reduced from 0.3 to be less aggressive
-            reasoning = [f"Potential merged cells: {empty_cells}/{total_cells} empty cells"]
+        Args:
+            parent_row: Parent header row
+            subheader_row: Subheader row
             
-            # Check if next row has more detailed headers
-            if row_index + 1 < len(sheet_data):
-                next_row = sheet_data[row_index + 1]
-                if next_row and len(next_row) > len([c for c in row if c]):
-                    score += 0.15  # Reduced from 0.2
-                    reasoning.append("Next row has more detailed headers")
-            
-            if score > 0.25:  # Reduced threshold from 0.4 to 0.25
-                return HeaderRowInfo(
-                    row_index=row_index,
-                    confidence=score,
-                    method=HeaderDetectionMethod.MERGED_CELLS,
-                    reasoning=reasoning,
-                    headers=row,
-                    is_merged=True
-                )
+        Returns:
+            List of combined header strings
+        """
+        combined_headers = []
         
-        return None
+        # Ensure both rows have the same length
+        max_length = max(len(parent_row), len(subheader_row))
+        parent_row = parent_row + [""] * (max_length - len(parent_row))
+        subheader_row = subheader_row + [""] * (max_length - len(subheader_row))
+        
+        # Step 1: Identify parent header spans (simulate merged cells)
+        parent_spans = self._identify_parent_spans(parent_row, subheader_row)
+        
+        # Step 2: Create combined headers based on spans
+        for i, subheader in enumerate(subheader_row):
+            # Find which parent header spans this column
+            parent_header = ""
+            for span_start, span_end, span_header in parent_spans:
+                if span_start <= i <= span_end:
+                    parent_header = span_header
+                    break
+            
+            # Create combined header
+            if subheader and str(subheader).strip():
+                subheader_str = str(subheader).strip()
+                if parent_header:
+                    combined_header = f"{parent_header} {subheader_str}"
+                else:
+                    combined_header = subheader_str
+            else:
+                combined_header = parent_header if parent_header else ""
+            
+            combined_headers.append(combined_header)
+        
+        return combined_headers
+    
+    def _identify_parent_spans(self, parent_row: List[str], subheader_row: List[str]) -> List[Tuple[int, int, str]]:
+        """
+        Identify the spans of parent headers, simulating merged cell behavior
+        
+        Args:
+            parent_row: Parent header row
+            subheader_row: Subheader row
+            
+        Returns:
+            List of tuples (start_col, end_col, header_text) for each parent header span
+        """
+        spans = []
+        i = 0
+        
+        while i < len(parent_row):
+            parent_cell = parent_row[i]
+            
+            if parent_cell and str(parent_cell).strip():
+                parent_header = str(parent_cell).strip()
+                span_start = i
+                
+                # Find the end of this parent header's span
+                # A parent header spans until:
+                # 1. We find another non-empty parent header, OR
+                # 2. We find empty subheaders (indicating end of logical group), OR
+                # 3. We reach the end of the row
+                
+                span_end = i
+                j = i + 1
+                consecutive_empty_subheaders = 0
+                
+                while j < len(parent_row):
+                    # If we find another parent header, the current span ends
+                    if parent_row[j] and str(parent_row[j]).strip():
+                        break
+                    
+                    # If we find a subheader, extend the span
+                    if j < len(subheader_row) and subheader_row[j] and str(subheader_row[j]).strip():
+                        span_end = j
+                        consecutive_empty_subheaders = 0
+                    else:
+                        consecutive_empty_subheaders += 1
+                        # If we have too many consecutive empty subheaders, stop the span
+                        if consecutive_empty_subheaders >= 2:
+                            break
+                    
+                    j += 1
+                
+                spans.append((span_start, span_end, parent_header))
+                i = span_end + 1
+            else:
+                i += 1
+        
+        return spans
     
     def normalize_header_text(self, headers: List[str]) -> List[str]:
         """
@@ -568,218 +956,87 @@ class ColumnMapper:
         return re.sub(r'[^a-z0-9]', '', header.strip().lower())
 
     def _canonical_type_for_header(self, header):
-        norm = self._normalize_header(header)
+        # Use exact matching instead of normalized matching
+        header_lower = header.strip().lower()
         for canonical, variants in self.CANONICAL_HEADER_MAP.items():
             for variant in variants:
-                if norm == self._normalize_header(variant):
+                if header_lower == variant.lower():
                     return canonical
-        # Fuzzy match fallback
-        all_variants = [v for vals in self.CANONICAL_HEADER_MAP.values() for v in vals]
-        close = difflib.get_close_matches(header.strip().lower(), all_variants, n=1, cutoff=0.85)
-        if close:
-            for canonical, variants in self.CANONICAL_HEADER_MAP.items():
-                if close[0] in variants:
-                    return canonical
+        # Remove fuzzy match fallback to enforce exact matching only
         return None
 
     def map_columns_to_types(self, headers: List[str]) -> List[ColumnMapping]:
         """
-        Map columns to BOQ types using improved normalization and canonical mapping
+        Map columns to BOQ types using only canonical mapping - no fuzzy matching
         """
-        logger.debug(f"Mapping {len(headers)} columns to BOQ types (robust)")
+        logger.debug(f"Mapping {len(headers)} columns to BOQ types (canonical only)")
         all_mappings = []
-        normalized_headers = [self._normalize_header(h) for h in headers]
-        for col_idx, (original_header, normalized_header) in enumerate(zip(headers, normalized_headers)):
-            if not normalized_header:
+        
+        for col_idx, original_header in enumerate(headers):
+            if not original_header or not str(original_header).strip():
+                # Create mapping for empty headers as IGNORE to maintain column index consistency
+                mapping = ColumnMapping(
+                    column_index=col_idx,
+                    original_header=original_header or "",
+                    normalized_header="",
+                    mapped_type=ColumnType.IGNORE,
+                    confidence=0.0,
+                    alternatives=[(ColumnType.IGNORE, 0.0)],
+                    reasoning=["Empty header - mapped to ignore"]
+                )
+                all_mappings.append(mapping)
                 continue
-            # Try canonical mapping first
+                
+            # Try canonical mapping only
             canonical_type = self._canonical_type_for_header(original_header)
             if canonical_type:
                 # 100% confidence for canonical match
-                col_type = getattr(ColumnType, canonical_type.upper(), ColumnType.REMARKS)
+                col_type = getattr(ColumnType, canonical_type.upper(), ColumnType.IGNORE)
                 mapping = ColumnMapping(
                     column_index=col_idx,
                     original_header=original_header,
-                    normalized_header=normalized_header,
+                    normalized_header=self._normalize_header(original_header),
                     mapped_type=col_type,
                     confidence=1.0,
                     alternatives=[(col_type, 1.0)],
                     reasoning=[f"Canonical match for '{original_header}' as '{col_type.value}'"]
                 )
                 all_mappings.append(mapping)
-                continue
-            # Fuzzy match fallback
-            best_type, best_score, alternatives = self._find_best_column_match(normalized_header, col_idx, headers)
-            if best_type:
-                reasoning = self._generate_mapping_reasoning(
-                    original_header, normalized_header, best_type, best_score, col_idx, headers
-                )
+            else:
+                # No canonical match - map to IGNORE for manual user correction
                 mapping = ColumnMapping(
                     column_index=col_idx,
                     original_header=original_header,
-                    normalized_header=normalized_header,
-                    mapped_type=best_type,
-                    confidence=best_score,
-                    alternatives=alternatives,
-                    reasoning=reasoning
+                    normalized_header=self._normalize_header(original_header),
+                    mapped_type=ColumnType.IGNORE,
+                    confidence=0.0,
+                    alternatives=[(ColumnType.IGNORE, 0.0)],
+                    reasoning=[f"No canonical match found for '{original_header}' - requires manual mapping"]
                 )
                 all_mappings.append(mapping)
-        # Second pass: enforce uniqueness for required columns
+        
+        # Enforce uniqueness for required columns (keep only the first match for each required type)
         required_types = {ColumnType.DESCRIPTION, ColumnType.QUANTITY, ColumnType.UNIT_PRICE, 
                           ColumnType.TOTAL_PRICE, ColumnType.UNIT, ColumnType.CODE}
-        best_candidates = {}
+        seen_required = set()
+        
         for mapping in all_mappings:
             if mapping.mapped_type in required_types:
-                confidence = mapping.confidence
-                if (mapping.mapped_type not in best_candidates or 
-                    confidence > best_candidates[mapping.mapped_type][0]):
-                    best_candidates[mapping.mapped_type] = (confidence, mapping)
-        for mapping in all_mappings:
-            if (mapping.mapped_type in required_types and 
-                mapping.mapped_type in best_candidates and 
-                best_candidates[mapping.mapped_type][1] != mapping):
-                original_type = mapping.mapped_type.value
-                if len(mapping.alternatives) > 1:
-                    second_best_type, second_best_confidence = mapping.alternatives[1]
-                    mapping.mapped_type = second_best_type
-                    mapping.confidence = second_best_confidence
-                    mapping.reasoning.append(f"Demoted from '{original_type}' to '{second_best_type.value}' due to uniqueness constraint.")
-                    logger.debug(f"Demoted column '{mapping.original_header}' from {original_type} to {second_best_type.value} (uniqueness constraint)")
-                else:
+                if mapping.mapped_type in seen_required:
+                    # Demote duplicate required column to IGNORE
+                    original_type = mapping.mapped_type.value
                     mapping.mapped_type = ColumnType.IGNORE
                     mapping.confidence = 0.0
-                    mapping.reasoning.append(f"Demoted from '{original_type}' to 'ignore' due to uniqueness constraint (no alternatives).")
-                    logger.debug(f"Demoted column '{mapping.original_header}' from {original_type} to ignore (uniqueness constraint, no alternatives)")
+                    mapping.reasoning.append(f"Demoted from '{original_type}' to 'ignore' - duplicate required column")
+                    logger.debug(f"Demoted column '{mapping.original_header}' from {original_type} to ignore (duplicate required column)")
+                else:
+                    seen_required.add(mapping.mapped_type)
+        
         return all_mappings
     
-    def _find_best_column_match(self, normalized_header: str, col_idx: int, 
-                               all_headers: List[str]) -> Tuple[Optional[ColumnType], float, List[Tuple[ColumnType, float]]]:
-        """Find the best column type match for a header"""
-        best_type = None
-        best_score = 0.0
-        alternatives = []
-        
-        # Check each column type
-        for col_type in self.config.get_all_column_types():
-            mapping = self.config.get_column_mapping(col_type)
-            if not mapping:
-                continue
-            
-            # Calculate score for this type
-            score = self._calculate_header_score(normalized_header, mapping, col_idx, all_headers)
-            
-            if score > best_score:
-                best_score = score
-                best_type = col_type
-            
-            # Store alternatives above threshold
-            if score > 0.3:
-                alternatives.append((col_type, score))
-        
-        # Sort alternatives by score
-        alternatives.sort(key=lambda x: x[1], reverse=True)
-        
-        return best_type, best_score, alternatives
+
     
-    def _calculate_header_score(self, normalized_header: str, mapping: Any, 
-                               col_idx: int, all_headers: List[str]) -> float:
-        """Calculate score for header matching a column type"""
-        score = 0.0
-        
-        # Direct keyword matching (base score)
-        for keyword in mapping.keywords:
-            keyword_lower = keyword.lower()
-            if keyword_lower in normalized_header or normalized_header in keyword_lower:
-                # Use a base score of 0.6 for keyword matches, then apply weight
-                base_score = 0.6 * mapping.weight
-                score += min(base_score, 0.8)  # Cap keyword score at 0.8
-                break
-        
-        # Positional scoring (additional bonus)
-        positional_bonus = self._calculate_positional_score(col_idx, mapping, all_headers)
-        score += min(positional_bonus, 0.15)  # Cap positional bonus at 0.15
-        
-        # Context scoring (additional bonus)
-        context_bonus = self._calculate_context_score(col_idx, mapping, all_headers)
-        score += min(context_bonus, 0.05)  # Cap context bonus at 0.05
-        
-        # Ensure final score is capped at 1.0
-        return min(score, 1.0)
-    
-    def _calculate_positional_score(self, col_idx: int, mapping: Any, 
-                                   all_headers: List[str]) -> float:
-        """Calculate score based on column position"""
-        score = 0.0
-        total_cols = len(all_headers)
-        
-        if total_cols == 0:
-            return score
-        
-        # Normalize position (0-1)
-        position = col_idx / (total_cols - 1) if total_cols > 1 else 0.5
-        
-        # Position preferences for different column types
-        if mapping.required:
-            if "description" in str(mapping).lower():
-                # Description typically on the left
-                if position < 0.3:
-                    score += 0.2
-            elif "total" in str(mapping).lower() or "amount" in str(mapping).lower():
-                # Totals typically on the right
-                if position > 0.7:
-                    score += 0.2
-            elif "quantity" in str(mapping).lower():
-                # Quantity typically in the middle
-                if 0.2 < position < 0.8:
-                    score += 0.1
-        
-        return score
-    
-    def _calculate_context_score(self, col_idx: int, mapping: Any, 
-                                all_headers: List[str]) -> float:
-        """Calculate score based on neighboring columns"""
-        score = 0.0
-        
-        # Check left neighbor
-        if col_idx > 0:
-            left_header = all_headers[col_idx - 1].lower() if all_headers[col_idx - 1] else ""
-            if "description" in left_header and "quantity" in str(mapping).lower():
-                score += 0.1  # Quantity often follows description
-            elif "quantity" in left_header and "unit" in str(mapping).lower():
-                score += 0.1  # Unit often follows quantity
-        
-        # Check right neighbor
-        if col_idx < len(all_headers) - 1:
-            right_header = all_headers[col_idx + 1].lower() if all_headers[col_idx + 1] else ""
-            if "total" in right_header and "rate" in str(mapping).lower():
-                score += 0.1  # Rate often precedes total
-        
-        return score
-    
-    def _generate_mapping_reasoning(self, original_header: str, normalized_header: str,
-                                   col_type: ColumnType, score: float, col_idx: int,
-                                   all_headers: List[str]) -> List[str]:
-        """Generate reasoning for column mapping"""
-        reasoning = []
-        
-        reasoning.append(f"Column {col_idx + 1}: '{original_header}' -> {col_type.value}")
-        reasoning.append(f"Confidence: {score:.2f}")
-        
-        # Add keyword match reasoning
-        mapping = self.config.get_column_mapping(col_type)
-        if mapping:
-            for keyword in mapping.keywords:
-                if keyword.lower() in normalized_header:
-                    reasoning.append(f"Keyword match: '{keyword}'")
-                    break
-        
-        # Add positional reasoning
-        total_cols = len(all_headers)
-        if total_cols > 1:
-            position = col_idx / (total_cols - 1)
-            reasoning.append(f"Position: {position:.1f} ({col_idx + 1}/{total_cols})")
-        
-        return reasoning
+
     
     def calculate_mapping_confidence(self, mappings: List[ColumnMapping]) -> float:
         """
@@ -813,39 +1070,36 @@ class ColumnMapper:
     
     def get_alternative_mappings(self, headers: List[str]) -> Dict[int, List[Tuple[ColumnType, float]]]:
         """
-        Get alternative mappings for ambiguous columns
+        Get alternative mappings for columns - simplified to only return all column types
         
         Args:
             headers: List of header strings
             
         Returns:
-            Dictionary mapping column index to alternative mappings
+            Dictionary mapping column index to all possible column types
         """
         alternatives = {}
-        normalized_headers = self.normalize_header_text(headers)
         
-        for col_idx, (original_header, normalized_header) in enumerate(zip(headers, normalized_headers)):
-            if not normalized_header:
+        for col_idx, original_header in enumerate(headers):
+            if not original_header or not str(original_header).strip():
+                # Include empty headers in alternatives as IGNORE only
+                alternatives[col_idx] = [(ColumnType.IGNORE, 0.0)]
                 continue
             
-            column_alternatives = []
+            # Check if there's a canonical match
+            canonical_type = self._canonical_type_for_header(original_header)
             
-            # Check all column types
-            for col_type in self.config.get_all_column_types():
-                mapping = self.config.get_column_mapping(col_type)
-                if not mapping:
-                    continue
+            if canonical_type:
+                # If there's a canonical match, only return that one
+                col_type = getattr(ColumnType, canonical_type.upper(), ColumnType.IGNORE)
+                alternatives[col_idx] = [(col_type, 1.0)]
+            else:
+                # No canonical match - return all column types for manual selection
+                column_alternatives = []
+                for col_type in self.config.get_all_column_types():
+                    column_alternatives.append((col_type, 0.0))  # Equal weight for manual selection
                 
-                score = self._calculate_header_score(normalized_header, mapping, col_idx, headers)
-                
-                # Include alternatives with reasonable scores
-                if score > 0.2:
-                    column_alternatives.append((col_type, score))
-            
-            # Sort by score and keep top alternatives
-            column_alternatives.sort(key=lambda x: x[1], reverse=True)
-            if column_alternatives:
-                alternatives[col_idx] = column_alternatives[:3]  # Top 3 alternatives
+                alternatives[col_idx] = column_alternatives
         
         return alternatives
     
@@ -897,7 +1151,80 @@ class ColumnMapper:
                 suggestions=["No headers found"]
             )
         
-        # Map columns to types
+        # CONSISTENCY FIX: Use the same enhancement logic as manual selection
+        # This ensures auto-detection and manual selection produce identical headers
+        logger.info(f"Applying consistent enhancement logic to auto-detected header row {header_info.row_index}")
+        
+        # Use the forced header processing method to get consistent enhancement
+        return self.process_sheet_mapping_with_forced_header(sheet_data, header_info.row_index)
+    
+    def process_sheet_mapping_with_forced_header(self, sheet_data: List[List[str]], header_row_index: int) -> MappingResult:
+        """
+        Complete sheet mapping process with user-specified header row
+        
+        Args:
+            sheet_data: Sheet data as list of rows
+            header_row_index: 0-based index of the header row (user-specified)
+            
+        Returns:
+            MappingResult with complete mapping information
+        """
+        logger.info(f"Processing sheet mapping with forced header row {header_row_index} for {len(sheet_data)} rows")
+        
+        # Validate header row index
+        if header_row_index < 0 or header_row_index >= len(sheet_data):
+            logger.error(f"Invalid header row index {header_row_index} for sheet with {len(sheet_data)} rows")
+            return MappingResult(
+                header_row=HeaderRowInfo(
+                    row_index=header_row_index,
+                    confidence=0.0,
+                    method=HeaderDetectionMethod.KEYWORD_MATCH,
+                    reasoning=[f"Invalid header row index {header_row_index}"],
+                    headers=[],
+                    is_merged=False
+                ),
+                mappings=[],
+                overall_confidence=0.0,
+                unmapped_columns=[],
+                suggestions=[f"Invalid header row index {header_row_index}"]
+            )
+        
+        # Get headers from specified row
+        headers = sheet_data[header_row_index]
+        
+        # Create header info with manual method
+        header_info = HeaderRowInfo(
+            row_index=header_row_index,
+            confidence=1.0,  # User specified = 100% confidence
+            method=HeaderDetectionMethod.KEYWORD_MATCH,  # Use existing enum value
+            reasoning=["User manually specified header row"],
+            headers=headers,
+            is_merged=False
+        )
+        
+        if not headers or not any(str(h).strip() for h in headers):
+            logger.warning(f"Header row {header_row_index} appears to be empty or invalid")
+            return MappingResult(
+                header_row=header_info,
+                mappings=[],
+                overall_confidence=0.0,
+                unmapped_columns=list(range(len(headers))),
+                suggestions=["Selected header row appears to be empty"]
+            )
+        
+        # Apply sub-header processing similar to find_header_row method
+        # Check if there are parent headers above it
+        if header_info.row_index > 0:
+            enhanced_header = self._enhance_header_with_parent_row(header_info, sheet_data)
+            if enhanced_header:
+                header_info = enhanced_header
+        
+        # Check if the header row itself has merged cells and subheaders below it
+        enhanced_header = self._enhance_header_with_subheader_row(header_info, sheet_data)
+        if enhanced_header:
+            header_info = enhanced_header
+        
+        # Map columns to types using the potentially enhanced headers
         mappings = self.map_columns_to_types(header_info.headers)
         
         # Calculate overall confidence
@@ -918,7 +1245,7 @@ class ColumnMapper:
             suggestions=suggestions
         )
         
-        logger.info(f"Mapping completed: {len(mappings)} columns mapped, "
+        logger.info(f"Forced header mapping completed: {len(mappings)} columns mapped, "
                    f"confidence: {overall_confidence:.2f}")
         
         return result

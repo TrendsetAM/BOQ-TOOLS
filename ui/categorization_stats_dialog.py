@@ -210,13 +210,15 @@ class CategorizationStatsDialog:
         tree.column('Uncategorized', width=100, minwidth=80)
         tree.column('Coverage_Rate', width=120, minwidth=100)
         
-        # Scrollbar
-        scrollbar = ttk.Scrollbar(coverage_frame, orient=tk.VERTICAL, command=tree.yview)
-        tree.configure(yscrollcommand=scrollbar.set)
+        # Scrollbars
+        vsb = ttk.Scrollbar(coverage_frame, orient=tk.VERTICAL, command=tree.yview)
+        hsb = ttk.Scrollbar(coverage_frame, orient=tk.HORIZONTAL, command=tree.xview)
+        tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
         
         # Grid layout
         tree.grid(row=1, column=0, sticky=tk.NSEW)
-        scrollbar.grid(row=1, column=1, sticky=tk.NS)
+        vsb.grid(row=1, column=1, sticky=tk.NS)
+        hsb.grid(row=2, column=0, sticky=tk.EW)
         
         # Load coverage data
         self._load_coverage_data(tree)
@@ -249,13 +251,15 @@ class CategorizationStatsDialog:
         tree.column('Percentage', width=100, minwidth=80)
         tree.column('Avg_Description_Length', width=150, minwidth=120)
         
-        # Scrollbar
-        scrollbar = ttk.Scrollbar(breakdown_frame, orient=tk.VERTICAL, command=tree.yview)
-        tree.configure(yscrollcommand=scrollbar.set)
+        # Scrollbars
+        vsb = ttk.Scrollbar(breakdown_frame, orient=tk.VERTICAL, command=tree.yview)
+        hsb = ttk.Scrollbar(breakdown_frame, orient=tk.HORIZONTAL, command=tree.xview)
+        tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
         
         # Grid layout
         tree.grid(row=1, column=0, sticky=tk.NSEW)
-        scrollbar.grid(row=1, column=1, sticky=tk.NS)
+        vsb.grid(row=1, column=1, sticky=tk.NS)
+        hsb.grid(row=2, column=0, sticky=tk.EW)
         
         # Load category breakdown data
         self._load_category_breakdown_data(tree)

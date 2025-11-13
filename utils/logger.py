@@ -37,7 +37,8 @@ def setup_logging(log_file: Optional[Path] = None,
         # Create log directory if it doesn't exist
         log_file.parent.mkdir(parents=True, exist_ok=True)
         
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        # Clear the log file on startup by using 'w' mode instead of 'a' mode
+        file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
         file_handler.setLevel(level)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)

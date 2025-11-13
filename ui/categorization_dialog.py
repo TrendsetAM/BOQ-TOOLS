@@ -381,7 +381,7 @@ class CategorizationDialog:
         """Open the manual categorization Excel file"""
         if self.categorization_result and 'summary' in self.categorization_result:
             excel_path = self.categorization_result['summary'].get('manual_excel_generated', '')
-            print(f"[DEBUG] UI trying to open: {excel_path}, exists: {os.path.exists(excel_path)}")
+            # print(f"[DEBUG] UI trying to open: {excel_path}, exists: {os.path.exists(excel_path)}")
             if excel_path and os.path.exists(excel_path):
                 try:
                     os.startfile(excel_path)  # Windows
@@ -461,8 +461,8 @@ class CategorizationDialog:
                 from core.category_dictionary import CategoryDictionary
                 from pathlib import Path
                 
-                # Load the category dictionary
-                category_dict = CategoryDictionary(Path("config/category_dictionary.json"))
+                # Load the category dictionary (uses user config path automatically)
+                category_dict = CategoryDictionary()
                 
                 # Update the dictionary
                 update_result = update_master_dictionary(category_dict, manual_cats)
@@ -492,7 +492,7 @@ class CategorizationDialog:
                 excel_path = self.categorization_result['summary'].get('manual_excel_generated', '')
                 if excel_path and os.path.exists(excel_path):
                     os.remove(excel_path)
-                    print(f"[DEBUG] Deleted temporary Excel file: {excel_path}")
+                    # print(f"[DEBUG] Deleted temporary Excel file: {excel_path}")
         except Exception as e:
             print(f"[WARNING] Could not delete temporary file: {e}")
     
@@ -524,11 +524,11 @@ class CategorizationDialog:
     
     def _finalize_categorization(self):
         """Finalize the categorization process"""
-        print("[DEBUG] Dialog finalize called. on_complete:", self.on_complete)
+        # print("[DEBUG] Dialog finalize called. on_complete:", self.on_complete)
         if self.final_dataframe is not None:
             # Call the completion callback to update the main window
             if self.on_complete:
-                print("[DEBUG] Calling on_complete from dialog with final_dataframe:", type(self.final_dataframe), "categorization_result:", type(self.categorization_result))
+                # print("[DEBUG] Calling on_complete from dialog with final_dataframe:", type(self.final_dataframe), "categorization_result:", type(self.categorization_result))
                 self.on_complete(self.final_dataframe, self.categorization_result)
             self.dialog.destroy()
         else:

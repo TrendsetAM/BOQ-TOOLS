@@ -8,18 +8,170 @@ from tkinter import ttk, filedialog, messagebox
 import os
 import platform
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 import logging
 import threading
 import dataclasses
 import pandas as pd
+import openpyxl
 from core.row_classifier import RowType
 from datetime import datetime
 import pickle
 import re
+import time
 
 # Get a logger for this module
 logger = logging.getLogger(__name__)
+
+# Custom exceptions for validation failures
+class ValidationError(Exception):
+    """Custom exception for validation failures"""
+    def __init__(self, message, validation_result=None):
+        super().__init__(message)
+        self.validation_result = validation_result
+
+class PositionValidationError(ValidationError):
+    """Specific exception for position-description validation failures"""
+    pass
+
+def _format_validation_error_message(validation_result, context=""):
+    """
+    Standardized error message formatting for position-description validation failures
+    
+    Args:
+        validation_result: Validation result dictionary with errors and summary
+        context: Additional context string (e.g., "Use Mapping", "Compare Full")
+        
+    Returns:
+        str: Formatted error message for user display
+    """
+    if not validation_result or validation_result.get('is_valid', True):
+        return "No validation errors found."
+    
+    # Base error message
+    title = f"{context} - Structure Validation Failed" if context else "Structure Validation Failed"
+    
+    # Summary
+    summary = validation_result.get('summary', 'Validation failed with unknown errors.')
+    
+    # Error details (limit to first 5 errors for readability)
+    errors = validation_result.get('errors', [])
+    error_details = "\n".join(errors[:5])
+    if len(errors) > 5:
+        error_details += f"\n... and {len(errors) - 5} more errors"
+    
+    # Mismatched positions for additional context
+    mismatched_positions = validation_result.get('mismatched_positions', [])
+    position_count = len(mismatched_positions)
+    
+    # Build comprehensive error message
+    if context == "Use Mapping":
+        action_guidance = (
+            "This means the current file has a different structure than the saved mapping.\n"
+            "You cannot apply this mapping to the current file.\n\n"
+            "Possible solutions:\n"
+            "• Use a file with the same structure as the original\n"
+            "• Create a new mapping for this file structure\n"
+            "• Verify you selected the correct mapping file"
+        )
+    elif context == "Compare Full":
+        action_guidance = (
+            "This means the comparison file has a different structure than the master BOQ.\n"
+            "You cannot compare BOQs with different structures.\n\n"
+            "Possible solutions:\n"
+            "• Use a comparison file with the same structure\n"
+            "• Create separate analyses for files with different structures\n"
+            "• Verify you selected the correct comparison file"
+        )
+    else:
+        action_guidance = (
+            "The files have different structures and cannot be processed together.\n\n"
+            "Please verify that you are using compatible files."
+        )
+    
+    formatted_message = (
+        f"{summary}\n\n"
+        f"Details ({position_count} mismatches found):\n{error_details}\n\n"
+        f"{action_guidance}"
+    )
+    
+    return formatted_message
+
+def _log_validation_failure(validation_result, context="", operation="validation"):
+    """
+    Standardized logging for validation failures
+    
+    Args:
+        validation_result: Validation result dictionary
+        context: Operation context (e.g., "Use Mapping", "Compare Full")
+        operation: Type of operation being performed
+    """
+    if not validation_result:
+        logger.error(f"{context} {operation}: No validation result provided")
+        return
+    
+    if validation_result.get('is_valid', True):
+        logger.info(f"{context} {operation}: Validation passed successfully")
+        return
+    
+    # Log summary
+    summary = validation_result.get('summary', 'Unknown validation failure')
+    logger.error(f"{context} {operation} failed: {summary}")
+    
+    # Log detailed errors
+    errors = validation_result.get('errors', [])
+    logger.error(f"{context} {operation}: Found {len(errors)} validation errors:")
+    for i, error in enumerate(errors[:10], 1):  # Log first 10 errors
+        logger.error(f"  {i}. {error}")
+    
+    if len(errors) > 10:
+        logger.error(f"  ... and {len(errors) - 10} more errors")
+    
+    # Log mismatched positions summary
+    mismatched_positions = validation_result.get('mismatched_positions', [])
+    if mismatched_positions:
+        logger.debug(f"{context} {operation}: Mismatched positions details:")
+        for position_info in mismatched_positions[:5]:  # Log first 5 for debugging
+            if 'expected_description' in position_info:
+                logger.debug(f"  Position {position_info.get('position', 'unknown')}: "
+                           f"expected '{position_info.get('expected_description', '')}', "
+                           f"got '{position_info.get('actual_description', '')}'")
+            else:
+                logger.debug(f"  Missing position {position_info.get('position', 'unknown')}: "
+                           f"expected '{position_info.get('expected_description', '')}'")
+
+def _handle_validation_failure(validation_result, context="", operation="validation", show_dialog=True):
+    """
+    Standardized validation failure handling with logging and user notification
+    
+    Args:
+        validation_result: Validation result dictionary
+        context: Operation context for error messages
+        operation: Type of operation being performed
+        show_dialog: Whether to show error dialog to user
+        
+    Returns:
+        bool: False (indicating failure)
+        
+    Raises:
+        PositionValidationError: Always raises this exception to terminate processing
+    """
+    # Log the failure
+    _log_validation_failure(validation_result, context, operation)
+    
+    # Format user message
+    error_message = _format_validation_error_message(validation_result, context)
+    
+    # Show dialog if requested
+    if show_dialog:
+        dialog_title = f"{context} - Structure Validation Failed" if context else "Structure Validation Failed"
+        messagebox.showerror(dialog_title, error_message)
+    
+    # Log termination
+    logger.warning(f"{context} {operation}: Process terminated due to validation failure")
+    
+    # Raise exception to terminate processing
+    raise PositionValidationError(error_message, validation_result)
 
 # Optional imports
 try:
@@ -48,6 +200,22 @@ try:
     SHEET_CATEGORIZATION_AVAILABLE = True
 except ImportError:
     SHEET_CATEGORIZATION_AVAILABLE = False
+
+print('SHEET_CATEGORIZATION_AVAILABLE forced to True')
+
+# Import comparison row review dialog
+try:
+    from ui.comparison_row_review_dialog import show_comparison_row_review
+    COMPARISON_ROW_REVIEW_AVAILABLE = True
+except ImportError:
+    COMPARISON_ROW_REVIEW_AVAILABLE = False
+
+# Import offer info dialog
+try:
+    from ui.offer_info_dialog import show_offer_info_dialog
+    OFFER_INFO_AVAILABLE = True
+except ImportError:
+    OFFER_INFO_AVAILABLE = False
 
 # Import row review dialog
 try:
@@ -100,27 +268,7 @@ def tooltip(widget, text):
     widget.bind('<Leave>', on_leave)
 
 
-def format_number(value, is_currency=False):
-    """Format number with thousands separator and decimal formatting"""
-    if not value or value == "":
-        return ""
-    
-    try:
-        # Convert to float
-        num = float(str(value).replace(',', '').replace(' ', ''))
-        
-        if is_currency:
-            # Format as currency with 2 decimal places
-            return f"{num:,.2f}".replace(',', ' ').replace('.', ',')
-        else:
-            # Format as number with 2 decimal places if needed
-            if num == int(num):
-                return f"{int(num):,}".replace(',', ' ')
-            else:
-                return f"{num:,.2f}".replace(',', ' ').replace('.', ',')
-    except (ValueError, TypeError):
-        return str(value)
-
+from utils.format_utils import format_number_eu
 
 class MainWindow:
     def __init__(self, controller, root=None):
@@ -141,10 +289,20 @@ class MainWindow:
         self.column_mapper = None  # Will be set when processing files
         self.row_validity = {}  # Initialize row validity dictionary
         self.row_review_treeviews = {}  # Initialize row review treeviews dictionary
+        self.row_review_frame = None  # Initialize row review frame
+        # ComparisonProcessor will handle comparison logic
+        self.comparison_processor = None
+        # Track comparison state
+        self.is_comparison_workflow = False
+        self.master_file_mapping = None
         # Add robust tab-to-file-mapping
         self.tab_id_to_file_mapping = {}
         # Offer name for summary grid
         self.current_offer_name = None
+        # Store comprehensive offer information
+        self.current_offer_info = None
+        self.previous_offer_info = None  # For subsequent BOQs in comparison
+        self.current_sheet_categories = None
         # Create widgets
         self._create_main_widgets()
         self._setup_drag_and_drop()
@@ -169,6 +327,8 @@ class MainWindow:
             style.theme_use('clam')
         style.configure('TNotebook.Tab', padding=[10, 5])
         style.configure('Treeview', rowheight=28)
+        style.map('Treeview', 
+                 background=[('selected', '#B3E5FC')])  # Light blue background (same as column mapping)
 
     def _create_menu(self):
         menubar = tk.Menu(self.root)
@@ -176,6 +336,8 @@ class MainWindow:
         file_menu = tk.Menu(menubar, tearoff=0)
         file_menu.add_command(label="Open...", accelerator="Ctrl+O", command=self.open_file)
         file_menu.add_command(label="Export", accelerator="Ctrl+E", command=self.export_file)
+        file_menu.add_separator()
+        file_menu.add_command(label="Clear All Files", command=self._clear_all_files)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", accelerator="Ctrl+Q", command=self.root.quit)
         menubar.add_cascade(label="File", menu=file_menu)
@@ -303,30 +465,78 @@ class MainWindow:
             self._update_status("No data to export.")
 
     def open_file(self):
-        # Prompt for offer name/label before opening file dialog
-        offer_name = self._prompt_offer_name()
-        if offer_name is None:
-            self._update_status("File open cancelled (no offer name provided).")
+        """Open file with enhanced comparison workflow support"""
+        # Clear all previous data when starting new analysis
+        self._clear_all_files()
+        
+        # Check if we're in comparison workflow
+        if self.is_comparison_workflow and self.master_file_mapping:
+            # We're in comparison mode, prompt for comparison file
+            offer_info = self._prompt_offer_info(is_first_boq=False)
+            if offer_info is None:
+                self._update_status("Comparison file selection cancelled.")
+                return
+            
+            # Prompt for comparison offer information FIRST (same as master workflow)
+            comparison_offer_info = self._prompt_offer_info(is_first_boq=False)
+            if comparison_offer_info is None:
+                self._update_status("Comparison cancelled (no offer information provided)")
+                return
+            
+            # Prompt for comparison file SECOND (same as master workflow)
+            filetypes = [("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
+            comparison_file = filedialog.askopenfilename(
+                title="Select Comparison BoQ File",
+                filetypes=filetypes
+            )
+            
+            if not comparison_file:
+                self._update_status("Comparison cancelled")
+                return
+            
+            self._process_comparison_file(comparison_file, offer_info)
             return
-        self.current_offer_name = offer_name
+        
+        # Normal file opening workflow
+        offer_info = self._prompt_offer_info(is_first_boq=True)
+        if offer_info is None:
+            self._update_status("File open cancelled (no offer information provided).")
+            return
+        
         filetypes = [("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
         filenames = filedialog.askopenfilenames(title="Open Excel File", filetypes=filetypes)
         for file in filenames:
-            self._open_excel_file(file)
+            # Check if there is already a file loaded in the current tab
+            current_tab_id = self.notebook.select()
+            if current_tab_id:
+                current_tab = self.notebook.nametowidget(current_tab_id)
+                # If the tab has a final_dataframe, trigger comparison logic
+                if hasattr(current_tab, 'final_dataframe') and getattr(current_tab, 'final_dataframe', None) is not None:
+                    self._compare_full(current_tab)
+                    return
+            # Otherwise, just open as new analysis
+            self._open_excel_file(file, offer_info)
 
     def _on_drop(self, event):
         if DND_AVAILABLE:
             files = self.root.tk.splitlist(event.data)
             for file in files:
                 if file.lower().endswith(('.xlsx', '.xls')):
-                    self._open_excel_file(file)
+                    # For drag and drop, prompt for offer info first
+                    offer_info = self._prompt_offer_info(is_first_boq=True)
+                    if offer_info:
+                        self._open_excel_file(file, offer_info)
+                    else:
+                        self._update_status("File drop cancelled (no offer information provided).")
                 else:
                     self._update_status(f"Unsupported file: {file}")
 
-    def _open_excel_file(self, filepath):
+    def _open_excel_file(self, filepath, offer_info=None):
         """Handle the file processing workflow"""
         if not filepath:
             return
+
+        # Process as master BoQ
 
         # Clear previous results, including treeview references
         self.sheet_treeviews.clear()
@@ -363,10 +573,14 @@ class MainWindow:
                     self.root.after(0, self._on_processing_error, tab, filename, loading_label)
                     return
                 
-                # Step 2: Ask user to categorize sheets
+                print(f"Loaded {len(visible_sheets)} visible sheets: {visible_sheets}")
+                
+                # Step 2: Ask user to categorize sheets - schedule this on main thread
                 def ask_categorization():
+                    print('About to show sheet categorization dialog')
                     if SHEET_CATEGORIZATION_AVAILABLE:
                         categories = show_sheet_categorization_dialog(self.root, visible_sheets)
+                        print('Returned from sheet categorization dialog')
                         if not categories:
                             # User cancelled
                             self._update_status("Sheet categorization cancelled.")
@@ -382,57 +596,164 @@ class MainWindow:
                         boq_sheets = visible_sheets
                         categories = {sheet: "BOQ" for sheet in visible_sheets}
                     
-                    # Step 3: Process only BOQ sheets
-                    file_mapping = self.controller.process_file(
-                        Path(filepath),
-                        progress_callback=lambda p, m: self.root.after(0, self.update_progress, p, m),
-                        sheet_filter=boq_sheets,
-                        sheet_types=categories
-                    )
-                    # After processing, show the main window with BOQ sheets for column mapping
-                    self.file_mapping = file_mapping
-                    self.column_mapper = file_mapping.column_mapper if hasattr(file_mapping, 'column_mapper') else None
-                    self.root.after(0, self._on_processing_complete, tab, filepath, self.file_mapping, loading_label)
+                    # Store the categories for later use in processing
+                    self.current_sheet_categories = categories
+                    
+                    print(f"Processing {len(boq_sheets)} BOQ sheets: {boq_sheets}")
+                    
+                    # Step 3: Process only BOQ sheets in a separate thread
+                    def process_boq_sheets(offer_info_param):
+                        try:
+                            file_mapping = self.controller.process_file(
+                                Path(filepath),
+                                progress_callback=lambda p, m: self.root.after(0, self.update_progress, p, m),
+                                sheet_filter=boq_sheets,
+                                sheet_types=categories
+                            )
+                            # After processing, show the main window with BOQ sheets for column mapping
+                            self.file_mapping = file_mapping
+                            self.column_mapper = file_mapping.column_mapper if hasattr(file_mapping, 'column_mapper') else None
+                            
+                            # Apply sheet categories to the file mapping
+                            if hasattr(self, 'current_sheet_categories'):
+                                for sheet in file_mapping.sheets:
+                                    if sheet.sheet_name in self.current_sheet_categories:
+                                        sheet.sheet_type = self.current_sheet_categories[sheet.sheet_name]
+                                        logger.debug(f"Applied sheet type '{sheet.sheet_type}' to sheet '{sheet.sheet_name}'")
+                            
+                            # Schedule the completion callback on the main thread
+                            try:
+                                self.root.after(0, self._on_processing_complete, tab, filepath, self.file_mapping, loading_label, offer_info_param)
+                            except RuntimeError:
+                                # If the main loop is not running, just log the completion
+                                logger.info(f"Processing completed for {filepath} but main loop not available")
+                        except Exception as e:
+                            logger.error(f"Failed to process BOQ sheets: {e}", exc_info=True)
+                            self.root.after(0, self._on_processing_error, tab, filename, loading_label)
+                    
+                    # Start the BOQ processing in a separate thread
+                    threading.Thread(target=lambda: process_boq_sheets(offer_info), daemon=True).start()
                 
-                self.root.after(0, ask_categorization)
+                # Schedule the categorization question on the main thread immediately
+                try:
+                    print("Scheduling ask_categorization on main thread")
+                    self.root.after(0, ask_categorization)
+                except RuntimeError:
+                    logger.error("Could not schedule categorization dialog - main loop not available")
+                    self._on_processing_error(tab, filename, loading_label)
+                    
             except Exception as e:
                 logger.error(f"Failed to process file {filepath}: {e}", exc_info=True)
-                self.root.after(0, self._on_processing_error, tab, filename, loading_label)
+                # Schedule the error callback on the main thread
+                try:
+                    self.root.after(0, self._on_processing_error, tab, filename, loading_label)
+                except RuntimeError:
+                    logger.error(f"Could not schedule error callback - main loop not available")
 
-        threading.Thread(target=process_in_thread, daemon=True).start()
+        # Start the processing thread
+        try:
+            threading.Thread(target=process_in_thread, daemon=True).start()
+        except Exception as e:
+            logger.error(f"Failed to start processing thread: {e}")
+            self._on_processing_error(tab, filename, loading_label)
 
     def update_progress(self, percentage, message):
         """Thread-safe method to update the progress bar and status label."""
         self.progress_var.set(percentage)
         self._update_status(message)
 
-    def _on_processing_complete(self, tab, filepath, file_mapping, loading_widget):
+    def _on_processing_complete(self, tab, filepath, file_mapping, loading_widget, offer_info=None):
         """Handle processing completion"""
+        logger.info(f"Processing complete for file: {filepath}")
+        
+        # Prevent setting file_mapping during comparison workflow
+        if getattr(self, 'is_comparison_workflow', False):
+            logger.info("Skipping file_mapping assignment during comparison workflow")
+            loading_widget.destroy()
+            return
+        
         # Store the file mapping and column mapper
         self.file_mapping = file_mapping
         self.column_mapper = file_mapping.column_mapper if hasattr(file_mapping, 'column_mapper') else None
+        
+        # Use the passed offer_info or prompt for it if not provided
+        if offer_info is None:
+            offer_info = self._prompt_offer_info(is_first_boq=True)
+            if not offer_info:
+                self._update_status("Offer information cancelled.")
+                loading_widget.destroy()
+                return
+        
+        # Store offer info for later use
+        self.current_offer_info = offer_info
+        
+        # Store offer info in the controller's current_files for summary data collection
+        file_key = str(Path(filepath).resolve())
+        if file_key in self.controller.current_files:
+            # Enhanced offer info creation with better fallbacks
+            offer_info_enhanced = {
+                'offer_name': offer_info.get('offer_name', 'Unknown'),
+                'project_name': offer_info.get('project_name', 'Unknown'),
+                'project_size': offer_info.get('project_size', 'N/A'),
+                'date': offer_info.get('date', datetime.now().strftime('%Y-%m-%d'))
+            }
+            logger.debug(f"Original offer_info: {offer_info}")
+            logger.debug(f"Enhanced offer_info: {offer_info_enhanced}")
+            
+            # Store under dynamic offer name for comparison datasets
+            offer_name = offer_info_enhanced['offer_name']
+            if 'offers' not in self.controller.current_files[file_key]:
+                self.controller.current_files[file_key]['offers'] = {}
+            self.controller.current_files[file_key]['offers'][offer_name] = offer_info_enhanced
+            # For backward compatibility, also store the last offer as 'offer_info'
+            self.controller.current_files[file_key]['offer_info'] = offer_info_enhanced
+            logger.debug(f"Stored offer info for offer_name '{offer_name}': {offer_info_enhanced}")
+        
+        # Also store offer info directly in the file_mapping object for easier access
+        file_mapping.offer_info = offer_info_enhanced
+        logger.debug(f"Stored offer info directly in file_mapping: {offer_info_enhanced}")
+        
+        # Also store in the current instance for immediate access
+        self.current_file_mapping = file_mapping
+        logger.debug(f"Stored current_file_mapping reference")
         
         # Remove loading widget and populate tab
         loading_widget.destroy()
         self._populate_file_tab(tab, file_mapping)
         
+        # Use centralized refresh method
+        logger.debug("Calling centralized summary grid refresh")
+        self._refresh_summary_grid_centralized()
+        
         # Update status
         self._update_status(f"Processing complete: {os.path.basename(filepath)}")
 
     def _on_processing_error(self, tab, filename, loading_widget):
-        """Callback for when file processing fails. Runs in the main UI thread."""
-        loading_widget.destroy()
-        # Use grid for consistency
-        error_label = ttk.Label(tab, text=f"Failed to process {filename}.\nSee logs for details.", foreground="red")
-        error_label.grid(row=0, column=0, pady=40, padx=100)
-        self._update_status(f"Error processing {filename}")
-        self.progress_var.set(0)
+        """Handle processing errors"""
+        logger.error(f"Processing error for file: {filename}")
+        
+        # Remove loading widget
+        if loading_widget:
+            loading_widget.destroy()
+        
+        # Show error message
+        messagebox.showerror("Processing Error", f"Failed to process file: {filename}")
+        
+        # Use centralized refresh method
+        logger.debug("Calling centralized summary grid refresh after error")
+        self._refresh_summary_grid_centralized()
 
     def _populate_file_tab(self, tab, file_mapping):
-        print("[DEBUG] _populate_file_tab called for tab:", tab)
+        # print("[DEBUG] _populate_file_tab called for tab:", tab)
         """Populates a tab with the processed data from a file mapping."""
+        
+        # Prevent tab population during comparison workflow
+        if getattr(self, 'is_comparison_workflow', False):
+            logger.info("Tab population prevented during comparison workflow")
+            return
+        
         # Debug: print all sheet names and their types
-        print('DEBUG: Sheets in file_mapping:')
+        # print('DEBUG: Sheets in file_mapping:')
         for s in file_mapping.sheets:
             print(f'  {s.sheet_name} (sheet_type={getattr(s, "sheet_type", None)})')
         
@@ -445,36 +766,14 @@ class MainWindow:
         tab_frame.grid(row=0, column=0, sticky=tk.NSEW)
         
         # Configure tab_frame's grid layout
-        tab_frame.grid_rowconfigure(0, weight=0)  # For export_frame
-        tab_frame.grid_rowconfigure(1, weight=0)  # For global_summary
-        tab_frame.grid_rowconfigure(2, weight=1)  # For sheet_notebook (main content, expands vertically)
-        tab_frame.grid_rowconfigure(3, weight=0)  # For confirm_col_btn
-        tab_frame.grid_rowconfigure(4, weight=1)  # For row_review_container (expands vertically)
+        tab_frame.grid_rowconfigure(0, weight=1)  # For sheet_notebook (main content, expands vertically)
+        tab_frame.grid_rowconfigure(1, weight=0)  # For confirm_col_btn
+        tab_frame.grid_rowconfigure(2, weight=1)  # For row_review_container (expands vertically)
         tab_frame.grid_columnconfigure(0, weight=1)  # Only one column, expands horizontally
-
-        # Add export button at the top
-        export_frame = ttk.Frame(tab_frame)
-        export_frame.grid(row=0, column=0, sticky=tk.EW, padx=5, pady=5)
-        export_frame.grid_columnconfigure(0, weight=1)  # Allow expansion
-        
-        export_btn = ttk.Button(export_frame, text="Export Data", command=self.export_file)
-        export_btn.grid(row=0, column=1, padx=5)
-
-        # Add global summary
-        global_summary = ttk.LabelFrame(tab_frame, text="File Summary")
-        global_summary.grid(row=1, column=0, sticky=tk.EW, padx=5, pady=5)
-        
-        global_text = f"""Total Sheets: {len(file_mapping.sheets)}
-Global Confidence: {file_mapping.global_confidence:.1%}
-Export Ready: {'Yes' if file_mapping.export_ready else 'No'}
-Processing Status: {file_mapping.processing_summary.successful_sheets} successful, {file_mapping.processing_summary.partial_sheets} partial"""
-        
-        summary_label = ttk.Label(global_summary, text=global_text)
-        summary_label.grid(row=0, column=0, padx=10, pady=5, sticky=tk.W)
 
         # Create sheet notebook for individual sheet tabs
         sheet_notebook = ttk.Notebook(tab_frame)
-        sheet_notebook.grid(row=2, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        sheet_notebook.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
         
         # Populate each sheet as a tab in the sheet_notebook
         for sheet in file_mapping.sheets:
@@ -484,7 +783,7 @@ Processing Status: {file_mapping.processing_summary.successful_sheets} successfu
         
         # Add confirmation button for column mappings
         confirm_frame = ttk.Frame(tab_frame)
-        confirm_frame.grid(row=3, column=0, sticky=tk.EW, padx=5, pady=5)
+        confirm_frame.grid(row=1, column=0, sticky=tk.EW, padx=5, pady=5)
         confirm_frame.grid_columnconfigure(0, weight=1)
         confirm_btn = ttk.Button(confirm_frame, text="Confirm Column Mappings", command=self._save_all_mappings_for_all_sheets)
         confirm_btn.grid(row=0, column=0, sticky=tk.EW, padx=5, pady=5)
@@ -504,22 +803,41 @@ Processing Status: {file_mapping.processing_summary.successful_sheets} successfu
     def _populate_sheet_tab(self, sheet_frame, sheet):
         """Populate an individual sheet tab with its data and column mappings."""
         # Configure sheet frame grid
-        sheet_frame.grid_rowconfigure(0, weight=0)  # Summary
+        sheet_frame.grid_rowconfigure(0, weight=0)  # Header row control
         sheet_frame.grid_rowconfigure(1, weight=1)  # Column mappings table
         sheet_frame.grid_columnconfigure(0, weight=1)
         
-        # Sheet summary
-        summary_frame = ttk.LabelFrame(sheet_frame, text="Sheet Summary")
-        summary_frame.grid(row=0, column=0, sticky=tk.EW, padx=5, pady=5)
+        # Header Row Control
+        header_control_frame = ttk.Frame(sheet_frame)
+        header_control_frame.grid(row=0, column=0, sticky=tk.EW, padx=5, pady=5)
         
-        summary_text = f"""Processing Status: {getattr(sheet, 'processing_status', 'Unknown')}
-Confidence: {getattr(sheet, 'confidence', 0):.1%}
-Data Rows: {getattr(sheet, 'data_rows', 0)}
-Columns: {len(getattr(sheet, 'column_mappings', []))}
-Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
+        # Get current header row (convert from 0-based to 1-based for display)
+        current_header_row = getattr(sheet, 'header_row_index', 0) + 1
+        header_row_var = tk.IntVar(value=current_header_row)
         
-        summary_label = ttk.Label(summary_frame, text=summary_text)
-        summary_label.grid(row=0, column=0, padx=10, pady=5, sticky=tk.W)
+        # Get sheet data length for validation (use a reasonable default)
+        # We'll load the file only when the user actually clicks the +/- buttons
+        sheet_data_length = 50  # Reasonable default for most Excel files
+        
+        # Header row control widgets
+        ttk.Label(header_control_frame, text="Header Row:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        decrease_btn = ttk.Button(header_control_frame, text="−", width=3,
+                                 command=lambda: self._on_header_row_decrease(sheet, header_row_var, entry_widget, 
+                                                                             decrease_btn, increase_btn))
+        decrease_btn.pack(side=tk.LEFT, padx=(0, 2))
+        
+        entry_widget = ttk.Entry(header_control_frame, textvariable=header_row_var, width=4, 
+                                justify=tk.CENTER, state='readonly')
+        entry_widget.pack(side=tk.LEFT, padx=(0, 2))
+        
+        increase_btn = ttk.Button(header_control_frame, text="+", width=3,
+                                 command=lambda: self._on_header_row_increase(sheet, header_row_var, entry_widget,
+                                                                             decrease_btn, increase_btn))
+        increase_btn.pack(side=tk.LEFT)
+        
+        # Update button states based on current row
+        self._update_header_row_buttons_simple(current_header_row, decrease_btn, increase_btn)
         
         # Column mappings table
         mappings_frame = ttk.LabelFrame(sheet_frame, text="Column Mappings (Double-click to edit) - Required columns are highlighted")
@@ -549,11 +867,21 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         v_scrollbar.grid(row=0, column=1, sticky=tk.NS)
         h_scrollbar.grid(row=1, column=0, sticky=tk.EW)
         
-        # Required types
+        # Required types (base required + successfully mapped new columns)
         if self.column_mapper and hasattr(self.column_mapper, 'config'):
-            required_types = {col_type.value for col_type in self.column_mapper.config.get_required_columns()}
+            base_required_types = {col_type.value for col_type in self.column_mapper.config.get_required_columns()}
         else:
-            required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+            base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        
+        # Add new columns as "required" if they are successfully mapped (confidence > 0)
+        required_types = base_required_types.copy()
+        if hasattr(sheet, 'column_mappings'):
+            for mapping in sheet.column_mappings:
+                mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                confidence = getattr(mapping, 'confidence', 0)
+                # Treat scope, manhours, wage as required if successfully mapped
+                if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                    required_types.add(mapped_type)
         
         # Populate treeview with column mappings
         if hasattr(sheet, 'column_mappings'):
@@ -587,6 +915,261 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         
         # Bind double-click to edit
         tree.bind('<Double-1>', lambda e, t=tree, s=sheet: self._edit_column_mapping(t, s))
+    
+    def _update_header_row_buttons(self, current_row, decrease_btn, increase_btn, max_rows):
+        """Update the state of header row buttons based on current row"""
+        # Disable decrease button if at minimum (row 1)
+        if current_row <= 1:
+            decrease_btn.config(state='disabled')
+        else:
+            decrease_btn.config(state='normal')
+        
+        # Disable increase button if at maximum
+        if current_row >= max_rows:
+            increase_btn.config(state='disabled')
+        else:
+            increase_btn.config(state='normal')
+    
+    def _update_header_row_buttons_simple(self, current_row, decrease_btn, increase_btn):
+        """Update the state of header row buttons based on current row (simple version)"""
+        # Disable decrease button if at minimum (row 1)
+        if current_row <= 1:
+            decrease_btn.config(state='disabled')
+        else:
+            decrease_btn.config(state='normal')
+        
+        # Increase button is always enabled (validation happens in reprocess method)
+        increase_btn.config(state='normal')
+    
+    def _on_header_row_decrease(self, sheet, header_row_var, entry_widget, decrease_btn, increase_btn):
+        """Decrease header row number and immediately refresh"""
+        current_row = header_row_var.get()
+        if current_row > 1:  # Minimum row 1
+            new_row = current_row - 1
+            header_row_var.set(new_row)
+            
+            # Update entry widget
+            entry_widget.config(state='normal')
+            entry_widget.delete(0, tk.END)
+            entry_widget.insert(0, str(new_row))
+            entry_widget.config(state='readonly')
+            
+            # Immediately reprocess with new header row (validation happens inside)
+            success = self._reprocess_sheet_with_header_row(sheet, new_row - 1)  # Convert to 0-based
+            
+            # Update button states based on success and new row
+            if success:
+                self._update_header_row_buttons_simple(new_row, decrease_btn, increase_btn)
+            else:
+                # Revert on failure
+                header_row_var.set(current_row)
+                entry_widget.config(state='normal')
+                entry_widget.delete(0, tk.END)
+                entry_widget.insert(0, str(current_row))
+                entry_widget.config(state='readonly')
+    
+    def _on_header_row_increase(self, sheet, header_row_var, entry_widget, decrease_btn, increase_btn):
+        """Increase header row number and immediately refresh"""
+        current_row = header_row_var.get()
+        new_row = current_row + 1
+        header_row_var.set(new_row)
+        
+        # Update entry widget
+        entry_widget.config(state='normal')
+        entry_widget.delete(0, tk.END)
+        entry_widget.insert(0, str(new_row))
+        entry_widget.config(state='readonly')
+        
+        # Immediately reprocess with new header row (validation happens inside)
+        success = self._reprocess_sheet_with_header_row(sheet, new_row - 1)  # Convert to 0-based
+        
+        # Update button states based on success and new row
+        if success:
+            self._update_header_row_buttons_simple(new_row, decrease_btn, increase_btn)
+        else:
+            # Revert on failure
+            header_row_var.set(current_row)
+            entry_widget.config(state='normal')
+            entry_widget.delete(0, tk.END)
+            entry_widget.insert(0, str(current_row))
+            entry_widget.config(state='readonly')
+    
+    def _reprocess_sheet_with_header_row(self, sheet, new_header_row_index):
+        """Reprocess sheet with new header row and update UI"""
+        try:
+            # Get the current file path from the file mapping
+            if not hasattr(self, 'file_mapping') or not self.file_mapping:
+                messagebox.showerror("Error", "No file mapping available")
+                return False
+            
+            # Get the file path from the metadata
+            file_path = Path(self.file_mapping.metadata.file_path)
+            if not file_path.exists():
+                messagebox.showerror("Error", f"Original file not found: {file_path}")
+                return False
+            
+            # Reload the file temporarily to get sheet data
+            try:
+                from core.file_processor import ExcelProcessor
+                temp_processor = ExcelProcessor()
+                temp_processor.load_file(file_path)
+                
+                # Get sheet data for the specific sheet
+                sheet_data = temp_processor.get_sheet_data(sheet.sheet_name)
+                
+                if not sheet_data:
+                    messagebox.showerror("Error", "No sheet data available for reprocessing")
+                    return False
+                
+                # Validate the new header row index
+                if new_header_row_index < 0 or new_header_row_index >= len(sheet_data):
+                    messagebox.showerror("Error", f"Invalid header row {new_header_row_index + 1}. Sheet has {len(sheet_data)} rows.")
+                    return False
+                
+            except Exception as e:
+                logger.error(f"Failed to reload file and get sheet data: {e}")
+                messagebox.showerror("Error", f"Failed to reload file: {str(e)}")
+                return False
+            
+            # Use the column mapper to reprocess with forced header row
+            if not self.column_mapper:
+                messagebox.showerror("Error", "Column mapper not available")
+                return False
+            
+            # Process with forced header row
+            mapping_result = self.column_mapper.process_sheet_mapping_with_forced_header(
+                sheet_data, new_header_row_index
+            )
+            
+            # Update sheet object with new mapping results
+            sheet.header_row_index = new_header_row_index
+            sheet.confidence = mapping_result.overall_confidence
+            
+            # Convert mappings to the format expected by the sheet
+            new_column_mappings = []
+            for mapping in mapping_result.mappings:
+                # Create a simple object with the required attributes
+                col_mapping = type('ColumnMapping', (), {})()
+                col_mapping.column_index = mapping.column_index
+                col_mapping.original_header = mapping.original_header
+                col_mapping.mapped_type = mapping.mapped_type.value
+                col_mapping.confidence = mapping.confidence
+                col_mapping.user_edited = True  # Mark as user-edited since user manually changed header row
+                col_mapping.reasoning = mapping.reasoning
+                new_column_mappings.append(col_mapping)
+            
+            sheet.column_mappings = new_column_mappings
+            
+            # CRITICAL FIX: Update the cached sheet data in the controller to reflect the new header row
+            # This prevents data corruption during row classification
+            if hasattr(self, 'controller') and self.controller:
+                # Find the file key by matching the file mapping
+                file_key = None
+                for key, file_data in self.controller.current_files.items():
+                    if file_data.get('file_mapping') == self.file_mapping:
+                        file_key = key
+                        break
+                
+                if file_key and hasattr(self.controller, 'current_files') and file_key in self.controller.current_files:
+                    processor_results = self.controller.current_files[file_key].get('processor_results', {})
+                    original_sheet_data = processor_results.get('sheet_data', {})
+                    
+                    # Update the cached sheet data with the new header row information
+                    if sheet.sheet_name in original_sheet_data:
+                        # Store the new header row index as metadata for this sheet
+                        # This will be used during row classification to skip the correct header row
+                        if 'header_row_indices' not in processor_results:
+                            processor_results['header_row_indices'] = {}
+                        processor_results['header_row_indices'][sheet.sheet_name] = new_header_row_index
+                        
+                        print(f"[DEBUG] Updated cached header row index for sheet '{sheet.sheet_name}' to {new_header_row_index}")
+            
+            # CRITICAL FIX: Set the sheet.sheet_data to the FULL original data
+            # The row classifications contain indices that reference the original data structure
+            # We should NOT remove the header row from sheet.sheet_data because the row indices
+            # in the classifications are adjusted to account for the header row position
+            sheet.sheet_data = sheet_data
+            print(f"[DEBUG] Set sheet.sheet_data for '{sheet.sheet_name}' with full original data")
+            print(f"[DEBUG] Data length: {len(sheet_data)}")
+            print(f"[DEBUG] Header row index: {new_header_row_index}")
+            if new_header_row_index < len(sheet_data):
+                print(f"[DEBUG] Header row content: {sheet_data[new_header_row_index]}")
+            if len(sheet_data) > 0:
+                print(f"[DEBUG] First row of sheet_data: {sheet_data[0]}")
+            if len(sheet_data) > 1:
+                print(f"[DEBUG] Second row of sheet_data: {sheet_data[1]}")
+            
+            # Refresh the UI for this sheet
+            self._refresh_single_sheet_tab(sheet)
+            
+            # Update status
+            self._update_status(f"Header row updated to row {new_header_row_index + 1} for sheet '{sheet.sheet_name}'")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error reprocessing sheet with header row {new_header_row_index}: {e}")
+            messagebox.showerror("Error", f"Failed to reprocess sheet: {str(e)}")
+            return False
+    
+    def _refresh_single_sheet_tab(self, sheet):
+        """Refresh the UI for a single sheet tab"""
+        try:
+            # Find the sheet tab in the notebook
+            if not hasattr(self, 'file_mapping') or not self.file_mapping:
+                return
+            
+            # Get the sheet treeview
+            tree = self.sheet_treeviews.get(sheet.sheet_name)
+            if not tree:
+                return
+            
+            # Clear existing items
+            for item in tree.get_children():
+                tree.delete(item)
+            
+            # Required types (base required + successfully mapped new columns)
+            if self.column_mapper and hasattr(self.column_mapper, 'config'):
+                base_required_types = {col_type.value for col_type in self.column_mapper.config.get_required_columns()}
+            else:
+                base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+            
+            # Add new columns as "required" if they are successfully mapped (confidence > 0)
+            required_types = base_required_types.copy()
+            if hasattr(sheet, 'column_mappings'):
+                for mapping in sheet.column_mappings:
+                    mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                    confidence = getattr(mapping, 'confidence', 0)
+                    # Treat scope, manhours, wage as required if successfully mapped
+                    if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                        required_types.add(mapped_type)
+            
+            # Repopulate treeview with updated column mappings
+            if hasattr(sheet, 'column_mappings'):
+                for mapping in sheet.column_mappings:
+                    confidence = getattr(mapping, 'confidence', 0)
+                    mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                    required = mapped_type in required_types
+                    original_header = getattr(mapping, 'original_header', 'Unknown')
+                    
+                    # Determine if this mapping was user-edited
+                    actions = "Manual Header" if getattr(mapping, 'user_edited', False) else "Auto-detected"
+                    
+                    tags = []
+                    if required:
+                        tags.append('required')
+                    
+                    tree.insert("", tk.END, values=(
+                        original_header,
+                        mapped_type,
+                        f"{confidence:.1%}",
+                        "Yes" if required else "No",
+                        actions
+                    ), tags=tags)
+            
+        except Exception as e:
+            logger.error(f"Error refreshing sheet tab: {e}")
+            # Don't show error dialog as this is a background refresh
 
     def _edit_column_mapping(self, tree, sheet):
         selection = tree.selection()
@@ -607,13 +1190,21 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             return
         # Radio button options for mapped type
         mapped_type_options = [
-            "description", "quantity", "unit_price", "total_price", "unit", "code", "ignore"
+            "description", "quantity", "unit_price", "total_price", "unit", "code", "scope", "manhours", "wage", "ignore"
         ]
-        required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        # Base required types + new columns if successfully mapped
+        base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        required_types = base_required_types.copy()
+        if hasattr(sheet, 'column_mappings'):
+            for mapping in sheet.column_mappings:
+                mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                confidence = getattr(mapping, 'confidence', 0)
+                if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                    required_types.add(mapped_type)
         # Dialog to edit mapped type
         dialog = tk.Toplevel(self.root)
         dialog.title(f"Edit Column: {column_name}")
-        dialog.geometry("500x500")
+        dialog.geometry("500x650")
         dialog.transient(self.root)
         dialog.grab_set()
         
@@ -738,7 +1329,15 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             self._update_status("No user-edited columns to propagate.")
             return
         count = 0
-        required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        # Base required types + new columns if successfully mapped
+        base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        required_types = base_required_types.copy()
+        if hasattr(source_sheet, 'column_mappings'):
+            for mapping in source_sheet.column_mappings:
+                mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                confidence = getattr(mapping, 'confidence', 0)
+                if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                    required_types.add(mapped_type)
         affected_sheets = set()
         for edited_cm in user_edited:
             edited_header = getattr(edited_cm, 'original_header', None)
@@ -801,6 +1400,11 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         self._update_status(f"Propagated {count} column mappings to all other sheets.")
 
     def _save_all_mappings_for_all_sheets(self):
+        # Prevent saving mappings during comparison workflow
+        if getattr(self, 'is_comparison_workflow', False):
+            logger.info("Saving mappings prevented during comparison workflow")
+            return
+            
         if not self.file_mapping or not hasattr(self.file_mapping, 'sheets'):
             messagebox.showwarning("No File", "No file loaded.")
             return
@@ -820,8 +1424,19 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
 
     def _trigger_row_mapping(self):
         """Trigger row mapping with the current column mappings"""
+        # Prevent row mapping during comparison workflow
+        if getattr(self, 'is_comparison_workflow', False):
+            logger.info("Row mapping prevented during comparison workflow")
+            return
+            
         if not self.file_mapping or not hasattr(self.file_mapping, 'sheets'):
             self._update_status("No file loaded for row mapping.")
+            return
+            
+        # CRITICAL VALIDATION: Check for missing required columns before proceeding
+        validation_result = self._validate_required_columns()
+        if not validation_result['is_valid']:
+            self._show_missing_columns_warning(validation_result)
             return
         
         try:
@@ -864,79 +1479,108 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                     # Skip if we don't have the original data
                     continue
                 
+                # CRITICAL FIX: Check if header row was manually changed and adjust sheet data accordingly
+                header_row_index = 0  # Default header row index
+                if hasattr(self, 'controller') and self.controller:
+                    # Find the file key by matching the file mapping
+                    file_key = None
+                    for key, file_data in self.controller.current_files.items():
+                        if file_data.get('file_mapping') == self.file_mapping:
+                            file_key = key
+                            break
+                    
+                    if file_key and hasattr(self.controller, 'current_files') and file_key in self.controller.current_files:
+                        processor_results = self.controller.current_files[file_key].get('processor_results', {})
+                        header_row_indices = processor_results.get('header_row_indices', {})
+                        
+                        # Use the manually set header row index if available
+                        if sheet.sheet_name in header_row_indices:
+                            header_row_index = header_row_indices[sheet.sheet_name]
+                            print(f"[DEBUG] Using manually set header row index {header_row_index} for sheet '{sheet.sheet_name}'")
+                        elif hasattr(sheet, 'header_row_index'):
+                            header_row_index = sheet.header_row_index
+                
+                # Remove the header row from sheet data before classification to prevent confusion
+                # The row classifier should only classify data rows, not header rows
+                if header_row_index < len(sheet_data):
+                    # Create a copy of sheet data without the header row
+                    data_rows = sheet_data[:header_row_index] + sheet_data[header_row_index + 1:]
+                    print(f"[DEBUG] Removed header row {header_row_index} from sheet '{sheet.sheet_name}' data for classification")
+                else:
+                    data_rows = sheet_data
+                
                 # Convert column mappings to the format expected by row classifier
-                # Use the original column mapping from the main processing pipeline
+                # Use the current column mappings from the sheet (which reflect any manual changes)
                 column_mapping_dict = {}
                 
-                # Get the original column mapping from the processor results
-                if hasattr(self, 'file_mapping') and hasattr(self.file_mapping, 'column_mapper'):
-                    # Use the column mapper's original mapping for this sheet
-                    sheet_name = sheet.sheet_name
-                    if hasattr(self.file_mapping.column_mapper, 'process_sheet_mapping'):
-                        # Get the original mapping result for this sheet
-                        sheet_data = original_sheet_data.get(sheet_name, [])
-                        if sheet_data:
-                            mapping_result = self.file_mapping.column_mapper.process_sheet_mapping(sheet_data)
-                            # Use the original 0-based column mapping
-                            for mapping in mapping_result.mappings:
-                                column_mapping_dict[mapping.column_index] = mapping.mapped_type
-                else:
-                    # Fallback: use the sheet's column mappings with 0-based conversion
-                    for col_mapping in sheet.column_mappings:
-                        try:
-                            # Convert string column type to ColumnType enum
-                            col_type = ColumnType(col_mapping.mapped_type)
-                            # Fix: Use 0-based indices for row classifier (subtract 1 from column_index)
-                            column_mapping_dict[col_mapping.column_index - 1] = col_type
-                        except ValueError:
-                            # Skip unknown column types
-                            continue
+                # Use the sheet's current column mappings
+                for col_mapping in sheet.column_mappings:
+                    try:
+                        # Convert string column type to ColumnType enum
+                        col_type = ColumnType(col_mapping.mapped_type)
+                        # Use the column index as-is (it's already 0-based from the mapping result)
+                        column_mapping_dict[col_mapping.column_index] = col_type
+                    except ValueError:
+                        # Skip unknown column types
+                        continue
                 
                 # DEBUG: Log the column mapping and first few rows to diagnose indexing
                 # Only debug the "Miscellaneous" sheet where Bank Guarantee is located
                 if sheet.sheet_name == "Miscellaneous":
-                    print(f"[DEBUG] Column mapping for {sheet.sheet_name}: {column_mapping_dict}")
+                    # print(f"[DEBUG] Column mapping for {sheet.sheet_name}: {column_mapping_dict}")
                     if sheet_data:
-                        print(f"[DEBUG] First row data: {sheet_data[0] if len(sheet_data) > 0 else 'No data'}")
-                        print(f"[DEBUG] Row data length: {len(sheet_data[0]) if sheet_data else 0}")
+                        # print(f"[DEBUG] First row data: {sheet_data[0] if len(sheet_data) > 0 else 'No data'}")
+                        # print(f"[DEBUG] Row data length: {len(sheet_data[0]) if sheet_data else 0}")
                         
                         # Show headers to understand column mapping
                         if hasattr(sheet, 'column_mappings'):
-                            print(f"[DEBUG] Headers for {sheet.sheet_name}:")
+                            # print(f"[DEBUG] Headers for {sheet.sheet_name}:")
                             for i, col_mapping in enumerate(sheet.column_mappings):
                                 header = getattr(col_mapping, 'original_header', f'Column_{i}')
                                 mapped_type = getattr(col_mapping, 'mapped_type', 'unknown')
                                 confidence = getattr(col_mapping, 'confidence', 0)
-                                print(f"[DEBUG] Column {col_mapping.column_index}: '{header}' -> {mapped_type} (confidence: {confidence:.2f})")
+                                # print(f"[DEBUG] Column {col_mapping.column_index}: '{header}' -> {mapped_type} (confidence: {confidence:.2f})")
                         
                         # Show first 10 rows to find Bank Guarantee
                         for i in range(min(10, len(sheet_data))):
                             if any('Bank Guarantee' in str(cell) for cell in sheet_data[i]):
-                                print(f"[DEBUG] FOUND BANK GUARANTEE at row {i}: {sheet_data[i]}")
+                                # print(f"[DEBUG] FOUND BANK GUARANTEE at row {i}: {sheet_data[i]}")
+                                pass
                             else:
-                                print(f"[DEBUG] Row {i}: {sheet_data[i]}")
+                                # print(f"[DEBUG] Row {i}: {sheet_data[i]}")
+                                pass
                 
-                # Perform row classification
-                row_classification_result = row_classifier.classify_rows(sheet_data, column_mapping_dict)
+                # Perform row classification using the data rows (without header row)
+                row_classification_result = row_classifier.classify_rows(data_rows, column_mapping_dict, sheet.sheet_name)
                 
                 # Update the sheet's row classifications
                 sheet.row_classifications = []
                 for row_class in row_classification_result.classifications:
                     from core.mapping_generator import RowClassificationInfo
+                    # CRITICAL FIX: Adjust row index to account for removed header row
+                    # The row classifier processed data WITHOUT the header row, so its indices
+                    # are already shifted down. We need to shift them back up to match the original data.
+                    adjusted_row_index = row_class.row_index
+                    if row_class.row_index >= header_row_index:
+                        adjusted_row_index = row_class.row_index + 1
+                    
+                    print(f"[DEBUG] Row classification: original_index={row_class.row_index}, header_row={header_row_index}, adjusted_index={adjusted_row_index}")
+                    
                     row_info = RowClassificationInfo(
-                        row_index=row_class.row_index,
+                        row_index=adjusted_row_index,
                         row_type=row_class.row_type.value,
                         confidence=row_class.confidence,
                         completeness_score=row_class.completeness_score,
                         hierarchical_level=row_class.hierarchical_level,
                         section_title=row_class.section_title,
                         validation_errors=row_class.validation_errors,
-                        reasoning=row_class.reasoning
+                        reasoning=row_class.reasoning,
+                        position=row_class.position
                     )
                     sheet.row_classifications.append(row_info)
                 
                 # Update sheet statistics
-                sheet.row_count = len(sheet_data)
+                sheet.row_count = len(data_rows)  # Use data rows count (excluding header)
                 sheet.overall_confidence = row_classification_result.overall_quality_score
                 
                 # Update processing status based on row classification quality
@@ -958,6 +1602,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 
             # After row mapping is complete and data is available:
             # Show the Row Review section with correct data
+                pass
             self._show_row_review(self.file_mapping, original_sheet_data)
             
         except Exception as e:
@@ -970,6 +1615,109 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 f"Please check the logs for more details."
             )
             self._update_status(f"Row mapping failed: {str(e)}")
+
+    def _validate_required_columns(self):
+        """
+        Validate that all required columns are properly mapped across all sheets.
+        Returns a dictionary with validation results.
+        """
+        # Define required columns
+        base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        
+        validation_result = {
+            'is_valid': True,
+            'missing_columns': {},  # sheet_name -> [missing_column_types]
+            'unmapped_sheets': [],
+            'total_sheets': 0,
+            'valid_sheets': 0
+        }
+        
+        if not self.file_mapping or not hasattr(self.file_mapping, 'sheets'):
+            validation_result['is_valid'] = False
+            return validation_result
+        
+        for sheet in self.file_mapping.sheets:
+            validation_result['total_sheets'] += 1
+            sheet_name = sheet.sheet_name
+            
+            # Get mapped types for this sheet
+            mapped_types = set()
+            if hasattr(sheet, 'column_mappings'):
+                for mapping in sheet.column_mappings:
+                    mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                    confidence = getattr(mapping, 'confidence', 0)
+                    # Only count columns with reasonable confidence or user-edited
+                    if confidence > 0 or getattr(mapping, 'user_edited', False):
+                        mapped_types.add(mapped_type)
+            
+            # Check for missing required columns
+            missing_columns = []
+            for required_type in base_required_types:
+                if required_type not in mapped_types:
+                    missing_columns.append(required_type)
+            
+            if missing_columns:
+                validation_result['is_valid'] = False
+                validation_result['missing_columns'][sheet_name] = missing_columns
+            else:
+                validation_result['valid_sheets'] += 1
+        
+        return validation_result
+    
+    def _show_missing_columns_warning(self, validation_result):
+        """
+        Show a detailed warning dialog about missing required columns.
+        """
+        from tkinter import messagebox
+        
+        missing_info = validation_result['missing_columns']
+        total_sheets = validation_result['total_sheets']
+        valid_sheets = validation_result['valid_sheets']
+        
+        # Build detailed message
+        message_parts = [
+            f"⚠️ COLUMN MAPPING INCOMPLETE ⚠️",
+            f"",
+            f"Cannot proceed to row mapping because some required columns are not mapped.",
+            f"",
+            f"Status: {valid_sheets}/{total_sheets} sheets have complete column mappings.",
+            f""
+        ]
+        
+        if missing_info:
+            message_parts.append("Missing required columns by sheet:")
+            message_parts.append("")
+            
+            for sheet_name, missing_columns in missing_info.items():
+                message_parts.append(f"📋 {sheet_name}:")
+                for col in missing_columns:
+                    message_parts.append(f"   • {col}")
+                message_parts.append("")
+        
+        message_parts.extend([
+            "Required columns for BOQ processing:",
+            "• description (item descriptions)",
+            "• quantity (quantities)",  
+            "• unit (units of measurement)",
+            "• unit_price (unit prices)",
+            "• total_price (total prices)",
+            "• code (position codes)",
+            "",
+            "Please:",
+            "1. Review the column mappings in each sheet tab",
+            "2. Double-click columns to edit their mapping",
+            "3. Ensure all required columns are properly mapped",
+            "4. Try row mapping again"
+        ])
+        
+        full_message = "\n".join(message_parts)
+        
+        messagebox.showerror(
+            "Missing Required Columns",
+            full_message
+        )
+        
+        self._update_status(f"Column mapping incomplete: {total_sheets - valid_sheets} sheets need attention")
 
     def _refresh_sheet_tabs(self):
         """Refresh the sheet tabs to show updated row mapping information"""
@@ -997,7 +1745,15 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             if show_dialogs:
                 messagebox.showwarning("No Column Mapper", "Column mapper not available. Please reload the file.")
             return 0, 0, 0
-        required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        # Base required types + new columns if successfully mapped
+        base_required_types = {"description", "quantity", "unit_price", "total_price", "unit", "code"}
+        required_types = base_required_types.copy()
+        if hasattr(sheet, 'column_mappings'):
+            for mapping in sheet.column_mappings:
+                mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                confidence = getattr(mapping, 'confidence', 0)
+                if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                    required_types.add(mapped_type)
         saved_count = 0
         failed_count = 0
         already_present_count = 0
@@ -1070,6 +1826,9 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         is_valid = self.row_validity[sheet_name].get(idx, True)
         new_valid = not is_valid
         self.row_validity[sheet_name][idx] = new_valid
+        
+        # Update validity state (no longer need to track manual invalidations)
+        
         # Update tag and status column
         tag = 'validrow' if new_valid else 'invalidrow'
         tree.item(row_id, tags=(tag,))
@@ -1078,6 +1837,17 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         tree.item(row_id, values=vals)
 
     def _show_row_review(self, file_mapping, original_sheet_data=None):
+        logger.info("_show_row_review called")
+        logger.info(f"File mapping type: {type(file_mapping)}")
+        logger.info(f"File mapping offer_info: {getattr(file_mapping, 'offer_info', 'No offer_info')}")
+        logger.info(f"Is comparison workflow: {getattr(self, 'is_comparison_workflow', False)}")
+        logger.info(f"Pending comparison export: {getattr(self, '_pending_comparison_export', False)}")
+        
+        # Prevent normal row review during comparison workflow
+        if getattr(self, 'is_comparison_workflow', False):
+            logger.info("Normal row review prevented during comparison workflow")
+            return
+            
         # Remove existing Row Review frame if present
         if self.row_review_frame:
             self.row_review_frame.destroy()
@@ -1124,12 +1894,23 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             self.row_review_notebook.add(frame, text=sheet.sheet_name)
             # Use standard mapped column names for display and value extraction
             if self.column_mapper and hasattr(self.column_mapper, 'config'):
-                required_types = [col_type.value for col_type in self.column_mapper.config.get_required_columns()]
+                base_required_types = [col_type.value for col_type in self.column_mapper.config.get_required_columns()]
             else:
-                required_types = ["description", "quantity", "unit_price", "total_price", "unit", "code"]
+                base_required_types = ["description", "quantity", "unit_price", "total_price", "unit", "code"]
+            
+            # Add new columns as "required" if they are successfully mapped (confidence > 0)
+            required_types = base_required_types.copy()
+            if hasattr(sheet, 'column_mappings'):
+                for mapping in sheet.column_mappings:
+                    mapped_type = getattr(mapping, 'mapped_type', 'unknown')
+                    confidence = getattr(mapping, 'confidence', 0)
+                    # Treat scope, manhours, wage as required if successfully mapped
+                    if mapped_type in ['scope', 'manhours', 'wage'] and confidence > 0:
+                        if mapped_type not in required_types:
+                            required_types.append(mapped_type)
             
             # Define the correct column order for display
-            display_column_order = ["code", "description", "unit", "quantity", "unit_price", "total_price"]
+            display_column_order = ["code", "description", "unit", "quantity", "unit_price", "total_price", "scope", "manhours", "wage"]
             
             # Use the display order, but only include columns that are actually mapped
             available_columns = []
@@ -1155,7 +1936,7 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                 if col == "status":
                     tree.column(col, width=80, anchor=tk.CENTER)
                 else:
-                    tree.column(col, width=120 if col != "#" else 40, anchor=tk.W)
+                    tree.column(col, width=120 if col != "#" else 40, anchor=tk.W, minwidth=50, stretch=False)
             # Add scrollbars
             v_scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=tree.yview)
             h_scrollbar = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=tree.xview)
@@ -1164,9 +1945,10 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
             h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
             self.row_review_treeviews[sheet.sheet_name] = tree
-            # Remove blue selection highlight
+            # Set selection highlight to light blue (same as column mapping)
             style = ttk.Style(tree)
-            style.map('Treeview', background=[('selected', '#FFEBEE')])  # Always red on select
+            style.map('Treeview', 
+                     background=[('selected', '#B3E5FC')])  # Light blue background
             style.layout('Treeview.Item', [('Treeitem.padding', {'sticky': 'nswe', 'children': [('Treeitem.indicator', {'side': 'left', 'sticky': ''}), ('Treeitem.image', {'side': 'left', 'sticky': ''}), ('Treeitem.text', {'side': 'left', 'sticky': ''})]})])
             # Populate rows
             self.row_validity[sheet.sheet_name] = {}
@@ -1186,13 +1968,29 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                         val = row_data[idx] if idx is not None and idx < len(row_data) else ""
                         
                         # Apply number formatting for specific columns
-                        if col in ['unit_price', 'total_price']:
-                            val = format_number(val, is_currency=True)
-                        elif col == 'quantity':
-                            val = format_number(val, is_currency=False)
+                        if col in ['unit_price', 'total_price', 'wage']:
+                            val = format_number_eu(val)
+                        elif col in ['quantity', 'manhours']:
+                            val = format_number_eu(val)
                         
                         row_values.append(val)
-                    is_valid = getattr(rc, 'row_type', None) == RowType.PRIMARY_LINE_ITEM or getattr(rc, 'row_type', None) == 'primary_line_item'
+                    # New: Use new row validity logic based on master vs comparison mode
+                    from core.row_classifier import RowClassifier
+                    from utils.config import ColumnType
+                    row_classifier = RowClassifier()
+                    
+                    # Convert column mappings to format expected by row classifier
+                    column_mapping = {}
+                    for cm in sheet.column_mappings:
+                        try:
+                            col_type = ColumnType(cm.mapped_type)
+                            column_mapping[cm.column_index] = col_type
+                        except ValueError:
+                            continue
+                    
+                    # Use master validation criteria for all rows
+                        is_valid = row_classifier.validate_master_row_validity(row_data, column_mapping)
+                    
                     self.row_validity[sheet.sheet_name][rc.row_index] = is_valid
                     status = "Valid" if is_valid else "Invalid"
                     tag = 'validrow' if is_valid else 'invalidrow'
@@ -1218,35 +2016,67 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
             self._hidden_column_mapping_widgets = []
 
     def _on_confirm_row_review(self):
-        """Handle row review confirmation and start categorization"""
-        self._update_status("Row review confirmed. Starting categorization process...")
-        # Get the current tab ID
+        """Handle row review confirmation and start categorization or export for comparison workflow"""
+        logger.info("_on_confirm_row_review called")
+        logger.info(f"Current tab ID: {self.notebook.select()}")
+        logger.info(f"Current file mapping: {self.file_mapping}")
+        logger.info(f"Pending comparison export: {getattr(self, '_pending_comparison_export', False)}")
+        logger.info(f"Is comparison workflow: {getattr(self, 'is_comparison_workflow', False)}")
+        
+        # If this was a comparison workflow, continue with comparison processing
+        if getattr(self, '_pending_comparison_export', False):
+            logger.info("Comparison workflow detected in _on_confirm_row_review")
+            # Reset flag immediately to prevent re-entry
+            self._pending_comparison_export = False
+            offer_info = getattr(self, '_pending_comparison_offer_info', None)
+            self._pending_comparison_offer_info = None
+            
+            # Get the current tab and continue with comparison processing
+            current_tab_id = self.notebook.select()
+            if current_tab_id:
+                current_tab = self.notebook.nametowidget(current_tab_id)
+                logger.info("Calling _compare_full to continue comparison processing")
+                self._compare_full(current_tab)
+            return
+            
+        # Additional safeguard: prevent normal workflow during comparison
+        if getattr(self, 'is_comparison_workflow', False):
+            logger.info("Normal workflow prevented during comparison workflow")
+            return
+        # --- Normal master BOQ workflow ---
+        self._update_status("Row review confirmed. Filtering valid rows and starting categorization process...")
         current_tab_id = self.notebook.select()
         file_mapping = self.tab_id_to_file_mapping.get(current_tab_id)
         if not file_mapping:
             messagebox.showerror("Error", "Could not find file mapping for categorization")
             return
-        # --- NEW: Create normalized DataFrame for categorization with logging, only including valid rows ---
+        
+        # CRITICAL FIX: Store row validity in file_mapping so controller can access it
+        file_mapping.row_validity = self.row_validity.copy()
+        
         try:
             import pandas as pd
-            import logging
-            logger = logging.getLogger(__name__)
-            # Build a DataFrame from all sheets marked as BOQ, only including valid rows
             rows = []
             sheet_count = 0
+            
+            # FILTER: Only process valid rows from each sheet
             for sheet in getattr(file_mapping, 'sheets', []):
                 if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
+                    logger.debug(f"Skipping sheet {sheet.sheet_name} with type {getattr(sheet, 'sheet_type', 'Unknown')}")
                     continue
                 sheet_count += 1
-                # Use mapped_type as DataFrame columns
                 col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
                 sheet_name = sheet.sheet_name
                 validity_dict = self.row_validity.get(sheet_name, {})
-                # For each row classification, get the row data
+                
+                # FILTER: Only include rows that are marked as valid
+                valid_row_classifications = []
                 for rc in getattr(sheet, 'row_classifications', []):
-                    # Only include valid rows
-                    if not validity_dict.get(rc.row_index, True):
-                        continue
+                    if validity_dict.get(rc.row_index, True):  # Only include valid rows
+                        valid_row_classifications.append(rc)
+                
+                # Process only valid rows
+                for rc in valid_row_classifications:
                     row_data = getattr(rc, 'row_data', None)
                     if row_data is None and hasattr(sheet, 'sheet_data'):
                         try:
@@ -1255,36 +2085,34 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
                             row_data = None
                     if row_data is None:
                         row_data = []
-                    # Build dict for DataFrame
-                    row_dict = {col_headers[i]: row_data[i] if i < len(row_data) else '' for i in range(len(col_headers))}
-                    row_dict['Source_Sheet'] = sheet.sheet_name
+                    row_dict = {}
+                    for cm in sheet.column_mappings:
+                        mapped_type = getattr(cm, 'mapped_type', None)
+                        if not mapped_type:
+                            continue
+                        idx = cm.column_index
+                        row_dict[mapped_type] = row_data[idx] if idx < len(row_data) else ''
+                    for mt in col_headers:
+                        if mt not in row_dict:
+                            row_dict[mt] = ''
                     rows.append(row_dict)
-            logger.info(f"Categorization: Processed {sheet_count} BOQ sheets, {len(rows)} valid rows for DataFrame.")
-            if rows:
-                df = pd.DataFrame(rows)
-                # Ensure 'Description' column is present and capitalized
-                if 'description' in df.columns and 'Description' not in df.columns:
-                    df.rename(columns={'description': 'Description'}, inplace=True)
-                logger.info(f"Categorization: DataFrame columns: {list(df.columns)}")
-                logger.info(f"Categorization: First 3 rows: {df.head(3).to_dict(orient='records')}")
-                logger.info(f"Categorization: First 10 Description values: {df['Description'].head(10).tolist() if 'Description' in df.columns else 'No Description column'}")
-            else:
-                df = None
-                logger.warning("Categorization: No valid rows found for DataFrame.")
-            file_mapping.dataframe = df
-            if df is None or df.empty or 'Description' not in df.columns:
-                messagebox.showerror("Categorization Error", "No valid data found for categorization. Please check that your sheets contain valid BOQ rows and that a 'Description' column is mapped.")
+            
+            if not rows:
+                messagebox.showerror("Error", "No valid rows found for categorization.")
                 return
+            
+            # Create filtered dataframe with only valid rows
+            final_dataframe = pd.DataFrame(rows)
+            logger.info(f"Filtered dataset created with {len(rows)} valid rows from {sheet_count} sheets")
+            
+            # Store the filtered dataframe in file_mapping for later use
+            file_mapping.filtered_dataframe = final_dataframe
+            
+            self._start_categorization(file_mapping)
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"Failed to build DataFrame for categorization: {e}")
-            file_mapping.dataframe = None
-            messagebox.showerror("Categorization Error", f"Failed to build DataFrame for categorization: {e}")
-            return
-        # --- END NEW ---
-        # Start categorization process
-        self._start_categorization(file_mapping)
-    
+            logger.error(f"Error during row review confirmation: {e}", exc_info=True)
+            messagebox.showerror("Error", f"An error occurred during row review confirmation: {str(e)}")
+
     def _start_categorization(self, file_mapping):
         """Start the categorization process"""
         if not CATEGORIZATION_AVAILABLE:
@@ -1308,1481 +2136,3650 @@ Validation Score: {getattr(sheet, 'validation_score', 0):.1%}"""
         """Handle categorization completion"""
         try:
             current_tab_path = self.notebook.select()
-            current_tab = self.notebook.select(current_tab_path)  # Get the actual tab widget
-            print("[DEBUG] Current tab path:", current_tab_path)
-            print("[DEBUG] Current tab widget:", current_tab)
-            print("[DEBUG] File mapping tabs:", [str(file_data['file_mapping'].tab) for file_data in self.controller.current_files.values()])
-            print("[DEBUG] Number of files:", len(self.controller.current_files))
             
+            # Get the actual tab widget using nametowidget
+            current_tab = self.notebook.nametowidget(self.notebook.select())
+            
+            logger.debug(f"Current tab path: {current_tab_path}")
+            logger.debug(f"Current tab widget type: {type(current_tab)}")
+            logger.debug(f"Current tab widget: {current_tab}")
+            
+            # First, try to find the matching file data in controller's current_files
+            file_data_found = False
             for file_key, file_data in self.controller.current_files.items():
-                print("[DEBUG] Checking file_key:", file_key)
-                print("[DEBUG] file_data['file_mapping'].tab:", file_data['file_mapping'].tab)
-                print("[DEBUG] hasattr check:", hasattr(file_data['file_mapping'], 'tab'))
-                print("[DEBUG] tab comparison:", str(file_data['file_mapping'].tab) == str(current_tab_path))
-                
                 if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
-                    print("[DEBUG] Found matching tab, storing data...")
-                    # Store the categorized data
-                    file_data['categorized_dataframe'] = final_dataframe
+                    # Store the final dataframe and categorization result
+                    file_data['final_dataframe'] = final_dataframe
                     file_data['categorization_result'] = categorization_result
-                    # Update the file mapping
-                    file_mapping = file_data['file_mapping']
-                    file_mapping.categorized_dataframe = final_dataframe
+                    
+                    # Update the tab with the final categorized data
+                    logger.debug(f"Calling _show_final_categorized_data with tab type: {type(current_tab)}")
+                    self._show_final_categorized_data(current_tab, final_dataframe, categorization_result)
+                    
+                    # Refresh summary grid
+                    logger.debug("Calling centralized summary grid refresh after categorization")
+                    self._refresh_summary_grid_centralized()
+                    file_data_found = True
+                    break
+            
+            # If not found in current_files, try tab_id_to_file_mapping (for Use Mapping workflow)
+            if not file_data_found:
+                file_mapping = self.tab_id_to_file_mapping.get(current_tab_path)
+                if file_mapping:
+                    logger.debug("Found file mapping in tab_id_to_file_mapping for Use Mapping workflow")
+                    
+                    # Store the final dataframe and categorization result in the file mapping
+                    file_mapping.final_dataframe = final_dataframe
                     file_mapping.categorization_result = categorization_result
-                    print("[DEBUG] About to call _show_final_categorized_data...")
-                    # Show the final data grid in the main window - use the actual tab widget from file_mapping
-                    self._show_final_categorized_data(file_mapping.tab, final_dataframe, categorization_result)
-                    self._update_status("Categorization completed successfully - showing final data")
-                    print("[DEBUG] _show_final_categorized_data call completed")
-                    break
+                    
+                    # Get offer info from file mapping or current offer info
+                    offer_info = getattr(file_mapping, 'offer_info', None)
+                    if not offer_info and hasattr(self, 'current_offer_info') and self.current_offer_info:
+                        offer_info = self.current_offer_info
+                        # Store it in the file mapping for consistency
+                        file_mapping.offer_info = offer_info
+                        logger.debug(f"Retrieved offer info from current_offer_info: {offer_info}")
+                    elif offer_info:
+                        logger.debug(f"Found offer info in file_mapping: {offer_info}")
+                    else:
+                        logger.warning("No offer info found for Use Mapping workflow")
+                        offer_info = {}
+                    
+                    # Also store in controller's current_files for consistency
+                    file_key = f"mapping_workflow_{int(time.time())}"
+                    self.controller.current_files[file_key] = {
+                        'file_mapping': file_mapping,
+                        'final_dataframe': final_dataframe,
+                        'categorization_result': categorization_result,
+                        'offer_info': offer_info
+                    }
+                    
+                    # Update the tab with the final categorized data
+                    logger.debug(f"Calling _show_final_categorized_data with tab type: {type(current_tab)}")
+                    self._show_final_categorized_data(current_tab, final_dataframe, categorization_result)
+                    
+                    # Refresh summary grid
+                    logger.debug("Calling centralized summary grid refresh after categorization")
+                    self._refresh_summary_grid_centralized()
                 else:
-                    print("[DEBUG] Tab mismatch or no tab attribute")
+                    logger.warning("Tab mismatch or no tab attribute found for categorization completion")
+                
         except Exception as e:
-            print("[DEBUG] Exception in _on_categorization_complete:", e)
-            import traceback
-            traceback.print_exc()
             logger.error(f"Error handling categorization completion: {e}")
+            import traceback
+            traceback.print_exc()
             messagebox.showerror("Error", f"Error handling categorization completion: {str(e)}")
-    
-    def _get_final_display_columns(self, file_mapping):
-        # Get the mapped types in the order the user mapped them
-        if hasattr(file_mapping, 'column_mappings'):
-            mapped_types = [getattr(cm, 'mapped_type', None) for cm in file_mapping.column_mappings]
-            # Remove None and duplicates, preserve order
-            seen = set()
-            ordered_types = []
-            for t in mapped_types:
-                if t and t not in seen:
-                    ordered_types.append(t)
-                    seen.add(t)
-            # Add standard columns not mapped by user at the end
-            std_order = ['code', 'sheet', 'category', 'description', 'quantity', 'unit_price', 'total_price', 'unit']
-            for t in std_order:
-                if t not in ordered_types:
-                    ordered_types.append(t)
-            return ordered_types
-        else:
-            return ['code', 'sheet', 'category', 'description', 'quantity', 'unit_price', 'total_price', 'unit']
 
-    def _build_final_grid_dataframe(self, file_mapping):
+    def _remap_comparison_columns(self, df):
+        """
+        Remap the columns of the comparison DataFrame to canonical names using ColumnMapper.
+        """
+        from core.column_mapper import ColumnMapper
         import pandas as pd
-        rows = []
-        # Determine required types and display order as in row review
-        if self.column_mapper and hasattr(self.column_mapper, 'config'):
-            required_types = [col_type.value for col_type in self.column_mapper.config.get_required_columns()]
-        else:
-            required_types = ["description", "quantity", "unit_price", "total_price", "unit", "code"]
-        # Row review display order
-        display_column_order = ["code", "sheet", "category", "description", "unit", "quantity", "unit_price", "total_price"]
         
-        # Helper function to parse numbers
-        def parse_number(val):
-            if isinstance(val, (int, float)):
-                return float(val)
-            if pd.isna(val):
-                return 0.0
-            s = str(val).replace('\u202f', '').replace(' ', '').replace(',', '.')
-            try:
-                return float(s)
-            except Exception:
-                return 0.0
+        mapper = ColumnMapper()
+        headers = list(df.columns)
         
-        # Build mapping from mapped_type to column index for each sheet
-        for sheet in getattr(file_mapping, 'sheets', []):
-            if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
-                continue
-            mapped_type_to_index = {}
-            if hasattr(sheet, 'column_mappings'):
-                for cm in sheet.column_mappings:
-                    mapped_type_to_index[getattr(cm, 'mapped_type', None)] = cm.column_index
-            validity_dict = self.row_validity.get(sheet.sheet_name, {})
-            if hasattr(sheet, 'row_classifications'):
-                for rc in sheet.row_classifications:
-                    # Only include valid rows
-                    is_valid = getattr(rc, 'row_type', None) == RowType.PRIMARY_LINE_ITEM or getattr(rc, 'row_type', None) == 'primary_line_item'
-                    if not is_valid:
-                        continue
-                    row_data = getattr(rc, 'row_data', None)
-                    if row_data is None and hasattr(sheet, 'sheet_data'):
-                        try:
-                            row_data = sheet.sheet_data[rc.row_index]
-                        except Exception:
-                            row_data = None
-                    if row_data is None:
-                        row_data = []
-                    row_dict = {}
-                    # Add columns in display order, fill with values if mapped
-                    for col in display_column_order:
-                        if col == 'sheet':
-                            row_dict['sheet'] = sheet.sheet_name
-                        elif col == 'category':
-                            # PATCH: Fill from final_dataframe if available
-                            category_value = ''
-                            if hasattr(file_mapping, 'categorized_dataframe') and file_mapping.categorized_dataframe is not None:
-                                df = file_mapping.categorized_dataframe
-                                # Try to match by Description and Sheet if possible
-                                desc = ''
-                                idx = mapped_type_to_index.get('description')
-                                if idx is not None and idx < len(row_data):
-                                    desc = row_data[idx]
-                                sheet_col = sheet.sheet_name
-                                # Try to find the row in the categorized_dataframe
-                                if 'Description' in df.columns:
-                                    match = df[(df['Description'] == desc) & (df.get('Source_Sheet', sheet_col) == sheet_col)]
-                                    if not match.empty and 'Category' in match.columns:
-                                        category_value = match.iloc[0]['Category']
-                                    elif not match.empty and 'category' in match.columns:
-                                        category_value = match.iloc[0]['category']
-                                elif 'category' in df.columns:
-                                    match = df[df['category'] == desc]
-                                    if not match.empty:
-                                        category_value = match.iloc[0]['category']
-                            # Fallback to rc.category if not found
-                            if not category_value:
-                                category_value = getattr(rc, 'category', '')
-                            row_dict['category'] = category_value
-                        else:
-                            idx = mapped_type_to_index.get(col)
-                            val = row_data[idx] if idx is not None and idx < len(row_data) else ""
-                            # Parse numeric values
-                            if col in ['quantity', 'unit_price', 'total_price']:
-                                val = parse_number(val)
-                            row_dict[col] = val
-                    rows.append(row_dict)
-        # Build DataFrame
-        if rows:
-            df = pd.DataFrame(rows)
-            # Ensure numeric columns are properly typed
-            for col in ['quantity', 'unit_price', 'total_price']:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-            # Only keep columns in display order that are present
-            columns = [col for col in display_column_order if col in df.columns]
-            df = df[columns]
-        else:
-            df = pd.DataFrame(columns=display_column_order)
-        return df
+        # Log original headers for debugging
+        logger.info(f"Original headers: {headers}")
+        
+        # First, try to map using ColumnMapper
+        mapping = mapper.map_columns_to_types(headers)
+        
+        # Build a mapping from original header to canonical name
+        header_map = {}
+        for m in mapping:
+            if m.mapped_type.value not in header_map.values():
+                header_map[m.original_header] = m.mapped_type.value
+        
+        # Log the mapping for debugging
+        logger.info(f"ColumnMapper mapping: {header_map}")
+        
+        # If ColumnMapper didn't find much, try manual mapping based on common patterns
+        if len(header_map) < 3:  # If we found less than 3 columns
+            logger.info("ColumnMapper found few matches, trying manual mapping...")
+            
+            # Manual mapping based on common patterns
+            manual_mapping = {}
+            for header in headers:
+                header_lower = str(header).lower().strip()
+                
+                # Quantity patterns
+                if any(keyword in header_lower for keyword in ['qty', 'quantity', 'no', 'number', 'count']):
+                    manual_mapping[header] = 'quantity'
+                
+                # Description patterns
+                elif any(keyword in header_lower for keyword in ['description', 'item', 'work', 'activity', 'task', 'detail']):
+                    manual_mapping[header] = 'Description'
+                
+                # Unit price patterns
+                elif any(keyword in header_lower for keyword in ['unit price', 'rate', 'price per unit', 'unit cost']):
+                    manual_mapping[header] = 'unit_price'
+                
+                # Total price patterns
+                elif any(keyword in header_lower for keyword in ['total', 'total price', 'total cost', 'value', 'amount']):
+                    manual_mapping[header] = 'total_price'
+                
+                # Unit patterns
+                elif any(keyword in header_lower for keyword in ['unit', 'measurement', 'uom', 'unit of measure']):
+                    manual_mapping[header] = 'unit'
+                
+                # Code patterns
+                elif any(keyword in header_lower for keyword in ['code', 'item code', 'reference', 'ref', 'item no']):
+                    manual_mapping[header] = 'code'
+            
+            # Update header_map with manual mappings
+            header_map.update(manual_mapping)
+            logger.info(f"Manual mapping additions: {manual_mapping}")
+        
+        # Rename columns
+        df_renamed = df.rename(columns=header_map)
+        
+        # Ensure we have all required columns with proper casing
+        required_columns = {
+            'quantity': 'quantity',
+            'unit_price': 'unit_price', 
+            'total_price': 'total_price',
+            'Description': 'Description',
+            'code': 'code',
+            'unit': 'unit'
+        }
+        
+        # Check if we have the required columns (case-insensitive)
+        missing_columns = []
+        for required_col, canonical_name in required_columns.items():
+            found = False
+            for col in df_renamed.columns:
+                if col.lower() == required_col.lower():
+                    # Rename to canonical name if needed
+                    if col != canonical_name:
+                        df_renamed = df_renamed.rename(columns={col: canonical_name})
+                    found = True
+                    break
+            if not found:
+                missing_columns.append(canonical_name)
+        
+        if missing_columns:
+            logger.warning(f"Missing required columns after mapping: {missing_columns}")
+            # Add empty columns for missing required columns
+            for col in missing_columns:
+                df_renamed[col] = None
+        
+        logger.info(f"Final columns: {list(df_renamed.columns)}")
+        return df_renamed
 
-    def _show_final_categorized_data(self, tab, final_dataframe, categorization_result):
-        print("[DEBUG] _show_final_categorized_data called for tab:", tab)
+    def _compare_full(self, tab):
+        """
+        Optimized comparison workflow using master BOQ structure
+        
+        Args:
+            tab: The tab containing the master BoQ data
+        """
         try:
-            # Get file_mapping for this tab (if it exists - won't exist for loaded analyses)
-            file_mapping = None
-            for file_data in self.controller.current_files.values():
-                if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == tab:
-                    file_mapping = file_data['file_mapping']
-                    break
-            
-            # For loaded analyses, use the DataFrame directly; for new analyses, build from file mapping
-            if file_mapping is not None:
-                # Build the DataFrame for the final grid using row review logic
-                display_df = self._build_final_grid_dataframe(file_mapping)
-            else:
-                # For loaded analyses, use the provided DataFrame directly
-                display_df = final_dataframe.copy()
-                # Remove the 'category_internal' column if it exists (it's not needed for display)
-                if 'category_internal' in display_df.columns:
-                    display_df = display_df.drop('category_internal', axis=1)
-                print(f"[DEBUG] Using loaded DataFrame directly with shape: {display_df.shape}")
-            
-            # Clear the current tab content
-            for widget in tab.winfo_children():
-                widget.destroy()
-            # Create main frame
-            main_frame = ttk.Frame(tab)
-            main_frame.grid(row=1, column=0, sticky=tk.NSEW, padx=10, pady=10)
-            # Configure grid weights
-            tab.grid_rowconfigure(0, weight=0)
-            tab.grid_rowconfigure(1, weight=1)
-            tab.grid_columnconfigure(0, weight=1)
-            main_frame.grid_rowconfigure(1, weight=1)
-            main_frame.grid_columnconfigure(0, weight=1)
-            # Title and instructions
-            title_label = ttk.Label(main_frame, text="Final Categorized Data", font=("TkDefaultFont", 14, "bold"))
-            title_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
-            instructions = """
-            Review the categorized data below. You can make corrections by double-clicking the category cell and selecting a value from the dropdown.\nChanges will be saved when you click 'Apply Changes', 'Summarize', 'Save Analysis', or 'Export Data'.
-            """
-            instruction_label = ttk.Label(main_frame, text=instructions, wraplength=800, justify=tk.LEFT)
-            instruction_label.grid(row=1, column=0, sticky=tk.W, pady=(0, 10))
-            # Create frame for the treeview
-            tree_frame = ttk.Frame(main_frame)
-            tree_frame.grid(row=2, column=0, sticky=tk.NSEW, pady=(0, 10))
-            tree_frame.grid_rowconfigure(0, weight=1)
-            tree_frame.grid_columnconfigure(0, weight=1)
-            # Only show columns that exist in the DataFrame
-            final_display_columns = list(display_df.columns)
-            tree = ttk.Treeview(tree_frame, columns=final_display_columns, show='headings', height=20)
-            for col in final_display_columns:
-                tree.heading(col, text=col.capitalize() if col != '#' else '#')
-                tree.column(col, width=150, minwidth=100)
-            vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
-            hsb = ttk.Scrollbar(tree_frame, orient="horizontal", command=tree.xview)
-            tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-            tree.grid(row=0, column=0, sticky=tk.NSEW)
-            vsb.grid(row=0, column=1, sticky=tk.NS)
-            hsb.grid(row=1, column=0, sticky=tk.EW)
-            # Set selection color to light blue and text color to black for readability
-            style = ttk.Style(tree)
-            style.map('Treeview', background=[('selected', '#B3E5FC')], foreground=[('selected', 'black')])
-            self._populate_final_data_treeview(tree, display_df, final_display_columns)
-            self._enable_final_data_editing(tree, display_df)
-            # --- SUMMARY GRID PLACEHOLDER ---
-            summary_frame = ttk.Frame(main_frame)
-            summary_frame.grid(row=3, column=0, sticky=tk.EW, pady=(0, 10))
-            summary_frame.grid_remove()  # Hide by default
-            tab.summary_frame = summary_frame
-            tab.summary_tree = None
-            def show_summary_grid():
-                import pandas as pd
-                from core.manual_categorizer import get_manual_categorization_categories
-                
-                # Get pretty categories - this is now our single source of truth
-                categories_pretty = get_manual_categorization_categories()
-                
-                # Helper to robustly parse numbers
-                def parse_number(val):
-                    if isinstance(val, (int, float)):
-                        return float(val)
-                    if pd.isna(val):
-                        return 0.0
-                    s = str(val).replace('\u202f', '').replace(' ', '').replace(',', '.')
-                    try:
-                        return float(s)
-                    except Exception as e:
-                        print(f"[DEBUG] Failed to parse number '{val}': {e}")
-                        return 0.0
-                
-                # Get the current DataFrame (now uses pretty categories directly)
-                df = tab.final_dataframe if hasattr(tab, 'final_dataframe') else display_df
-                print("[DEBUG] DataFrame columns:", df.columns.tolist())
-                print("[DEBUG] First few rows of DataFrame:")
-                print(df.head().to_string())
-                
-                # Ensure numeric columns are properly parsed
-                price_col = 'Total_price' if 'Total_price' in df.columns else 'total_price'
-                print(f"[DEBUG] Using price column: {price_col}")
-                if price_col in df.columns:
-                    df[price_col] = df[price_col].apply(parse_number)
-                    print(f"[DEBUG] Price column after parsing:")
-                    print(df[price_col].head().to_string())
-                
-                # Group by category (now using pretty categories directly)
-                cat_col = 'category'
-                if cat_col in df.columns:
-                    # Categories are already in pretty format, just group directly
-                    print(f"[DEBUG] Unique categories before grouping:", df[cat_col].unique())
-                    
-                    # Create the summary dictionary with pretty category names
-                    summary_dict = df.groupby(cat_col)[price_col].sum().to_dict()
-                    print("[DEBUG] Summary dict after grouping:", summary_dict)
-                    
-                    # No need for complex mapping - categories are already pretty
-                    # Just ensure we have all predefined categories with zero values if not present
-                    final_summary = {}
-                    for cat_pretty in categories_pretty:
-                        final_summary[cat_pretty] = summary_dict.get(cat_pretty, 0.0)
-                    
-                    print("[DEBUG] Final summary:", final_summary)
-                else:
-                    print("[DEBUG] No category column found!")
-                    final_summary = {cat: 0.0 for cat in categories_pretty}
-                
-                offer_label = self.current_offer_name if hasattr(self, 'current_offer_name') and self.current_offer_name else 'Offer'
-                summary_columns = ['Offer'] + categories_pretty
-                
-                # Use the final summary to get values in the correct order
-                summary_values = [offer_label] + [final_summary[cat] for cat in categories_pretty]
-                
-                print("[DEBUG] Final summary values:", summary_values)
-                
-                # Remove old summary tree if present
-                for widget in summary_frame.winfo_children():
-                    widget.destroy()
-                
-                if len(summary_columns) <= 1:
-                    summary_frame.grid_remove()
-                    return
-                
-                summary_tree = ttk.Treeview(summary_frame, columns=summary_columns, show='headings', height=2)
-                for col in summary_columns:
-                    summary_tree.heading(col, text=col)
-                    summary_tree.column(col, width=150, minwidth=100)
-                
-                # Format values for display
-                display_values = []
-                for i, val in enumerate(summary_values):
-                    if i == 0:  # Offer label
-                        display_values.append(str(val))
-                    else:  # Numeric values
-                        try:
-                            num_val = float(val)
-                            display_values.append(f"{num_val:,.2f}".replace(',', ' ').replace('.', ','))
-                        except (ValueError, TypeError):
-                            display_values.append(str(val))
-                
-                summary_tree.insert('', 'end', values=display_values, tags=('offer',))
-                summary_tree.grid(row=0, column=0, sticky=tk.EW)
-                summary_frame.grid()
-                tab.summary_tree = summary_tree
-                
-                # --- CATEGORY FILTERING FEATURE ---
-                tab._active_category_filter = None  # Track the current filter
-                def on_summary_double_click(event):
-                    region = summary_tree.identify('region', event.x, event.y)
-                    if region != 'cell':
-                        return
-                    col_id = summary_tree.identify_column(event.x)
-                    col_num = int(col_id[1:]) - 1  # 0-based
-                    if col_num == 0:
-                        return  # Ignore 'Offer' column
-                    category_pretty = summary_columns[col_num]
-                    
-                    # Toggle filter: if already filtered to this, remove; else filter
-                    if getattr(tab, '_active_category_filter', None) == category_pretty:
-                        tab._active_category_filter = None
-                        filtered_df = tab.final_dataframe if hasattr(tab, 'final_dataframe') else display_df
-                    else:
-                        tab._active_category_filter = category_pretty
-                        df_full = tab.final_dataframe if hasattr(tab, 'final_dataframe') else display_df
-                        # Filter by pretty category directly - no conversion needed
-                        filtered_df = df_full[df_full['category'] == category_pretty]
-                    
-                    # Repopulate the main grid with the filtered DataFrame
-                    self._populate_final_data_treeview(tab.final_data_tree, filtered_df, final_display_columns)
-                    # Update the reference so further edits work on the filtered view
-                    tab._filtered_dataframe = filtered_df
-                
-                summary_tree.bind('<Double-1>', on_summary_double_click)
-                # --- END CATEGORY FILTERING FEATURE ---
-            # --- END SUMMARY GRID PLACEHOLDER ---
-            # Button frame at the bottom
-            button_frame = ttk.Frame(main_frame)
-            button_frame.grid(row=4, column=0, pady=(10, 0))
-            summarize_button = ttk.Button(button_frame, text="Summarize", command=show_summary_grid)
-            summarize_button.pack(side=tk.LEFT, padx=(0, 5))
-            save_dataset_button = ttk.Button(button_frame, text="Save Dataset", command=lambda: self._save_dataset(tab))
-            save_dataset_button.pack(side=tk.LEFT, padx=(0, 5))
-            save_mappings_button = ttk.Button(button_frame, text="Save Mappings", command=lambda: self._save_mappings(tab))
-            save_mappings_button.pack(side=tk.LEFT, padx=(0, 5))
-            export_button = ttk.Button(button_frame, text="Export Data", 
-                                      command=lambda: self._export_final_data(tab.final_dataframe, tab))
-            export_button.pack(side=tk.LEFT, padx=(0, 5))
-            tab.final_data_tree = tree
-            tab.final_dataframe = display_df
-            tab.categorization_result = categorization_result
-        except Exception as e:
-            print("[DEBUG] Exception in _show_final_categorized_data:", e)
-            import traceback
-            traceback.print_exc()
-    
-    def _populate_final_data_treeview(self, tree, dataframe, columns):
-        """Populate the treeview with data from the final DataFrame, using pretty categories directly."""
-        print(f"[DEBUG] _populate_final_data_treeview called with DataFrame shape: {dataframe.shape}")
-        print(f"[DEBUG] DataFrame columns: {dataframe.columns.tolist()}")
-        print(f"[DEBUG] Requested columns: {columns}")
-        
-        # Helper to format numbers consistently
-        def format_number(val, is_currency=False):
-            try:
-                if pd.isna(val):
-                    return ""
-                if isinstance(val, str):
-                    # Remove any existing formatting
-                    val = val.replace(' ', '').replace('\u202f', '').replace(',', '.')
-                num = float(val)
-                return f"{num:,.2f}".replace(',', ' ').replace('.', ',')
-            except (ValueError, TypeError):
-                return str(val)
-        
-        # Clear existing items
-        for item in tree.get_children():
-            tree.delete(item)
-        
-        print(f"[DEBUG] Cleared existing items, now adding {len(dataframe)} rows")
-        
-        # Add data rows
-        for index, row in dataframe.iterrows():
-            values = []
-            for col in columns:
-                value = row.get(col, '')
-                if pd.isna(value):
-                    value = ''
-                # Format based on column type
-                if col == 'category':
-                    # Category is already in pretty format - use directly
-                    values.append(str(value))
-                elif col in ['quantity', 'unit_price', 'total_price']:
-                    # Format numeric columns
-                    values.append(format_number(value))
-                else:
-                    values.append(str(value))
-            
-            print(f"[DEBUG] Adding row {index}: {values[:3]}...")  # Show first 3 values
-            tree.insert('', 'end', values=values, tags=(f'row_{index}',))
-        
-        print(f"[DEBUG] Finished populating treeview with {len(dataframe)} rows")
-    
-    def _enable_final_data_editing(self, tree, dataframe):
-        """Enable editing capabilities for the final data treeview. Only allow editing of the 'category' column with a dropdown."""
-        from core.manual_categorizer import get_manual_categorization_categories
-        categories_pretty = get_manual_categorization_categories()
-        
-        def on_double_click(event):
-            try:
-                row_id = tree.identify_row(event.y)
-                column = tree.identify_column(event.x)
-                if not row_id or not column:
-                    return
-                col_num = int(column[1:]) - 1  # Convert column identifier to index
-                col_name = tree['columns'][col_num]
-                if col_name != 'category':
-                    return  # Only allow editing of the 'category' column
-                current_values = tree.item(row_id, 'values')
-                current_value = current_values[col_num] if col_num < len(current_values) else ''
-                
-                # Create combobox for category selection
-                combo = ttk.Combobox(tree, values=categories_pretty, state='readonly')
-                combo.set(current_value)
-                bbox = tree.bbox(row_id, column)
-                if bbox:
-                    combo.place(x=bbox[0], y=bbox[1], width=bbox[2], height=bbox[3])
-                    def save_combo(event=None):
-                        try:
-                            new_pretty = combo.get()
-                            values = list(tree.item(row_id, 'values'))
-                            if col_num < len(values):
-                                # Update display to pretty category
-                                values[col_num] = new_pretty
-                                tree.item(row_id, values=values)
-                                # Update the underlying DataFrame with the pretty category (no conversion needed)
-                                if dataframe is not None and row_id.isdigit():
-                                    idx = int(row_id)
-                                    if idx < len(dataframe):
-                                        dataframe.at[idx, 'category'] = new_pretty
-                            combo.destroy()
-                        except Exception as e:
-                            print(f"[DEBUG] Error saving combo: {e}")
-                            combo.destroy()
-                    def cancel_combo(event=None):
-                        combo.destroy()
-                    combo.bind('<Return>', save_combo)
-                    combo.bind('<FocusOut>', save_combo)
-                    combo.bind('<Escape>', cancel_combo)
-                    combo.focus()
-            except Exception as e:
-                print(f"[DEBUG] Error in double-click editing: {e}")
-        tree.bind('<Double-1>', on_double_click)
-        print("[DEBUG] Double-click binding added to treeview (category only)")
-    
-    def _apply_final_data_changes(self, tree, dataframe, tab):
-        """Apply changes made in the grid to the final DataFrame"""
-        try:
-            # Get all items from treeview
-            items = tree.get_children()
-            
-            # Create a new DataFrame with the updated values
-            updated_data = []
-            columns = [tree.heading(col)['text'] for col in tree['columns']]
-            
-            for item in items:
-                values = tree.item(item, 'values')
-                row_data = dict(zip(columns, values))
-                updated_data.append(row_data)
-            
-            # Update the DataFrame
-            updated_dataframe = pd.DataFrame(updated_data)
-            
-            # Update stored references
-            tab.final_dataframe = updated_dataframe
-            
-            # Update the file mapping
-            current_tab = self.notebook.select()
-            for file_key, file_data in self.controller.current_files.items():
-                if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == current_tab:
-                    file_mapping = file_data['file_mapping']
-                    file_mapping.categorized_dataframe = updated_dataframe
-                    file_data['categorized_dataframe'] = updated_dataframe
-                    break
-                    
-            messagebox.showinfo("Success", "Changes applied successfully!")
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to apply changes: {str(e)}")
-    
-    def _export_final_data(self, dataframe, tab=None):
-        """Export the final categorized data to a nicely formatted Excel file with summary and validation."""
-        try:
+            from core.comparison_engine import ComparisonProcessor
             import pandas as pd
-            from tkinter import filedialog, messagebox
-            import xlsxwriter
-            import numpy as np
-            from core.manual_categorizer import get_manual_categorization_categories
             
-            # Get pretty categories - our single source of truth
-            categories_pretty = get_manual_categorization_categories()
+            # Get the current tab ID and file mapping
+            current_tab_id = self.notebook.select()
+            master_file_mapping = self.tab_id_to_file_mapping.get(current_tab_id)
             
-            # Helper to robustly parse numbers
-            def parse_number(val):
-                if isinstance(val, (int, float)):
-                    return float(val)
-                if pd.isna(val):
-                    return 0.0
-                s = str(val).replace('\u202f', '').replace(' ', '').replace(',', '.')
-                try:
-                    return float(s)
-                except Exception:
-                    return 0.0
-            
-            # Prompt for file path
-            file_path = filedialog.asksaveasfilename(
-                title="Export Categorized Data",
-                defaultextension=".xlsx",
-                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")]
-            )
-            if not file_path:
+            if not master_file_mapping:
+                messagebox.showerror("Error", "Could not find master file mapping")
                 return
             
-            # Prepare main data
-            df = dataframe.copy()
-            
-            # Categories are already in pretty format - no conversion needed
-            print(f"[DEBUG] Exporting with categories: {df['category'].unique() if 'category' in df.columns else 'No category column'}")
-            
-            # Ensure numeric columns are numbers
-            for col in ['quantity', 'unit_price', 'total_price']:
-                if col in df.columns:
-                    df[col] = df[col].apply(parse_number)
-            
-            # Write to Excel with formatting
-            with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
-                df.to_excel(writer, sheet_name='Data', index=False)
-                workbook = writer.book
-                worksheet = writer.sheets['Data']
-                
-                # Format headers
-                header_format = workbook.add_format({'bold': True, 'bg_color': '#D9E1F2', 'border': 1})
-                for col_num, value in enumerate(df.columns):
-                    worksheet.write(0, col_num, value, header_format)
-                
-                # Format numeric columns
-                num_format = workbook.add_format({'num_format': '#,##0.00', 'align': 'right'})
-                for col in ['quantity', 'unit_price', 'total_price']:
-                    if col in df.columns:
-                        col_idx = df.columns.get_loc(col)
-                        worksheet.set_column(col_idx, col_idx, 15, num_format)
-                
-                # Data validation for category column
-                if 'category' in df.columns:
-                    cat_col_idx = df.columns.get_loc('category')
-                    worksheet.data_validation(1, cat_col_idx, len(df), cat_col_idx, {
-                        'validate': 'list',
-                        'source': categories_pretty,
-                        'input_message': 'Select a category from the list.'
-                    })
-                
-                # Autofit columns
-                for i, col in enumerate(df.columns):
-                    maxlen = max(
-                        [len(str(x)) for x in df[col].astype(str).values] + [len(str(col))]
-                    )
-                    worksheet.set_column(i, i, min(maxlen + 2, 30))
-                
-                # Add summary sheet
-                if tab and hasattr(tab, 'summary_frame') and hasattr(tab, 'final_dataframe'):
-                    df_summary = tab.final_dataframe.copy()
-                    
-                    # Ensure price column is numeric
-                    price_col = 'total_price' if 'total_price' in df_summary.columns else 'Total_price'
-                    if price_col in df_summary.columns:
-                        df_summary[price_col] = df_summary[price_col].apply(parse_number)
-                    
-                    # Create summary by grouping pretty categories directly
-                    if 'category' in df_summary.columns:
-                        summary_dict = df_summary.groupby('category')[price_col].sum().to_dict()
-                        
-                        # Ensure all predefined categories are present
-                        final_summary = {}
-                        for cat_pretty in categories_pretty:
-                            final_summary[cat_pretty] = summary_dict.get(cat_pretty, 0.0)
-                    else:
-                        final_summary = {cat: 0.0 for cat in categories_pretty}
-                    
-                    # Create summary sheet
-                    summary_ws = workbook.add_worksheet('Summary')
-                    
-                    # Write headers with formatting
-                    summary_columns = ['Offer'] + categories_pretty
-                    for col_idx, col in enumerate(summary_columns):
-                        summary_ws.write(0, col_idx, col, header_format)
-                    
-                    # Write values
-                    offer_label = self.current_offer_name if hasattr(self, 'current_offer_name') and self.current_offer_name else 'Offer'
-                    summary_values = [offer_label] + [final_summary[cat] for cat in categories_pretty]
-                    
-                    # Write summary row with formatting
-                    for col_idx, val in enumerate(summary_values):
-                        if col_idx == 0:
-                            summary_ws.write(1, col_idx, val)
-                        else:
-                            summary_ws.write_number(1, col_idx, val, num_format)
-                    
-                    # Format columns
-                    for i in range(len(summary_columns)):
-                        if i == 0:
-                            summary_ws.set_column(i, i, 25)  # Offer column: text
-                        else:
-                            summary_ws.set_column(i, i, 18, num_format)  # Category columns: number format
-                
-                messagebox.showinfo("Success", f"Data exported to: {file_path}")
-                self._update_status(f"Exported data to: {file_path}")
-                
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            messagebox.showerror("Error", f"Failed to export data: {str(e)}")
-    
-    def run(self):
-        """Start the main application loop."""
-        self.root.mainloop()
-
-    def _prompt_offer_name(self):
-        # Simple dialog to prompt for offer name/label
-        import tkinter.simpledialog
-        offer_name = tkinter.simpledialog.askstring("Offer Name", "Enter a name or label for this offer:", parent=self.root)
-        if offer_name is not None and offer_name.strip() != "":
-            return offer_name.strip()
-        return None
-
-    def _save_dataset(self, tab):
-        """Save the current DataFrame as a pickle file."""
-        df = getattr(tab, 'final_dataframe', None)
-        if df is None:
-            messagebox.showerror("Error", "No dataset to save.")
-            return
-        
-        print(f"[DEBUG] Saving DataFrame with shape: {df.shape}")
-        print(f"[DEBUG] DataFrame columns: {df.columns.tolist()}")
-        print(f"[DEBUG] DataFrame first few rows:")
-        print(df.head().to_string())
-        
-        if df.empty:
-            messagebox.showerror("Error", "Dataset is empty - nothing to save.")
-            return
-            
-        # Get the current offer name
-        offer_name = self.current_offer_name if hasattr(self, 'current_offer_name') else None
-        
-        # Create a dictionary with all necessary data
-        save_data = {
-            'dataframe': df,
-            'offer_name': offer_name,
-            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
-        
-        file_path = filedialog.asksaveasfilename(
-            title="Save Dataset as Pickle",
-            defaultextension=".pkl",
-            filetypes=[("Pickle files", "*.pkl"), ("All files", "*.*")]
-        )
-        if file_path:
-            try:
-                with open(file_path, 'wb') as f:
-                    pickle.dump(save_data, f)
-                print(f"[DEBUG] Successfully saved to {file_path}")
-                messagebox.showinfo("Success", f"Dataset saved to: {file_path}")
-                self._update_status(f"Dataset saved to: {file_path}")
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to save dataset: {str(e)}")
-                print(f"[DEBUG] Failed to save: {e}")
-                import traceback
-                traceback.print_exc()
-
-    def _save_mappings(self, tab):
-        """Save the current mappings (sheet, column, row) as a pickle file."""
-        # Find the file_mapping for this tab
-        file_mapping = None
-        for file_data in self.controller.current_files.values():
-            if hasattr(file_data['file_mapping'], 'tab') and file_data['file_mapping'].tab == tab:
-                file_mapping = file_data['file_mapping']
-                break
-        if file_mapping is None:
-            messagebox.showerror("Error", "No mappings to save.")
-            return
-        
-        # Prepare mappings data
-        mappings_data = {
-            'sheets': [],
-            'row_validity': self.row_validity.copy(),
-        }
-        
-        # Save relevant info from each sheet
-        for sheet in getattr(file_mapping, 'sheets', []):
-            sheet_info = {
-                'sheet_name': getattr(sheet, 'sheet_name', None),
-                'sheet_type': getattr(sheet, 'sheet_type', None),
-                'column_mappings': [],
-                'row_classifications': [],
-            }
-            # Column mappings
-            for cm in getattr(sheet, 'column_mappings', []):
-                cm_dict = cm.__dict__.copy() if hasattr(cm, '__dict__') else dict(cm)
-                sheet_info['column_mappings'].append(cm_dict)
-            # Row classifications
-            for rc in getattr(sheet, 'row_classifications', []):
-                rc_dict = rc.__dict__.copy() if hasattr(rc, '__dict__') else dict(rc)
-                sheet_info['row_classifications'].append(rc_dict)
-            mappings_data['sheets'].append(sheet_info)
-        
-        # IMPORTANT: Save the final categorized DataFrame if it exists
-        if hasattr(tab, 'final_dataframe') and tab.final_dataframe is not None:
-            mappings_data['final_dataframe'] = tab.final_dataframe.copy()
-            print(f"[DEBUG] Saving final DataFrame with shape: {tab.final_dataframe.shape}")
-        
-        # Save offer name if available
-        if hasattr(self, 'current_offer_name') and self.current_offer_name:
-            mappings_data['offer_name'] = self.current_offer_name
-        
-        # Optionally save column_mapper config if needed for re-use
-        if hasattr(file_mapping, 'column_mapper'):
-            try:
-                mappings_data['column_mapper'] = file_mapping.column_mapper
-            except Exception:
-                pass
-        
-        file_path = filedialog.asksaveasfilename(
-            title="Save Mappings as Pickle",
-            defaultextension=".pkl",
-            filetypes=[("Pickle files", "*.pkl"), ("All files", "*.*")]
-        )
-        if file_path:
-            try:
-                with open(file_path, 'wb') as f:
-                    pickle.dump(mappings_data, f)
-                messagebox.showinfo("Success", f"Mappings saved to: {file_path}")
-                self._update_status(f"Mappings saved to: {file_path}")
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to save mappings: {str(e)}")
-
-    def _load_analysis(self):
-        """Handle loading a previously saved analysis"""
-        file_path = filedialog.askopenfilename(
-            title="Load Analysis",
-            filetypes=[("Pickle files", "*.pkl"), ("All files", "*.*")]
-        )
-        if file_path:
-            try:
-                with open(file_path, 'rb') as f:
-                    loaded_data = pickle.load(f)
-                
-                print(f"[DEBUG] Loaded data type: {type(loaded_data)}")
-                
-                # Handle both old format (just DataFrame) and new format (dictionary)
-                if isinstance(loaded_data, dict):
-                    df = loaded_data.get('dataframe')
-                    self.current_offer_name = loaded_data.get('offer_name')
-                    print(f"[DEBUG] Dictionary format - DataFrame shape: {df.shape if df is not None else 'None'}")
-                    print(f"[DEBUG] Offer name: {self.current_offer_name}")
-                else:
-                    df = loaded_data
-                    self.current_offer_name = None
-                    print(f"[DEBUG] Direct DataFrame format - shape: {df.shape if df is not None else 'None'}")
-                
-                if isinstance(df, pd.DataFrame) and not df.empty:
-                    print(f"[DEBUG] DataFrame columns: {df.columns.tolist()}")
-                    print(f"[DEBUG] DataFrame first few rows:")
-                    print(df.head().to_string())
-                    
-                    # Create a new tab for the loaded analysis
-                    tab = ttk.Frame(self.notebook)
-                    self.notebook.add(tab, text=f"Loaded Analysis {os.path.basename(file_path)}")
-                    self.notebook.select(tab)
-                    
-                    # Show the data in the grid
-                    self._show_final_categorized_data(tab, df, None)
-                    self._update_status(f"Analysis loaded from: {file_path}")
-                elif isinstance(df, pd.DataFrame) and df.empty:
-                    messagebox.showerror("Error", "The loaded DataFrame is empty")
-                    print("[DEBUG] DataFrame is empty")
-                else:
-                    messagebox.showerror("Error", "Invalid analysis file format - no DataFrame found")
-                    print(f"[DEBUG] Invalid format - df type: {type(df)}")
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to load analysis: {str(e)}")
-                logger.error(f"Failed to load analysis from {file_path}: {e}", exc_info=True)
-                print(f"[DEBUG] Exception loading analysis: {e}")
-                import traceback
-                traceback.print_exc()
-
-    def _use_mapping(self):
-        """Handle loading and applying a previously saved mapping"""
-        # Step 1: Load the mapping file
-        mapping_path = filedialog.askopenfilename(
-            title="Select Mapping File",
-            filetypes=[("Pickle files", "*.pkl"), ("All files", "*.*")]
-        )
-        if not mapping_path:
-            return
-            
-        try:
-            with open(mapping_path, 'rb') as f:
-                mapping_data = pickle.load(f)
-            
-            # Validate mapping data structure
-            if not isinstance(mapping_data, dict) or 'sheets' not in mapping_data:
-                messagebox.showerror("Error", "Invalid mapping file format")
+            # Create unified master dataset with consistent structure
+            master_df = self._create_unified_dataframe(master_file_mapping, is_master=True)
+            if master_df is None or master_df.empty:
+                messagebox.showerror("Error", "No data available for comparison")
                 return
-                
-            self.saved_mapping = mapping_data
-            print(f"[DEBUG] Loaded mapping with {len(mapping_data['sheets'])} sheets")
             
-            # Debug: Check if mapping contains final categorized data
-            if 'final_dataframe' in mapping_data:
-                df = mapping_data['final_dataframe']
-                print(f"[DEBUG] Mapping contains final DataFrame with shape: {df.shape if df is not None else None}")
-                if df is not None and 'category' in df.columns:
-                    print(f"[DEBUG] Final DataFrame has category column with {len(df)} rows")
-                else:
-                    print("[DEBUG] Final DataFrame missing category column")
-            else:
-                print("[DEBUG] Mapping does NOT contain final DataFrame - will require categorization")
-            
-            # Step 2: Prompt for BOQ file to analyze
-            self._update_status("Mapping loaded. Please select a BOQ file to analyze.")
-            
-            # Prompt for offer name
-            offer_name = self._prompt_offer_name()
-            if offer_name is None:
-                self._update_status("Analysis cancelled (no offer name provided).")
+            # Prompt for comparison offer information FIRST (same as master workflow)
+            comparison_offer_info = self._prompt_offer_info(is_first_boq=False)
+            if comparison_offer_info is None:
+                self._update_status("Comparison cancelled (no offer information provided)")
                 return
-            self.current_offer_name = offer_name
             
-            # Select BOQ file
+            # Prompt for comparison file SECOND (same as master workflow)
             filetypes = [("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
-            filename = filedialog.askopenfilename(title="Select BOQ File to Analyze", filetypes=filetypes)
-            if not filename:
-                self._update_status("Analysis cancelled (no file selected).")
-                return
-                
-            # Step 3: Process the file with mapping validation
-            self._process_file_with_mapping(filename, mapping_data)
+            comparison_file = filedialog.askopenfilename(
+                title="Select Comparison BoQ File",
+                filetypes=filetypes
+            )
             
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load mapping: {str(e)}")
-            print(f"[DEBUG] Error loading mapping: {e}")
-            import traceback
-            traceback.print_exc()
-
-    def _process_file_with_mapping(self, filepath, mapping_data):
-        """Process a BOQ file using a saved mapping"""
-        self._update_status(f"Processing {os.path.basename(filepath)} with saved mapping...")
-        
-        # Create a new tab for the file
-        filename = os.path.basename(filepath)
-        tab = ttk.Frame(self.notebook)
-        self.notebook.add(tab, text=f"Mapped: {filename}")
-        self.notebook.select(tab)
-        
-        # Configure grid for the tab frame
-        tab.grid_rowconfigure(0, weight=1)
-        tab.grid_columnconfigure(0, weight=1)
-        
-        loading_label = ttk.Label(tab, text="Applying saved mapping...")
-        loading_label.grid(row=0, column=0, pady=40, padx=100)
-        self.root.update_idletasks()
-        
-        def process_with_mapping():
-            try:
-                # Step 1: Load the file and get sheets
-                from core.file_processor import ExcelProcessor
-                processor = ExcelProcessor()
-                processor.load_file(Path(filepath))
-                visible_sheets = processor.get_visible_sheets()
+            if not comparison_file:
+                self._update_status("Comparison cancelled")
+                return
+            
+            # Process comparison file using optimized method
+            self._update_status("Processing comparison file...")
+            
+            # Process comparison file using the same logic as "Use Mapping"
+            self._update_status("Processing comparison file...")
+            
+            # Use the same file processing logic as "Use Mapping" workflow but adapted for comparison
+            comparison_file_mapping = self._process_comparison_file_with_master_mappings(
+                comparison_file, 
+                master_file_mapping,  # Use master BOQ mappings
+                comparison_offer_info
+            )
+            
+            if not comparison_file_mapping:
+                messagebox.showerror("Error", "Failed to process comparison file")
+                return
+            
+            # Set comparison workflow state
+            self.is_comparison_workflow = True
+            self.master_file_mapping = master_file_mapping
+            self.comparison_processor = ComparisonProcessor()
+            
+            # Load master dataset
+            self.comparison_processor.load_master_dataset(master_df)
+            
+            # Create unified comparison dataset with consistent structure
+            comparison_df = self._create_unified_dataframe(comparison_file_mapping, is_master=False)
+            if comparison_df is None or comparison_df.empty:
+                messagebox.showerror("Error", "No comparison data available")
+                return
+            
+            # Debug: Log both datasets for verification
+            logger.info(f"Master DataFrame shape: {master_df.shape}, columns: {list(master_df.columns)}")
+            logger.info(f"Comparison DataFrame shape: {comparison_df.shape}, columns: {list(comparison_df.columns)}")
+            
+            # Verify both datasets have the same required columns
+            master_cols = set(master_df.columns)
+            comparison_cols = set(comparison_df.columns)
+            missing_in_comparison = master_cols - comparison_cols
+            missing_in_master = comparison_cols - master_cols
+            
+            if missing_in_comparison:
+                logger.warning(f"Comparison dataset missing columns: {missing_in_comparison}")
+                # Add missing columns to comparison dataset
+                for col in missing_in_comparison:
+                    comparison_df[col] = ''
+            
+            if missing_in_master:
+                logger.warning(f"Master dataset missing columns: {missing_in_master}")
+                # Add missing columns to master dataset
+                for col in missing_in_master:
+                    master_df[col] = ''
+            
+            # Ensure both datasets have the same column order
+            all_columns = list(set(master_df.columns) | set(comparison_df.columns))
+            master_df = master_df.reindex(columns=all_columns, fill_value='')
+            comparison_df = comparison_df.reindex(columns=all_columns, fill_value='')
+            
+            self.comparison_processor.load_comparison_data(comparison_df)
+            
+            # Validate comparison data with enhanced error handling
+            is_valid, message = self.comparison_processor.validate_comparison_data()
+            if not is_valid:
+                # Try to fix common validation issues
+                logger.warning(f"Initial validation failed: {message}")
                 
-                print(f"[DEBUG] File has sheets: {visible_sheets}")
-                print(f"[DEBUG] Mapping expects sheets: {[s['sheet_name'] for s in mapping_data['sheets']]}")
-                
-                # Step 2: Validate sheets
-                mapping_sheets = {s['sheet_name'] for s in mapping_data['sheets']}
-                file_sheets = set(visible_sheets)
-                
-                missing_sheets = mapping_sheets - file_sheets
-                if missing_sheets:
-                    error_msg = f"Missing sheets in file: {', '.join(missing_sheets)}"
-                    self.root.after(0, lambda: messagebox.showerror("Sheet Validation Error", error_msg))
-                    self.root.after(0, lambda: loading_label.destroy())
+                # Check if it's a column mismatch issue
+                if "missing columns" in message.lower():
+                    # We've already handled column alignment above, so this shouldn't happen
+                    logger.error(f"Column alignment failed despite our attempts: {message}")
+                    messagebox.showerror("Validation Error", 
+                                       f"Comparison data validation failed: {message}\n\n"
+                                       f"Master columns: {list(master_df.columns)}\n"
+                                       f"Comparison columns: {list(comparison_df.columns)}")
                     return
+                else:
+                    messagebox.showerror("Validation Error", f"Comparison data validation failed: {message}")
+                    return
+            
+            # Process rows for validity
+            self._update_status("Processing row validity...")
+            row_results = self.comparison_processor.process_comparison_rows()
+            
+            # Show comparison row review dialog
+            if COMPARISON_ROW_REVIEW_AVAILABLE:
+                logger.info("Using comparison row review dialog")
+                logger.info(f"Comparison file mapping: {comparison_file_mapping}")
+                logger.info(f"Comparison offer info: {comparison_offer_info}")
+                # Set flag to indicate this is a comparison workflow
+                self._pending_comparison_export = True
+                self._pending_comparison_offer_info = comparison_offer_info
                 
-                # Step 3: Process the file (basic processing first)
-                file_mapping = self.controller.process_file(
-                    Path(filepath),
-                    progress_callback=lambda p, m: self.root.after(0, self.update_progress, p, m),
-                    sheet_filter=list(mapping_sheets),
-                    sheet_types={sheet: "BOQ" for sheet in mapping_sheets}
+                confirmed, updated_results = show_comparison_row_review(
+                    self.root, 
+                    comparison_file_mapping,  # Pass file mapping instead of DataFrame
+                    row_results, 
+                    comparison_offer_info.get('offer_name', 'Comparison')
                 )
                 
-                # Step 4: Apply the saved mappings
-                self.root.after(0, lambda: self._apply_saved_mappings(tab, file_mapping, mapping_data, loading_label))
+                logger.info(f"Comparison row review dialog returned: confirmed={confirmed}")
+                logger.info(f"Updated results count: {len(updated_results) if updated_results else 0}")
                 
-            except Exception as e:
-                print(f"[DEBUG] Error in process_with_mapping: {e}")
-                import traceback
-                traceback.print_exc()
-                self.root.after(0, lambda: self._on_processing_error(tab, filename, loading_label))
-        
-        threading.Thread(target=process_with_mapping, daemon=True).start()
-
-    def _apply_saved_mappings(self, tab, file_mapping, mapping_data, loading_widget):
-        """Apply saved column and row mappings to the processed file with strict validation"""
-        try:
-            print("[DEBUG] Applying saved mappings with strict validation...")
+                if not confirmed:
+                    self._update_status("Comparison cancelled by user")
+                    return
+                
+                # DEBUG: Export both datasets when user confirms row review
+                # Create filtered comparison dataset with only valid rows
+                valid_comparison_rows = [r for r in updated_results if r['is_valid']]
+                valid_comparison_indices = [r['row_index'] for r in valid_comparison_rows]
+                filtered_comparison_df = comparison_df.iloc[valid_comparison_indices].copy()
+                
+                # Store the filtered comparison dataset for later use
+                comparison_file_mapping.filtered_dataframe = filtered_comparison_df
+                
+                # Reload comparison processor with filtered dataset (only valid rows)
+                self.comparison_processor.load_comparison_data(filtered_comparison_df)
+                
+                # DEBUG EXPORT (COMMENTED OUT)
+                # self._debug_export_datasets_before_merge(master_df, filtered_comparison_df, comparison_offer_info)
+                
+                # Update processor with user modifications
+                self.comparison_processor.row_results = updated_results
+            else:
+                # Fallback: use original results
+                updated_results = row_results
             
-            # Apply column mappings and validate structure
-            for sheet in file_mapping.sheets:
-                sheet_name = sheet.sheet_name
+            # Process valid rows with MERGE/ADD logic
+            self._update_status("Processing valid rows...")
+            offer_name = comparison_offer_info.get('offer_name', 'Comparison')
+            instance_results = self.comparison_processor.process_valid_rows(offer_name=offer_name)
+            
+            # Collect and display warnings
+            all_warnings = []
+            if self.comparison_processor.comparison_warnings:
+                all_warnings.extend(self.comparison_processor.comparison_warnings)
+                # Clear warnings after collecting
+                self.comparison_processor.comparison_warnings.clear()
+            
+            if all_warnings:
+                warning_messages = []
+                for warning in all_warnings:
+                    # Extract sheet name and row index from the warning object
+                    # The row_index in ValidationIssue is 0-based, convert to 1-based for display
+                    # The suggestion field might contain the sheet name for unit mismatches
+                    sheet_name = "Unknown Sheet"
+                    row_display_index = warning.row_index + 2 # Convert to Excel row number
+                    
+                    if warning.suggestion and "sheet" in warning.suggestion:
+                        try:
+                            # Extract sheet name from suggestion string
+                            match = re.search(r"sheet '([^']+)'", warning.suggestion)
+                            if match:
+                                sheet_name = match.group(1)
+                        except Exception:
+                            pass # Fallback to "Unknown Sheet"
+                    
+                    # Format message based on warning type
+                    if warning.validation_type == ValidationType.CONSISTENCY: # Unit mismatch
+                        message = f"Unit Mismatch: Sheet '{sheet_name}', Row {row_display_index}. Master unit '{warning.expected_value}' vs. Comparison unit '{warning.actual_value}'."
+                    elif warning.validation_type == ValidationType.DATA_TYPE: # Invalid data type
+                        message = f"Invalid Data: Sheet '{sheet_name}', Row {row_display_index}, Column '{warning.column_index}'. Value '{warning.actual_value}' is not valid. Suggestion: {warning.suggestion}"
+                    else:
+                        message = f"Warning: Sheet '{sheet_name}', Row {row_display_index}. {warning.message}"
+                    
+                    warning_messages.append(message)
                 
-                # Find corresponding mapping
-                saved_sheet = next((s for s in mapping_data['sheets'] if s['sheet_name'] == sheet_name), None)
-                if not saved_sheet:
+                full_warning_message = "The comparison completed with the following warnings:\n\n" + "\n".join(warning_messages)
+                messagebox.showwarning("Comparison Warnings", full_warning_message)
+            
+            # Clean up data
+            self._update_status("Cleaning up data...")
+            cleanup_results = self.comparison_processor.cleanup_comparison_data()
+            
+            # Update the main dataset in place instead of showing results
+            self._update_main_dataset_with_comparison_results(self.comparison_processor, comparison_offer_info)
+            
+            # Reset comparison workflow flags
+            self.is_comparison_workflow = False
+            self._pending_comparison_export = False
+            self._pending_comparison_offer_info = None
+            
+            self._update_status("Comparison completed successfully")
+            
+        except Exception as e:
+            logger.error(f"Error in _compare_full: {e}")
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Error", f"Comparison failed: {str(e)}")
+            
+            # Reset comparison workflow flags even on error
+            self.is_comparison_workflow = False
+            self._pending_comparison_export = False
+            self._pending_comparison_offer_info = None
+
+    def _process_comparison_file(self, filepath, offer_info):
+        """
+        Process comparison file using the SAME logic as master file processing
+        
+        Args:
+            filepath: Path to comparison file
+            offer_info: Offer information dictionary
+            
+        Returns:
+            FileMapping object or None if failed
+        """
+        try:
+            # Use the EXACT SAME processing logic as master file
+            # This ensures identical data handling and calculations
+            
+            # Get visible sheets first
+            from core.file_processor import ExcelProcessor
+            processor = ExcelProcessor()
+            processor.load_file(Path(filepath))
+            visible_sheets = processor.get_visible_sheets()
+            if not visible_sheets:
+                return None
+            
+            # Use the same sheet categorization logic as master
+            if SHEET_CATEGORIZATION_AVAILABLE:
+                # For comparison, we'll use the same sheet structure as master
+                # but we need to get the sheet categories from the master
+                boq_sheets = visible_sheets  # Use all visible sheets for comparison
+                categories = {sheet: "BOQ" for sheet in visible_sheets}
+            else:
+                # Fallback: treat all sheets as BOQ (same as master)
+                boq_sheets = visible_sheets
+                categories = {sheet: "BOQ" for sheet in visible_sheets}
+            
+            # Process using the SAME controller.process_file method as master
+            file_mapping = self.controller.process_file(
+                Path(filepath),
+                progress_callback=lambda p, m: None,  # No progress callback for comparison
+                sheet_filter=boq_sheets,
+                sheet_types=categories
+            )
+            
+            if not file_mapping:
+                return None
+            
+            # Store offer information (same as master)
+            file_mapping.offer_info = offer_info
+            
+            return file_mapping
+            
+        except Exception as e:
+            logger.error(f"Error processing comparison file: {e}")
+            return None
+
+    def _validate_mapping_compatibility(self, master_mapping, comparison_mapping):
+        """
+        Validate that master and comparison mappings are compatible
+        
+        Args:
+            master_mapping: FileMapping for master BoQ
+            comparison_mapping: FileMapping for comparison BoQ
+            
+        Returns:
+            dict: Validation result
+        """
+        try:
+            # Check if both have sheets
+            if not master_mapping.sheets or not comparison_mapping.sheets:
+                return {
+                    'is_valid': False,
+                    'summary': 'One or both files have no sheets',
+                    'errors': ['Missing sheets in one or both files']
+                }
+            
+            # Check if sheet names match
+            master_sheet_names = {sheet.sheet_name for sheet in master_mapping.sheets}
+            comparison_sheet_names = {sheet.sheet_name for sheet in comparison_mapping.sheets}
+            
+            if master_sheet_names != comparison_sheet_names:
+                missing_in_comparison = master_sheet_names - comparison_sheet_names
+                extra_in_comparison = comparison_sheet_names - master_sheet_names
+                
+                errors = []
+                if missing_in_comparison:
+                    errors.append(f"Missing sheets in comparison: {missing_in_comparison}")
+                if extra_in_comparison:
+                    errors.append(f"Extra sheets in comparison: {extra_in_comparison}")
+                
+                return {
+                    'is_valid': False,
+                    'summary': 'Sheet names do not match between master and comparison files',
+                    'errors': errors
+                }
+            
+            # Check column mappings for each sheet
+            errors = []
+            for master_sheet in master_mapping.sheets:
+                comparison_sheet = next(
+                    (s for s in comparison_mapping.sheets if s.sheet_name == master_sheet.sheet_name),
+                    None
+                )
+                
+                if not comparison_sheet:
                     continue
                 
-                print(f"[DEBUG] Validating structure for sheet: {sheet_name}")
+                # Check column mappings
+                master_columns = {cm.original_header: cm.mapped_type for cm in master_sheet.column_mappings}
+                comparison_columns = {cm.original_header: cm.mapped_type for cm in comparison_sheet.column_mappings}
                 
-                # Strict validation: columns must match exactly
-                if not self._validate_exact_column_structure(sheet, saved_sheet):
-                    error_msg = (
-                        f"Column structure mismatch in sheet '{sheet_name}'.\n\n"
-                        "The new file does not have the exact same column structure as the saved mapping.\n"
-                        "Mapping can only be applied to files with identical structure."
-                    )
-                    loading_widget.destroy()
-                    messagebox.showerror("Structure Validation Failed", error_msg)
-                    return
-                
-                # Strict validation: rows must match exactly
-                if not self._validate_exact_row_structure(sheet, saved_sheet):
-                    error_msg = (
-                        f"Row structure mismatch in sheet '{sheet_name}'.\n\n"
-                        "The new file does not have the exact same row content as the saved mapping.\n"
-                        "Mapping can only be applied to files with identical structure and content."
-                    )
-                    loading_widget.destroy()
-                    messagebox.showerror("Structure Validation Failed", error_msg)
-                    return
-                
-                # Apply the mappings (since validation passed)
-                self._apply_exact_column_mappings(sheet, saved_sheet)
-                self._apply_exact_row_classifications(sheet, saved_sheet)
-                
-                print(f"[DEBUG] Sheet '{sheet_name}': Structure validated and mappings applied")
-            
-            # Store the file mapping and remove loading widget
-            self.file_mapping = file_mapping
-            self.column_mapper = file_mapping.column_mapper if hasattr(file_mapping, 'column_mapper') else None
-            loading_widget.destroy()
-            
-            # Show Row Review directly (skip column mapping step)
-            self._show_mapped_file_review(tab, file_mapping, mapping_data)
-            
-            success_msg = (
-                f"Mapping applied successfully!\n\n"
-                f"File structure matches perfectly with saved mapping.\n"
-                f"All column mappings and row classifications have been applied."
-            )
-            self._update_status("Mapping applied successfully - identical structure confirmed")
-            messagebox.showinfo("Mapping Applied", success_msg)
-            
-        except Exception as e:
-            print(f"[DEBUG] Error applying mappings: {e}")
-            import traceback
-            traceback.print_exc()
-            messagebox.showerror("Error", f"Failed to apply mappings: {str(e)}")
-            loading_widget.destroy()
-
-    def _validate_exact_column_structure(self, sheet, saved_sheet):
-        """Validate that the column structure matches exactly"""
-        try:
-            # Get current column headers
-            current_headers = []
-            if hasattr(sheet, 'column_mappings'):
-                current_headers = [getattr(cm, 'original_header', '') for cm in sheet.column_mappings]
-            
-            # Get saved column headers
-            saved_mappings = saved_sheet.get('column_mappings', [])
-            saved_headers = []
-            for saved_mapping in saved_mappings:
-                if isinstance(saved_mapping, dict):
-                    header = saved_mapping.get('original_header', '')
-                    saved_headers.append(header)
-            
-            print(f"[DEBUG] Current headers ({len(current_headers)}): {current_headers}")
-            print(f"[DEBUG] Saved headers ({len(saved_headers)}): {saved_headers}")
-            
-            # Must have same number of columns
-            if len(current_headers) != len(saved_headers):
-                print(f"[DEBUG] Column count mismatch: {len(current_headers)} vs {len(saved_headers)}")
-                return False
-            
-            # Headers must match exactly (case-sensitive)
-            for i, (current, saved) in enumerate(zip(current_headers, saved_headers)):
-                if current.strip() != saved.strip():
-                    print(f"[DEBUG] Header mismatch at position {i}: '{current}' vs '{saved}'")
-                    return False
-            
-            print("[DEBUG] Column structure validation passed")
-            return True
-            
-        except Exception as e:
-            print(f"[DEBUG] Error validating column structure: {e}")
-            return False
-
-    def _validate_exact_row_structure(self, sheet, saved_sheet):
-        """Validate that the row content matches exactly for valid rows only"""
-        try:
-            # Get saved row classifications - only the valid ones
-            saved_classifications = saved_sheet.get('row_classifications', [])
-            saved_valid_rows = []
-            saved_valid_indices = []
-            
-            for saved_rc in saved_classifications:
-                if isinstance(saved_rc, dict):
-                    row_type = saved_rc.get('row_type', '')
-                    # Only include rows that were marked as valid (primary line items)
-                    if row_type in ['primary_line_item', 'PRIMARY_LINE_ITEM']:
-                        row_data = saved_rc.get('row_data', [])
-                        row_index = saved_rc.get('row_index', -1)
-                        if row_data and row_index >= 0:
-                            saved_valid_rows.append(row_data)
-                            saved_valid_indices.append(row_index)
-            
-            print(f"[DEBUG] Saved mapping has {len(saved_valid_rows)} valid rows at indices: {saved_valid_indices[:10]}...")
-            
-            # Get current row data for the same indices
-            current_valid_rows = []
-            if hasattr(sheet, 'row_classifications'):
-                for rc in sheet.row_classifications:
-                    row_index = getattr(rc, 'row_index', -1)
+                if master_columns != comparison_columns:
+                    missing_cols = set(master_columns.keys()) - set(comparison_columns.keys())
+                    extra_cols = set(comparison_columns.keys()) - set(master_columns.keys())
+                    different_mappings = set(master_columns.keys()) & set(comparison_columns.keys())
+                    different_mappings = {col for col in different_mappings if master_columns[col] != comparison_columns[col]}
                     
-                    # Only check rows that were valid in the saved mapping
-                    if row_index in saved_valid_indices:
-                        row_data = getattr(rc, 'row_data', None)
-                        if row_data is None and hasattr(sheet, 'sheet_data'):
-                            try:
-                                row_data = sheet.sheet_data[row_index]
-                            except Exception:
-                                row_data = []
-                        if row_data is None:
-                            row_data = []
-                        current_valid_rows.append((row_index, row_data))
+                    if missing_cols:
+                        errors.append(f"Sheet '{master_sheet.sheet_name}': Missing columns: {missing_cols}")
+                    if extra_cols:
+                        errors.append(f"Sheet '{master_sheet.sheet_name}': Extra columns: {extra_cols}")
+                    if different_mappings:
+                        errors.append(f"Sheet '{master_sheet.sheet_name}': Different column mappings: {different_mappings}")
             
-            # Sort current rows by index to match saved order
-            current_valid_rows.sort(key=lambda x: x[0])
-            current_row_data = [row_data for _, row_data in current_valid_rows]
+            if errors:
+                return {
+                    'is_valid': False,
+                    'summary': 'Column mappings do not match between master and comparison files',
+                    'errors': errors
+                }
             
-            print(f"[DEBUG] Current file has {len(current_row_data)} rows at the expected valid indices")
+            return {
+                'is_valid': True,
+                'summary': 'Mappings are compatible'
+            }
             
-            # Must have same number of valid rows
-            if len(current_row_data) != len(saved_valid_rows):
-                print(f"[DEBUG] Valid row count mismatch: {len(current_row_data)} vs {len(saved_valid_rows)}")
-                print(f"[DEBUG] Missing indices: {set(saved_valid_indices) - {idx for idx, _ in current_valid_rows}}")
-                return False
+        except Exception as e:
+            return {
+                'is_valid': False,
+                'summary': f'Validation error: {str(e)}',
+                'errors': [str(e)]
+            }
+
+    def _update_main_dataset_with_comparison_results(self, processor, offer_info):
+        """
+        Update the main dataset in place with comparison results
+        
+        Args:
+            processor: ComparisonProcessor instance
+            offer_info: Offer information dictionary
+        """
+        try:
+            logger.info("=== STARTING _update_main_dataset_with_comparison_results ===")
             
-            # Each valid row must match exactly
-            mismatched_rows = 0
-            for i, (current_row, saved_row) in enumerate(zip(current_row_data, saved_valid_rows)):
-                # Normalize for comparison (strip whitespace, handle empty cells)
-                current_normalized = [str(cell).strip() if cell is not None else '' for cell in current_row]
-                saved_normalized = [str(cell).strip() if cell is not None else '' for cell in saved_row]
+            # Get the current tab (master dataset)
+            current_tab_id = self.notebook.select()
+            if not current_tab_id:
+                logger.warning("No current tab found for updating main dataset")
+                return
+            
+            logger.info(f"Current tab ID: {current_tab_id}")
+            
+            # Get the current file mapping from the tab_id_to_file_mapping dictionary
+            file_mapping = self.tab_id_to_file_mapping.get(current_tab_id)
+            
+            if not file_mapping:
+                logger.warning("No file mapping found for current tab")
+                return
+            
+            # Get the updated dataframe from the processor's master_dataset
+            updated_df = processor.master_dataset.copy()
+            
+            if updated_df is None or updated_df.empty:
+                logger.warning("No updated dataframe available from processor")
+                return
+            
+            logger.info(f"Updating master dataset with {len(updated_df)} rows and {len(updated_df.columns)} columns")
+            
+            # Update the file mapping's dataframe with the merged data
+            file_mapping.dataframe = updated_df.copy()
+            
+            # CRITICAL FIX: Store comparison offer info in controller's current_files
+            # This ensures the comparison offer info is available for summary display
+            if offer_info:
+                offer_name = offer_info.get('offer_name', 'Comparison')
+                logger.info(f"Storing comparison offer info for offer: {offer_name}")
                 
-                # Pad shorter row with empty strings
-                max_len = max(len(current_normalized), len(saved_normalized))
-                current_normalized.extend([''] * (max_len - len(current_normalized)))
-                saved_normalized.extend([''] * (max_len - len(saved_normalized)))
+                # Find the file key for the current tab
+                file_key = None
+                for key, file_data in self.controller.current_files.items():
+                    if hasattr(file_data.get('file_mapping'), 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_id):
+                        file_key = key
+                        break
                 
-                if current_normalized != saved_normalized:
-                    mismatched_rows += 1
-                    if mismatched_rows <= 3:  # Show first 3 mismatches for debugging
-                        row_idx = saved_valid_indices[i] if i < len(saved_valid_indices) else i
-                        print(f"[DEBUG] Valid row {row_idx} mismatch:")
-                        print(f"  Current: {current_normalized[:3]}...")
-                        print(f"  Saved:   {saved_normalized[:3]}...")
+                if file_key:
+                    # Ensure offers dictionary exists
+                    if 'offers' not in self.controller.current_files[file_key]:
+                        self.controller.current_files[file_key]['offers'] = {}
+                    
+                    # Store the comparison offer info
+                    self.controller.current_files[file_key]['offers'][offer_name] = offer_info
+                    logger.info(f"Stored comparison offer info: {offer_info}")
+                else:
+                    logger.warning("Could not find file key to store comparison offer info")
             
-            if mismatched_rows > 0:
-                print(f"[DEBUG] {mismatched_rows} valid rows don't match exactly")
-                return False
+            # Reset comparison workflow flags to allow normal UI refresh
+            self.is_comparison_workflow = False
+            self.comparison_processor = None
             
-            print("[DEBUG] Row structure validation passed - all valid rows match")
-            return True
+            # Show success message
+            merge_count = len(processor.merge_results) if hasattr(processor, 'merge_results') else 0
+            add_count = len(processor.add_results) if hasattr(processor, 'add_results') else 0
+            status_msg = f"Comparison completed: {merge_count} merges, {add_count} adds"
+            self._update_status(status_msg)
+            logger.info(f"Status message: {status_msg}")
+            print("=== AFTER STATUS, BEFORE TRY ===")
             
-        except Exception as e:
-            print(f"[DEBUG] Error validating row structure: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-
-    def _apply_exact_column_mappings(self, sheet, saved_sheet):
-        """Apply the saved column mappings exactly"""
-        try:
-            saved_mappings = saved_sheet.get('column_mappings', [])
+            # Get the current tab widget
+            current_tab = self.notebook.nametowidget(current_tab_id)
+            logger.info("DEBUG: Got current tab widget successfully")
             
-            # Create mapping from header to saved mapping info
-            header_to_mapping = {}
-            for saved_mapping in saved_mappings:
-                if isinstance(saved_mapping, dict):
-                    header = saved_mapping.get('original_header', '')
-                    header_to_mapping[header] = saved_mapping
+            # Debug: Log what we're about to do
+            logger.info(f"About to update tab with comparison data")
+            logger.info(f"Current tab type: {type(current_tab)}")
+            logger.info(f"Updated dataframe shape: {updated_df.shape}")
+            logger.info(f"Updated dataframe columns: {list(updated_df.columns)}")
             
-            # Apply to current sheet
-            for cm in sheet.column_mappings:
-                original_header = getattr(cm, 'original_header', '')
-                if original_header in header_to_mapping:
-                    saved_mapping = header_to_mapping[original_header]
-                    cm.mapped_type = saved_mapping.get('mapped_type', 'unknown')
-                    cm.confidence = saved_mapping.get('confidence', 1.0)
-                    cm.user_edited = saved_mapping.get('user_edited', True)
-                    print(f"[DEBUG] Applied exact mapping: {original_header} -> {cm.mapped_type}")
+            # Update the existing tab with comparison data, preserving formatting and column order
+            logger.info("Calling _update_tab_with_comparison_data...")
+            logger.info(f"DEBUG: current_tab type: {type(current_tab)}")
+            logger.info(f"DEBUG: updated_df shape: {updated_df.shape}")
+            logger.info(f"DEBUG: updated_df columns: {list(updated_df.columns)}")
+            logger.info(f"DEBUG: About to call _update_tab_with_comparison_data method")
+            logger.info(f"DEBUG: Method exists: {hasattr(self, '_update_tab_with_comparison_data')}")
+            try:
+                self._update_tab_with_comparison_data(current_tab, updated_df)
+                logger.info("_update_tab_with_comparison_data completed successfully")
+            except Exception as e:
+                logger.error(f"Exception in _update_tab_with_comparison_data: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                raise
             
-        except Exception as e:
-            print(f"[DEBUG] Error applying column mappings: {e}")
-
-    def _apply_exact_row_classifications(self, sheet, saved_sheet):
-        """Apply the saved row classifications exactly"""
-        try:
-            saved_classifications = saved_sheet.get('row_classifications', [])
-            
-            # Initialize row validity for this sheet
-            sheet_name = sheet.sheet_name
-            if not hasattr(self, 'row_validity'):
-                self.row_validity = {}
-            self.row_validity[sheet_name] = {}
-            
-            # Apply saved validity to corresponding rows
-            if hasattr(sheet, 'row_classifications') and len(sheet.row_classifications) == len(saved_classifications):
-                for i, (current_rc, saved_rc) in enumerate(zip(sheet.row_classifications, saved_classifications)):
-                    if isinstance(saved_rc, dict):
-                        saved_row_type = saved_rc.get('row_type', '')
-                        is_valid = saved_row_type in ['primary_line_item', 'PRIMARY_LINE_ITEM']
-                        
-                        row_index = getattr(current_rc, 'row_index', i)
-                        self.row_validity[sheet_name][row_index] = is_valid
-                        
-                        print(f"[DEBUG] Row {row_index}: {'Valid' if is_valid else 'Invalid'} (from saved mapping)")
-            
-            print(f"[DEBUG] Applied exact row classifications for {len(self.row_validity[sheet_name])} rows")
+            logger.info("=== COMPLETED _update_main_dataset_with_comparison_results ===")
+            print("=== END OF _update_main_dataset_with_comparison_results ===")
             
         except Exception as e:
-            print(f"[DEBUG] Error applying row classifications: {e}")
+            logger.error(f"Error updating main dataset with comparison results: {e}")
+            self._update_status(f"Error updating dataset: {str(e)}")
 
-    def _show_mapped_file_review(self, tab, file_mapping, mapping_data):
-        """Show the file with applied mappings in Row Review mode"""
+    def _refresh_tab_with_updated_data(self, tab, file_mapping):
+        """
+        Simple UI refresh that shows the updated data without triggering column mapping workflow
+        
+        Args:
+            tab: The tab widget to refresh
+            file_mapping: The updated file mapping with new data
+        """
         try:
-            # Clear tab content
+            logger.info("Starting simple UI refresh for updated data")
+            
+            # Clear existing content
             for widget in tab.winfo_children():
                 widget.destroy()
             
             # Create main container frame
-            tab_frame = ttk.Frame(tab)
-            tab_frame.grid(row=0, column=0, sticky=tk.NSEW)
+            main_frame = ttk.Frame(tab)
+            main_frame.grid(row=0, column=0, sticky=tk.NSEW)
+            main_frame.grid_rowconfigure(0, weight=1)
+            main_frame.grid_columnconfigure(0, weight=1)
             
-            # Configure grid layout
-            tab_frame.grid_rowconfigure(0, weight=0)  # Info frame
-            tab_frame.grid_rowconfigure(1, weight=1)  # Row review
-            tab_frame.grid_rowconfigure(2, weight=0)  # Confirm button
-            tab_frame.grid_columnconfigure(0, weight=1)
+            # Get the updated dataframe
+            df = file_mapping.dataframe
             
-            # Add info frame
-            info_frame = ttk.LabelFrame(tab_frame, text="Mapping Applied")
-            info_frame.grid(row=0, column=0, sticky=tk.EW, padx=5, pady=5)
+            # Filter out ignore columns and get meaningful columns
+            meaningful_columns = [col for col in df.columns if not (col.startswith('ignore') or col == 'ignore')]
             
-            info_text = f"""Mapping successfully applied to {len(file_mapping.sheets)} sheets.
-Column mappings and row validity have been pre-populated from the saved mapping.
-Review the rows below and adjust validity as needed."""
+            # Define the exact column order from row review (same as original)
+            display_column_order = ["code", "description", "unit", "quantity", "unit_price", "total_price", "scope", "manhours", "wage"]
             
-            info_label = ttk.Label(info_frame, text=info_text, wraplength=800, justify=tk.LEFT)
-            info_label.grid(row=0, column=0, padx=10, pady=10, sticky=tk.W)
+            # Add any offer-specific columns (those with [offer_name] pattern)
+            offer_columns = [col for col in meaningful_columns if '[' in col and ']' in col]
             
-            # Show Row Review directly
-            self._show_row_review_for_mapped_file(tab_frame, file_mapping)
+            # Create final column order: standard columns first, then offer-specific columns
+            final_columns = []
+            for col in display_column_order:
+                if col in meaningful_columns:
+                    final_columns.append(col)
             
-            # Add confirm button
-            confirm_frame = ttk.Frame(tab_frame)
-            confirm_frame.grid(row=2, column=0, sticky=tk.EW, padx=5, pady=5)
-            confirm_frame.grid_columnconfigure(0, weight=1)
+            # Add offer-specific columns at the end
+            for col in offer_columns:
+                if col not in final_columns:
+                    final_columns.append(col)
             
-            confirm_btn = ttk.Button(confirm_frame, text="Confirm Row Review & Continue", 
-                                   command=lambda: self._on_confirm_mapped_file_review(file_mapping))
-            confirm_btn.grid(row=0, column=0, sticky=tk.EW, padx=5, pady=5)
+            # Add any remaining meaningful columns
+            for col in meaningful_columns:
+                if col not in final_columns:
+                    final_columns.append(col)
             
-            # Store file mapping reference
-            file_mapping.tab = tab
-            tab_id = str(tab)
-            self.tab_id_to_file_mapping[tab_id] = file_mapping
+            # Create treeview for data display
+            tree = ttk.Treeview(main_frame, columns=final_columns, show="headings", height=20)
+            
+            # Configure columns with proper formatting (same as row review)
+            for col in final_columns:
+                tree.heading(col, text=col)
+                
+                # Set column widths based on content type (same as row review)
+                if col == "status":
+                    tree.column(col, width=80, anchor=tk.CENTER)
+                else:
+                    tree.column(col, width=120 if col != "#" else 40, anchor=tk.W, minwidth=50, stretch=False)
+            
+            # Add scrollbars
+            v_scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=tree.yview)
+            h_scrollbar = ttk.Scrollbar(main_frame, orient=tk.HORIZONTAL, command=tree.xview)
+            tree.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
+            
+            # Pack treeview and scrollbars
+            tree.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
+            v_scrollbar.grid(row=0, column=1, sticky=tk.NS)
+            h_scrollbar.grid(row=1, column=0, sticky=tk.EW)
+            
+            # Populate with data using exact same formatting as row review
+            for idx, row in df.iterrows():
+                values = []
+                for col in final_columns:
+                    val = row.get(col, '')
+                    
+                    # Apply exact same formatting as row review
+                    if pd.notna(val) and val != '':
+                        if col in ['unit_price', 'total_price', 'wage']:
+                            # Currency formatting (same as row review)
+                            val = format_number_eu(val)
+                        elif col in ['quantity', 'manhours']:
+                            # Number formatting (same as row review)
+                            # Use standard European number formatting for all numeric columns
+                            val = format_number_eu(val)
+                        else:
+                            val = str(val)
+                    else:
+                        val = ''
+                    
+                    values.append(val)
+                
+                tree.insert('', 'end', values=values)
+            
+            # Add subtle success indicator at the bottom
+            status_frame = ttk.Frame(main_frame)
+            status_frame.grid(row=2, column=0, sticky=tk.EW, pady=(5, 0))
+            
+            status_label = ttk.Label(status_frame, text="✓ Dataset updated with comparison results", 
+                                   foreground="green", font=("Arial", 9))
+            status_label.pack(side=tk.LEFT)
+            
+            logger.info("Simple UI refresh completed successfully")
             
         except Exception as e:
-            print(f"[DEBUG] Error showing mapped file review: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Error in simple UI refresh: {e}")
+            # Fallback: just show a simple message
+            for widget in tab.winfo_children():
+                widget.destroy()
+            
+            message_frame = ttk.Frame(tab)
+            message_frame.grid(row=0, column=0, sticky=tk.NSEW)
+            message_frame.grid_rowconfigure(0, weight=1)
+            message_frame.grid_columnconfigure(0, weight=1)
+            
+            message_label = ttk.Label(message_frame, 
+                                    text="✓ Dataset updated successfully with comparison results\n\n"
+                                         "The master dataset has been updated with the comparison data.",
+                                    font=("Arial", 12), justify=tk.CENTER)
+            message_label.grid(row=0, column=0, padx=50, pady=50)
 
-    def _show_row_review_for_mapped_file(self, parent_frame, file_mapping):
-        """Show row review for a file with applied mappings"""
-        # Create Row Review container
-        row_review_frame = ttk.LabelFrame(parent_frame, text="Row Review (Pre-populated from Mapping)")
-        row_review_frame.grid(row=1, column=0, sticky=tk.NSEW, padx=5, pady=5)
-        row_review_frame.grid_rowconfigure(0, weight=1)
-        row_review_frame.grid_columnconfigure(0, weight=1)
+    def _show_comparison_results(self, processor, offer_info):
+        """
+        Show comparison results to user
         
-        # Add notebook for sheets
-        row_review_notebook = ttk.Notebook(row_review_frame)
-        row_review_notebook.grid(row=0, column=0, sticky=tk.NSEW)
-        
-        # Initialize treeview storage
-        if not hasattr(self, 'row_review_treeviews'):
-            self.row_review_treeviews = {}
-        
-        # Create tabs for each sheet
-        for sheet in file_mapping.sheets:
-            self._create_row_review_tab_for_sheet(row_review_notebook, sheet)
-
-    def _create_row_review_tab_for_sheet(self, notebook, sheet):
-        """Create a row review tab for a specific sheet"""
-        frame = ttk.Frame(notebook)
-        notebook.add(frame, text=sheet.sheet_name)
-        
-        # Determine required columns
-        if self.column_mapper and hasattr(self.column_mapper, 'config'):
-            required_types = [col_type.value for col_type in self.column_mapper.config.get_required_columns()]
-        else:
-            required_types = ["description", "quantity", "unit_price", "total_price", "unit", "code"]
-        
-        # Display column order
-        display_column_order = ["code", "description", "unit", "quantity", "unit_price", "total_price"]
-        available_columns = [col for col in display_column_order if col in required_types]
-        
-        # Create column mapping
-        mapped_type_to_index = {}
-        if hasattr(sheet, 'column_mappings'):
-            for cm in sheet.column_mappings:
-                mapped_type_to_index[getattr(cm, 'mapped_type', None)] = cm.column_index
-        
-        # Create treeview
-        columns = ["#"] + available_columns + ["status"]
-        tree = ttk.Treeview(frame, columns=columns, show="headings", height=12, selectmode="none")
-        
-        for col in columns:
-            tree.heading(col, text=col.capitalize() if col != '#' else '#')
-            if col == "status":
-                tree.column(col, width=80, anchor=tk.CENTER)
-            else:
-                tree.column(col, width=120 if col != "#" else 40, anchor=tk.W)
-        
-        # Add scrollbars
-        v_scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=tree.yview)
-        h_scrollbar = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=tree.xview)
-        tree.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
-        
-        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-        v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
-        
-        # Store treeview reference
-        self.row_review_treeviews[sheet.sheet_name] = tree
-        
-        # Populate with data
-        if hasattr(sheet, 'row_classifications'):
-            for rc in sheet.row_classifications:
-                row_data = getattr(rc, 'row_data', None)
-                if row_data is None and hasattr(sheet, 'sheet_data'):
-                    try:
-                        row_data = sheet.sheet_data[rc.row_index]
-                    except Exception:
-                        row_data = []
-                
-                if row_data is None:
-                    row_data = []
-                
-                # Build row values
-                row_values = [rc.row_index + 1]
-                for col in available_columns:
-                    idx = mapped_type_to_index.get(col)
-                    val = row_data[idx] if idx is not None and idx < len(row_data) else ""
-                    
-                    # Format numbers
-                    if col in ['unit_price', 'total_price']:
-                        val = format_number(val, is_currency=True)
-                    elif col == 'quantity':
-                        val = format_number(val, is_currency=False)
-                    
-                    row_values.append(val)
-                
-                # Get validity from pre-populated data
-                is_valid = self.row_validity.get(sheet.sheet_name, {}).get(rc.row_index, False)
-                status = "Valid" if is_valid else "Invalid"
-                tag = 'validrow' if is_valid else 'invalidrow'
-                
-                tree.insert('', 'end', iid=str(rc.row_index), 
-                          values=row_values + [status], tags=(tag,))
-        
-        # Configure tags
-        tree.tag_configure('validrow', background='#E8F5E9')  # light green
-        tree.tag_configure('invalidrow', background='#FFEBEE')  # light red
-        
-        # Bind click events
-        tree.bind('<Button-1>', lambda e, s=sheet.sheet_name, t=tree: self._on_row_review_click(e, s, t, required_types))
-
-    def _on_confirm_mapped_file_review(self, file_mapping):
-        """Handle confirmation of row review for mapped file"""
+        Args:
+            processor: ComparisonProcessor instance
+            offer_info: Offer information dictionary
+        """
         try:
-            print(f"[DEBUG] _on_confirm_mapped_file_review called")
-            print(f"[DEBUG] Has saved_mapping: {hasattr(self, 'saved_mapping')}")
-            if hasattr(self, 'saved_mapping'):
-                print(f"[DEBUG] Saved mapping keys: {list(self.saved_mapping.keys())}")
+            # Create results summary
+            total_rows = len(processor.row_results)
+            valid_rows = sum(1 for r in processor.row_results if r['is_valid'])
+            invalid_rows = total_rows - valid_rows
             
-            # Check if we have saved categories from the mapping
-            if hasattr(self, 'saved_mapping') and 'final_dataframe' in self.saved_mapping:
-                print("[DEBUG] Found saved categories in mapping - applying directly without categorization")
-                
-                # Get the saved categorized DataFrame
-                saved_df = self.saved_mapping['final_dataframe'].copy()
-                
-                # Build the current DataFrame structure (without categories)
-                import pandas as pd
-                rows = []
-                sheet_count = 0
-                
-                for sheet in getattr(file_mapping, 'sheets', []):
-                    if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
-                        continue
-                        
-                    sheet_count += 1
-                    col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
-                    sheet_name = sheet.sheet_name
-                    validity_dict = self.row_validity.get(sheet_name, {})
-                    
-                    for rc in getattr(sheet, 'row_classifications', []):
-                        # Only include valid rows
-                        if not validity_dict.get(rc.row_index, False):
-                            continue
-                            
-                        row_data = getattr(rc, 'row_data', None)
-                        if row_data is None and hasattr(sheet, 'sheet_data'):
-                            try:
-                                row_data = sheet.sheet_data[rc.row_index]
-                            except Exception:
-                                row_data = None
-                        
-                        if row_data is None:
-                            row_data = []
-                        
-                        # Build dict for DataFrame
-                        row_dict = {col_headers[i]: row_data[i] if i < len(row_data) else '' 
-                                  for i in range(len(col_headers))}
-                        row_dict['Source_Sheet'] = sheet.sheet_name
-                        rows.append(row_dict)
-                
-                if rows:
-                    current_df = pd.DataFrame(rows)
-                    if 'description' in current_df.columns and 'Description' not in current_df.columns:
-                        current_df.rename(columns={'description': 'Description'}, inplace=True)
-                    
-                    # Apply saved categories to current data by matching descriptions
-                    print(f"[DEBUG] Applying saved categories to {len(current_df)} rows")
-                    
-                    # Create category mapping from saved DataFrame
-                    if 'Description' in saved_df.columns and 'category' in saved_df.columns:
-                        category_mapping = {}
-                        for _, row in saved_df.iterrows():
-                            desc = str(row['Description']).strip().lower()
-                            category = str(row['category']).strip()
-                            if desc and category:
-                                category_mapping[desc] = category
-                        
-                        print(f"[DEBUG] Created category mapping with {len(category_mapping)} entries")
-                        
-                        # Apply categories to current DataFrame (categories are already in pretty format)
-                        current_df['category'] = current_df['Description'].apply(
-                            lambda x: category_mapping.get(str(x).strip().lower(), '')
-                        )
-                        
-                        # Count successful matches
-                        matched_count = (current_df['category'] != '').sum()
-                        print(f"[DEBUG] Successfully matched {matched_count} out of {len(current_df)} rows")
-                        
-                        # Store the categorized DataFrame
-                        file_mapping.dataframe = current_df
-                        file_mapping.categorized_dataframe = current_df
-                        
-                        # Show final categorized data directly (skip categorization dialog)
-                        current_tab = file_mapping.tab
-                        self._show_final_categorized_data(current_tab, current_df, None)
-                        
-                        self._update_status(f"Applied saved categories to {matched_count} rows - categorization complete")
-                        
-                        success_msg = (
-                            f"Categories applied successfully from saved mapping!\n\n"
-                            f"Matched {matched_count} out of {len(current_df)} rows.\n"
-                            f"Categorization completed without manual review."
-                        )
-                        messagebox.showinfo("Categories Applied", success_msg)
-                        return
-                    else:
-                        print("[DEBUG] Saved DataFrame missing required columns for category mapping")
-                else:
-                    print("[DEBUG] No valid rows found for category application")
+            merge_count = len(processor.merge_results)
+            add_count = len(processor.add_results)
             
-            # Fallback to normal categorization if no saved categories found
-            print("[DEBUG] No saved categories found - proceeding with normal categorization")
-            self._update_status("Row review confirmed. Starting categorization process...")
+            summary = f"""
+Comparison Results for {offer_info.get('offer_name', 'Comparison')}:
+
+Total Rows Processed: {total_rows}
+Valid Rows: {valid_rows}
+Invalid Rows: {invalid_rows}
+
+Operations Performed:
+- Merge Operations: {merge_count}
+- Add Operations: {add_count}
+
+Master Dataset Updated: {len(processor.master_dataset)} rows
+            """
             
-            # Build DataFrame for categorization (same as normal workflow)
-            import pandas as pd
-            rows = []
-            sheet_count = 0
+            messagebox.showinfo("Comparison Complete", summary)
             
-            for sheet in getattr(file_mapping, 'sheets', []):
-                if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
-                    continue
+            # Show detailed results in a new tab
+            self._show_detailed_comparison_results(processor, offer_info)
+            
+        except Exception as e:
+            logger.error(f"Error showing comparison results: {e}")
+            messagebox.showerror("Error", f"Failed to show comparison results: {str(e)}")
+
+    def _show_detailed_comparison_results(self, processor, offer_info):
+        """
+        Show detailed comparison results in a new tab
+        
+        Args:
+            processor: ComparisonProcessor instance
+            offer_info: Offer information dictionary
+        """
+        try:
+            # Create a new tab for comparison results
+            tab_title = f"Comparison Results - {offer_info.get('offer_name', 'Comparison')}"
+            tab = ttk.Frame(self.notebook)
+            self.notebook.add(tab, text=tab_title)
+            
+            # Create the tab content
+            self._populate_comparison_results_tab(tab, processor, offer_info)
+            
+            # Switch to the new tab
+            self.notebook.select(tab)
+            
+        except Exception as e:
+            logger.error(f"Error showing detailed comparison results: {e}")
+            messagebox.showerror("Error", f"Failed to show detailed comparison results: {str(e)}")
+
+    def _populate_comparison_results_tab(self, tab, processor, offer_info):
+        """
+        Populate the comparison results tab with detailed information
+        
+        Args:
+            tab: The tab to populate
+            processor: ComparisonProcessor instance
+            offer_info: Offer information dictionary
+        """
+        try:
+            # Create main frame
+            main_frame = ttk.Frame(tab, padding="10")
+            main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+            
+            # Configure grid weights
+            tab.columnconfigure(0, weight=1)
+            tab.rowconfigure(0, weight=1)
+            main_frame.columnconfigure(0, weight=1)
+            main_frame.rowconfigure(1, weight=1)
+            
+            # Title
+            title_label = ttk.Label(main_frame, text=f"Comparison Results - {offer_info.get('offer_name', 'Comparison')}", 
+                                   font=("Arial", 14, "bold"))
+            title_label.grid(row=0, column=0, pady=(0, 10), sticky=tk.W)
+            
+            # Create notebook for different views
+            results_notebook = ttk.Notebook(main_frame)
+            results_notebook.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+            
+            # Summary tab
+            summary_frame = ttk.Frame(results_notebook)
+            results_notebook.add(summary_frame, text="Summary")
+            self._populate_summary_frame(summary_frame, processor, offer_info)
+            
+            # Updated dataset tab
+            dataset_frame = ttk.Frame(results_notebook)
+            results_notebook.add(dataset_frame, text="Updated Dataset")
+            self._populate_dataset_frame(dataset_frame, processor, offer_info)
+            
+            # Button frame
+            button_frame = ttk.Frame(main_frame)
+            button_frame.grid(row=2, column=0, pady=(10, 0), sticky=(tk.E, tk.W))
+            button_frame.columnconfigure(1, weight=1)
+            
+            # Export button
+            export_btn = ttk.Button(button_frame, text="Export Results", 
+                                   command=lambda: self._export_comparison_results(processor, offer_info))
+            export_btn.grid(row=0, column=0, padx=(0, 10))
+            
+            # Close button
+            close_btn = ttk.Button(button_frame, text="Close", command=lambda: self.notebook.forget(tab))
+            close_btn.grid(row=0, column=2)
+            
+        except Exception as e:
+            logger.error(f"Error populating comparison results tab: {e}")
+            raise
+
+    def _populate_summary_frame(self, frame, processor, offer_info):
+        """Populate the summary frame with comparison statistics"""
+        try:
+            # Statistics
+            total_rows = len(processor.row_results)
+            valid_rows = sum(1 for r in processor.row_results if r['is_valid'])
+            invalid_rows = total_rows - valid_rows
+            merge_count = len(processor.merge_results)
+            add_count = len(processor.add_results)
+            
+            # Create statistics text
+            stats_text = f"""
+Comparison Statistics for {offer_info.get('offer_name', 'Comparison')}:
+
+Processing Results:
+• Total Rows Processed: {total_rows}
+• Valid Rows: {valid_rows}
+• Invalid Rows: {invalid_rows}
+
+Operations Performed:
+• Merge Operations: {merge_count}
+• Add Operations: {add_count}
+
+Dataset Information:
+• Master Dataset Rows: {len(processor.master_dataset)}
+• New Columns Created: {len([col for col in processor.master_dataset.columns if '[' in col])}
+
+Offer Information:
+• Offer Name: {offer_info.get('offer_name', 'N/A')}
+• Client: {offer_info.get('client_name', 'N/A')}
+• Project: {offer_info.get('project_name', 'N/A')}
+• Date: {offer_info.get('date', 'N/A')}
+            """
+            
+            # Create text widget
+            text_widget = tk.Text(frame, wrap=tk.WORD, height=20, width=60)
+            text_widget.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
+            
+            # Add scrollbar
+            scrollbar = ttk.Scrollbar(frame, orient="vertical", command=text_widget.yview)
+            scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+            text_widget.configure(yscrollcommand=scrollbar.set)
+            
+            # Insert text
+            text_widget.insert(tk.END, stats_text)
+            text_widget.config(state=tk.DISABLED)
+            
+            # Configure grid weights
+            frame.columnconfigure(0, weight=1)
+            frame.rowconfigure(0, weight=1)
+            
+        except Exception as e:
+            logger.error(f"Error populating summary frame: {e}")
+            raise
+
+    def _populate_dataset_frame(self, frame, processor, offer_info):
+        """Populate the dataset frame with the updated master dataset"""
+        try:
+            # Create treeview
+            columns = list(processor.master_dataset.columns)
+            tree = ttk.Treeview(frame, columns=columns, show='headings', height=15)
+            
+            # Configure columns
+            for col in columns:
+                tree.heading(col, text=col)
+                tree.column(col, width=100, minwidth=80)
+            
+            # Add scrollbars
+            vsb = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
+            hsb = ttk.Scrollbar(frame, orient="horizontal", command=tree.xview)
+            tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+            
+            # Grid layout
+            tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
+            vsb.grid(row=0, column=1, sticky=(tk.N, tk.S))
+            hsb.grid(row=1, column=0, sticky=(tk.W, tk.E))
+            
+            # Populate with data (limit to first 100 rows for performance)
+            for i, row in processor.master_dataset.head(100).iterrows():
+                values = [str(val) if pd.notna(val) else "" for val in row.values]
+                tree.insert('', 'end', values=values)
+            
+            # Configure grid weights
+            frame.columnconfigure(0, weight=1)
+            frame.rowconfigure(0, weight=1)
+            
+        except Exception as e:
+            logger.error(f"Error populating dataset frame: {e}")
+            raise
+
+    def _export_comparison_results(self, processor, offer_info):
+        """Export comparison results to Excel with proper formatting and data validation"""
+        try:
+            filetypes = [("Excel files", "*.xlsx"), ("All files", "*.*")]
+            filename = filedialog.asksaveasfilename(
+                title="Export Comparison Results",
+                filetypes=filetypes,
+                defaultextension=".xlsx"
+            )
+            
+            if filename:
+                # Export the updated master dataset with proper formatting
+                with pd.ExcelWriter(filename, engine='openpyxl') as writer:
+                    processor.master_dataset.to_excel(writer, index=False, sheet_name='Comparison Results')
                     
-                sheet_count += 1
-                col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
-                sheet_name = sheet.sheet_name
-                validity_dict = self.row_validity.get(sheet_name, {})
-                
-                for rc in getattr(sheet, 'row_classifications', []):
-                    # Only include valid rows
-                    if not validity_dict.get(rc.row_index, False):
-                        continue
+                    # Get the workbook and worksheet
+                    workbook = writer.book
+                    worksheet = writer.sheets['Comparison Results']
+                    
+                    # Apply European number formatting to numeric columns
+                    from openpyxl.styles import NamedStyle
+                    from openpyxl.utils import get_column_letter
+                    
+                    # Identify numeric columns (those containing price, quantity, manhours, wage)
+                    numeric_columns = []
+                    for col_idx, col_name in enumerate(processor.master_dataset.columns, 1):
+                        col_lower = col_name.lower()
+                        if any(keyword in col_lower for keyword in ['price', 'quantity', 'manhours', 'wage']):
+                            numeric_columns.append((col_idx, col_name))
+                    
+                    # Apply formatting to numeric columns
+                    for col_idx, col_name in numeric_columns:
+                        # Create European number style
+                        euro_style = NamedStyle(name=f"euro_number_{col_name}")
+                        euro_style.number_format = '#,##0.00'
                         
-                    row_data = getattr(rc, 'row_data', None)
-                    if row_data is None and hasattr(sheet, 'sheet_data'):
+                        # Apply to the column
+                        col_letter = get_column_letter(col_idx)
+                        for row in range(2, len(processor.master_dataset) + 2):  # Skip header row
+                            cell = worksheet[f'{col_letter}{row}']
+                            cell.style = euro_style
+                    
+                    # Add data validation for Category column if it exists
+                    if 'Category' in processor.master_dataset.columns:
+                        category_col_idx = list(processor.master_dataset.columns).index('Category') + 1
+                        category_col_letter = get_column_letter(category_col_idx)
+                        
+                        # Get available categories in the correct order (from category_order)
                         try:
-                            row_data = sheet.sheet_data[rc.row_index]
-                        except Exception:
-                            row_data = None
+                            category_order = ['General Costs', 'Site Costs', 'Civil Works', 'Earth Movement', 'Roads', 'OEM Building', 'Electrical Works', 'Solar Cables', 'LV Cables', 'MV Cables', 'Trenching', 'PV Mod. Installation', 'Cleaning and Cabling of PV Mod.', 'Tracker Inst.', 'Other']
+                            available_categories = category_order
+                            
+                            # Create data validation for Category column
+                            from openpyxl.worksheet.datavalidation import DataValidation
+                            
+                            # Create validation rule
+                            dv = DataValidation(
+                                type="list",
+                                formula1=f'"{",".join(available_categories)}"',
+                                allow_blank=True,
+                                showErrorMessage=True,
+                                errorTitle="Invalid Category",
+                                error="Please select a category from the dropdown list.",
+                                showInputMessage=True,
+                                promptTitle="Category Selection",
+                                prompt="Select a category from the dropdown list."
+                            )
+                            
+                            # Add validation to worksheet
+                            worksheet.add_data_validation(dv)
+                            
+                            # Apply validation to Category column (skip header row)
+                            for row in range(2, len(processor.master_dataset) + 2):
+                                dv.add(f'{category_col_letter}{row}')
+                            
+                        except Exception as e:
+                            logger.warning(f"Could not add category validation: {e}")
                     
-                    if row_data is None:
-                        row_data = []
+                    # Auto-adjust column widths
+                    for column in worksheet.columns:
+                        max_length = 0
+                        column_letter = column[0].column_letter
+                        for cell in column:
+                            try:
+                                if len(str(cell.value)) > max_length:
+                                    max_length = len(str(cell.value))
+                            except:
+                                pass
+                        adjusted_width = min(max_length + 2, 50)  # Cap at 50 characters
+                        worksheet.column_dimensions[column_letter].width = adjusted_width
                     
-                    # Build dict for DataFrame
-                    row_dict = {col_headers[i]: row_data[i] if i < len(row_data) else '' 
-                              for i in range(len(col_headers))}
-                    row_dict['Source_Sheet'] = sheet.sheet_name
-                    rows.append(row_dict)
+                    # Format header row
+                    from openpyxl.styles import Font, PatternFill, Alignment
+                    header_font = Font(bold=True)
+                    header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+                    header_alignment = Alignment(horizontal="center", vertical="center")
+                    
+                    for cell in worksheet[1]:
+                        cell.font = header_font
+                        cell.fill = header_fill
+                        cell.alignment = header_alignment
+                    
+                    # Add summary sheet with formulas
+                    self._add_summary_sheet_with_formulas_comparison(workbook, processor.master_dataset, offer_info)
+                
+                messagebox.showinfo("Export Complete", f"Comparison results exported to {filename}")
+                
+        except Exception as e:
+            logger.error(f"Error exporting comparison results: {e}")
+            messagebox.showerror("Export Error", f"Failed to export results: {str(e)}")
+
+    def _prompt_offer_info(self, is_first_boq=True):
+        """
+        Prompt user for offer information
+        
+        Args:
+            is_first_boq: True if this is the first BoQ, False for comparison
+            
+        Returns:
+            dict: Offer information or None if cancelled
+        """
+        try:
+            if OFFER_INFO_AVAILABLE:
+                # Get previous offer info for comparison BOQs
+                previous_offer_info = None
+                if not is_first_boq and hasattr(self, 'current_offer_info') and self.current_offer_info:
+                    previous_offer_info = self.current_offer_info
+                    logger.debug(f"Using previous offer info for comparison: {previous_offer_info}")
+                
+                result = show_offer_info_dialog(self.root, is_first_boq, previous_offer_info)
+                logger.debug(f"Offer info dialog returned: {result}")
+                return result
+            else:
+                # Fallback: return default info
+                fallback_info = {
+                    'offer_name': 'Default Offer' if is_first_boq else 'Comparison Offer',
+                    'client_name': 'Default Client',
+                    'project_name': 'Default Project',
+                    'date': datetime.now().strftime('%Y-%m-%d')
+                }
+                logger.debug(f"Using fallback offer info: {fallback_info}")
+                return fallback_info
+        except Exception as e:
+            logger.error(f"Error prompting for offer info: {e}")
+            return None
+
+    def _clear_all_files(self):
+        """Clear all loaded files and reset the interface"""
+        try:
+            # Clear all tabs
+            for tab in self.notebook.tabs():
+                self.notebook.forget(tab)
+            
+            # Clear controller data
+            if hasattr(self.controller, 'current_files'):
+                self.controller.current_files.clear()
+            
+            # Reset comparison workflow state
+            self.is_comparison_workflow = False
+            self.master_file_mapping = None
+            self.comparison_processor = None
+            
+            # Update status
+            self._update_status("All files cleared")
+            
+            # Refresh summary grid
+            self._refresh_summary_grid_centralized()
+            
+        except Exception as e:
+            logger.error(f"Error clearing all files: {e}")
+            messagebox.showerror("Error", f"Failed to clear files: {str(e)}")
+
+    def _load_analysis(self):
+        """Load a previously saved analysis file"""
+        try:
+            # Clear all previous data when loading analysis
+            self._clear_all_files()
+            
+            filetypes = [("Pickle files", "*.pkl"), ("All files", "*.*")]
+            filename = filedialog.askopenfilename(
+                title="Load Analysis",
+                filetypes=filetypes
+            )
+            
+            if filename:
+                with open(filename, 'rb') as f:
+                    analysis_data = pickle.load(f)
+                
+                # Process the loaded analysis
+                if 'dataframe' in analysis_data and 'categorization_result' in analysis_data:
+                    # Create a new tab for the loaded analysis
+                    tab = ttk.Frame(self.notebook)
+                    self.notebook.add(tab, text=f"Loaded Analysis - {os.path.basename(filename)}")
+                    self.notebook.select(tab)
+                    
+                    # Store the analysis data in controller for summary display
+                    file_key = f"loaded_analysis_{int(time.time())}"
+                    self.controller.current_files[file_key] = {
+                        'file_mapping': type('MockFileMapping', (), {
+                            'tab': tab,
+                            'offer_info': analysis_data.get('offer_info', {
+                                'offer_name': 'Loaded Analysis',
+                                'project_name': 'Loaded Project',
+                                'project_size': 'N/A',
+                                'date': datetime.now().strftime('%Y-%m-%d')
+                            })
+                        })(),
+                        'final_dataframe': analysis_data['dataframe'],
+                        'offer_info': analysis_data.get('offer_info', {
+                            'offer_name': 'Loaded Analysis',
+                            'project_name': 'Loaded Project',
+                            'project_size': 'N/A',
+                            'date': datetime.now().strftime('%Y-%m-%d')
+                        })
+                    }
+                    
+                    # Show the final categorized data directly
+                    final_dataframe = analysis_data['dataframe']
+                    categorization_result = analysis_data['categorization_result']
+                    
+                    self._show_final_categorized_data(tab, final_dataframe, categorization_result)
+                    
+                    self._update_status(f"Analysis loaded from {filename}")
+                else:
+                    messagebox.showerror("Error", "Invalid analysis file format")
+                
+        except Exception as e:
+            logger.error(f"Error loading analysis: {e}")
+            messagebox.showerror("Error", f"Failed to load analysis: {str(e)}")
+
+    def _use_mapping(self):
+        """Load and apply a saved mapping to a new file"""
+        try:
+            # Clear all previous data when using mapping
+            self._clear_all_files()
+            
+            filetypes = [("Pickle files", "*.pkl"), ("All files", "*.*")]
+            filename = filedialog.askopenfilename(
+                title="Load Mapping",
+                filetypes=filetypes
+            )
+            
+            if filename:
+                with open(filename, 'rb') as f:
+                    mapping_data = pickle.load(f)
+                
+                # Apply the mapping to a new file
+                self._open_excel_file_with_mapping(mapping_data)
+                
+                self._update_status(f"Mapping loaded from {filename}")
+                
+        except Exception as e:
+            logger.error(f"Error loading mapping: {e}")
+            messagebox.showerror("Error", f"Failed to load mapping: {str(e)}")
+
+    def _open_excel_file_with_mapping(self, mapping_data):
+        """Open an Excel file and apply a saved mapping - streamlined workflow"""
+        try:
+            filetypes = [("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
+            filepath = filedialog.askopenfilename(
+                title="Select Excel File to Apply Mapping",
+                filetypes=filetypes
+            )
+            
+            if filepath:
+                # Prompt for offer info first
+                offer_info = self._prompt_offer_info(is_first_boq=True)
+                if not offer_info:
+                    self._update_status("Mapping application cancelled (no offer information provided).")
+                    return
+                
+                # Process file with mapping in a streamlined way
+                self._process_file_with_mapping(filepath, mapping_data, offer_info)
+                
+        except Exception as e:
+            logger.error(f"Error applying mapping: {e}")
+            messagebox.showerror("Error", f"Failed to apply mapping: {str(e)}")
+
+    def _process_file_with_mapping(self, filepath, mapping_data, offer_info):
+        """Process file with pre-existing mapping - skip categorization and column mapping"""
+        try:
+            # Clear previous results
+            self.sheet_treeviews.clear()
+            if self.notebook:
+                for tab in self.notebook.tabs():
+                    self.notebook.forget(tab)
+
+            self._update_status(f"Processing {os.path.basename(filepath)} with saved mapping...")
+            self.progress_var.set(0)
+
+            # Create a new tab for the file
+            filename = os.path.basename(filepath)
+            tab = ttk.Frame(self.notebook)
+            self.notebook.add(tab, text=filename)
+            self.notebook.select(tab)
+
+            # Configure grid for the tab frame
+            tab.grid_rowconfigure(0, weight=1)
+            tab.grid_columnconfigure(0, weight=1)
+
+            loading_label = ttk.Label(tab, text="Processing with saved mapping...")
+            loading_label.grid(row=0, column=0, pady=40, padx=100)
+            self.root.update_idletasks()
+
+            def process_in_thread():
+                try:
+                    # Process file with mapping
+                    file_mapping = self.controller.process_file(
+                        Path(filepath),
+                        progress_callback=lambda p, m: self.root.after(0, self.update_progress, p, m)
+                    )
+                    
+                    # Apply the saved mapping to the file_mapping
+                    self._apply_saved_mapping(file_mapping, mapping_data)
+                    
+                    # Store the file mapping
+                    self.file_mapping = file_mapping
+                    self.column_mapper = file_mapping.column_mapper if hasattr(file_mapping, 'column_mapper') else None
+                    
+                    # Schedule completion on main thread
+                    self.root.after(0, self._on_mapping_processing_complete, tab, filepath, file_mapping, loading_label, offer_info)
+                    
+                except Exception as e:
+                    logger.error(f"Failed to process file with mapping: {e}", exc_info=True)
+                    self.root.after(0, self._on_processing_error, tab, filename, loading_label)
+
+            # Start processing thread
+            threading.Thread(target=process_in_thread, daemon=True).start()
+            
+        except Exception as e:
+            logger.error(f"Error in _process_file_with_mapping: {e}")
+            messagebox.showerror("Error", f"Failed to process file with mapping: {str(e)}")
+
+    def _apply_saved_mapping(self, file_mapping, mapping_data):
+        """Apply saved mapping to file_mapping"""
+        try:
+            # Apply sheet categories for filtering
+            if 'sheet_categories' in mapping_data:
+                self.current_sheet_categories = mapping_data['sheet_categories']
+                logger.debug(f"Applied sheet categories: {self.current_sheet_categories}")
+                
+                # Filter sheets based on saved categories
+                boq_sheets = [sheet for sheet, cat in self.current_sheet_categories.items() if cat == "BOQ"]
+                logger.debug(f"Filtered to BOQ sheets: {boq_sheets}")
+                
+                # Only keep BOQ sheets in the file mapping
+                if boq_sheets:
+                    file_mapping.sheets = [sheet for sheet in file_mapping.sheets if sheet.sheet_name in boq_sheets]
+                    logger.debug(f"Filtered file_mapping to {len(file_mapping.sheets)} BOQ sheets")
+            
+            # Apply column mappings from saved mapping
+            if 'column_mappings' in mapping_data:
+                for sheet in file_mapping.sheets:
+                    if sheet.sheet_name in mapping_data['column_mappings']:
+                        sheet.column_mappings = mapping_data['column_mappings'][sheet.sheet_name]
+                        logger.debug(f"Applied column mappings to sheet {sheet.sheet_name}")
+            
+            # Apply any other mapping data
+            if 'header_row_index' in mapping_data:
+                for sheet in file_mapping.sheets:
+                    sheet.header_row_index = mapping_data['header_row_index']
+                    
+            logger.debug("Applied saved mapping to file_mapping")
+            
+        except Exception as e:
+            logger.error(f"Error applying saved mapping: {e}")
+
+    def _on_mapping_processing_complete(self, tab, filepath, file_mapping, loading_widget, offer_info):
+        """Handle completion of file processing with mapping"""
+        try:
+            logger.info(f"Mapping processing complete for file: {filepath}")
+            
+            # Prevent setting file_mapping during comparison workflow
+            if getattr(self, 'is_comparison_workflow', False):
+                logger.info("Skipping file_mapping assignment during comparison workflow in mapping processing")
+                loading_widget.destroy()
+                return
+            
+            # Store the file mapping and column mapper
+            self.file_mapping = file_mapping
+            self.column_mapper = file_mapping.column_mapper if hasattr(file_mapping, 'column_mapper') else None
+            
+            # Store offer info
+            self.current_offer_info = offer_info
+            
+            # Store offer info in the controller's current_files
+            file_key = str(Path(filepath).resolve())
+            if file_key in self.controller.current_files:
+                offer_info_enhanced = {
+                    'offer_name': offer_info.get('offer_name', 'Unknown'),
+                    'project_name': offer_info.get('project_name', 'Unknown'),
+                    'project_size': offer_info.get('project_size', 'N/A'),
+                    'date': offer_info.get('date', datetime.now().strftime('%Y-%m-%d'))
+                }
+                
+                offer_name = offer_info_enhanced['offer_name']
+                if 'offers' not in self.controller.current_files[file_key]:
+                    self.controller.current_files[file_key]['offers'] = {}
+                self.controller.current_files[file_key]['offers'][offer_name] = offer_info_enhanced
+                self.controller.current_files[file_key]['offer_info'] = offer_info_enhanced
+                
+                # Store offer info directly in file_mapping
+                file_mapping.offer_info = offer_info_enhanced
+                
+                logger.debug(f"Stored offer info for mapping workflow: {offer_info_enhanced}")
+            
+            # Store file mapping in tab_id_to_file_mapping for row review
+            current_tab_id = self.notebook.select()
+            self.tab_id_to_file_mapping[current_tab_id] = file_mapping
+            
+            # Remove loading widget and go straight to row review
+            loading_widget.destroy()
+            self._show_row_review_with_mapping(tab, file_mapping)
+            
+            # Update status
+            self._update_status(f"Mapping applied successfully: {os.path.basename(filepath)}")
+            
+        except Exception as e:
+            logger.error(f"Error in mapping processing completion: {e}")
+            messagebox.showerror("Error", f"Failed to complete mapping processing: {str(e)}")
+
+    def _show_row_review_with_mapping(self, tab, file_mapping):
+        """Show row review directly when using saved mapping"""
+        try:
+            # Prevent row review during comparison workflow
+            if getattr(self, 'is_comparison_workflow', False):
+                logger.info("Row review with mapping prevented during comparison workflow")
+                return
+            
+            # Clear existing content
+            for widget in tab.winfo_children():
+                widget.destroy()
+            
+            # Create main frame
+            main_frame = ttk.Frame(tab)
+            main_frame.grid(row=0, column=0, sticky=tk.NSEW)
+            main_frame.grid_rowconfigure(0, weight=1)
+            main_frame.grid_columnconfigure(0, weight=1)
+            
+            # Title
+            title_label = ttk.Label(main_frame, text="Row Review (Using Saved Mapping)", 
+                                   font=("Arial", 14, "bold"))
+            title_label.grid(row=0, column=0, pady=(0, 10), sticky=tk.W)
+            
+            # Show row review directly
+            self._show_row_review(file_mapping)
+            
+        except Exception as e:
+            logger.error(f"Error showing row review with mapping: {e}")
+            messagebox.showerror("Error", f"Failed to show row review: {str(e)}")
+
+    def _refresh_summary_grid_centralized(self):
+        """Centralized method to refresh the summary grid"""
+        try:
+            # This method should refresh any summary or overview displays
+            # For now, just log that it was called
+            logger.debug("Summary grid refresh called")
+            
+            # Update status if needed
+            self._update_status("Summary updated")
+            
+        except Exception as e:
+            logger.error(f"Error refreshing summary grid: {e}")
+
+    def _show_final_categorized_data(self, tab, final_dataframe, categorization_result):
+        # Use the dataframe with comparison columns if available
+        display_df = getattr(self, '_current_dataframe_with_comparison', final_dataframe)
+        """Show the final categorized data in the tab"""
+        try:
+            # Validate tab parameter
+            if not hasattr(tab, 'winfo_children'):
+                logger.error(f"Invalid tab parameter: {type(tab)} - {tab}")
+                messagebox.showerror("Error", f"Invalid tab parameter: {type(tab)}")
+                return
+            
+            # Clear existing content
+            for widget in tab.winfo_children():
+                widget.destroy()
+            
+            # Create main frame
+            main_frame = ttk.Frame(tab, padding="10")
+            main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+            
+            # Configure grid weights
+            tab.columnconfigure(0, weight=1)
+            tab.rowconfigure(0, weight=1)
+            main_frame.columnconfigure(0, weight=1)
+            main_frame.rowconfigure(1, weight=1)
+            main_frame.rowconfigure(2, weight=0)  # For summary panel
+            main_frame.rowconfigure(3, weight=0)  # For category summary (when shown)
+            main_frame.rowconfigure(4, weight=0)  # For buttons
+            
+            # Title
+            title_label = ttk.Label(main_frame, text="Final Categorized Data", 
+                                   font=("Arial", 14, "bold"))
+            title_label.grid(row=0, column=0, pady=(0, 10), sticky=tk.W)
+            
+            # Prepare data for display
+            display_df = final_dataframe.copy()
+            
+            # Remove unwanted columns - expanded list of internal processing columns
+            columns_to_remove = [
+                'ignore', 'Position', 'Labour', 
+                'ignore_14', 'ignore_15', '_3'
+            ]
+            
+            # Also remove any columns that start with 'ignore_' or are just numbers
+            for col in list(display_df.columns):
+                if col.startswith('ignore_') or col.isdigit() or col in columns_to_remove:
+                    display_df = display_df.drop(columns=[col])
+            
+            # Keep only essential columns for comparison results
+            essential_columns = [
+                'code', 'Category', 'Description', 'unit', 'quantity', 'unit_price', 'total_price',
+                'manhours', 'wage'
+            ]
+            
+            # Add any offer-specific columns (quantity[OfferName], etc.)
+            offer_columns = [col for col in display_df.columns if '[' in col and ']' in col]
+            
+            # Final column order: essential columns first, then offer-specific columns
+            final_columns = [col for col in essential_columns if col in display_df.columns]
+            final_columns.extend(offer_columns)
+            
+            # Add any remaining columns that aren't offer-specific
+            remaining_columns = [col for col in display_df.columns if col not in final_columns and col not in offer_columns]
+            final_columns.extend(remaining_columns)
+            
+            display_df = display_df[final_columns]
+            
+            # Use the same column order as comparison window
+            desired_order = ['Source_Sheet', 'code', 'Category', 'Description', 'scope', 'unit', 'quantity', 'unit_price', 'total_price', 'manhours', 'wage']
+            
+            # Build final column order - same logic as comparison window
+            final_columns = []
+            for col in desired_order:
+                if col in display_df.columns:
+                    final_columns.append(col)
+            
+            # Add any offer-specific columns (those with [offer_name] pattern)
+            offer_columns = [col for col in display_df.columns if '[' in col and ']' in col]
+            for col in offer_columns:
+                if col not in final_columns:
+                    final_columns.append(col)
+            
+            # Add any remaining columns
+            for col in display_df.columns:
+                if col not in final_columns:
+                    final_columns.append(col)
+            
+            # Source_Sheet should now be present from the initial data processing
+            if 'Source_Sheet' not in final_columns:
+                logger.warning("Source_Sheet column is still missing - this indicates a processing issue")
+            
+            display_df = display_df[final_columns]
+            
+            # Create treeview
+            columns = list(display_df.columns)
+            tree = ttk.Treeview(main_frame, columns=columns, show='headings', height=15)
+            
+            # Apply light blue selection style to the treeview (same as column mapping)
+            style = ttk.Style(tree)
+            style.map('Treeview', 
+                     background=[('selected', '#B3E5FC')])  # Light blue background
+            
+            # Configure columns with appropriate widths
+            column_widths = {
+                'Description': 400,  # Wider for descriptions
+                'code': 100,
+                'unit': 80,
+                'quantity': 100,
+                'unit_price': 120,
+                'total_price': 120,
+                'Category': 150,
+                'manhours': 100,
+                'wage': 80
+            }
+            
+            # Set default width for offer-specific columns
+            default_offer_width = 120
+            
+            for col in columns:
+                # Display pretty names in headers
+                pretty_name = self._get_pretty_column_name(col)
+                tree.heading(col, text=pretty_name)
+                # Use specific width if defined, otherwise use default for offer columns
+                if col in column_widths:
+                    width = column_widths[col]
+                elif '[' in col and ']' in col:
+                    width = default_offer_width
+                else:
+                    width = 100
+                tree.column(col, width=width, minwidth=80)
+            
+            # Add scrollbars
+            vsb = ttk.Scrollbar(main_frame, orient="vertical", command=tree.yview)
+            hsb = ttk.Scrollbar(main_frame, orient="horizontal", command=tree.xview)
+            tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+            
+            # Grid layout with proper scrollbar configuration
+            tree.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
+            vsb.grid(row=1, column=1, sticky=(tk.N, tk.S))
+            hsb.grid(row=2, column=0, sticky=(tk.W, tk.E))
+            
+            # Configure grid weights to ensure scrollbars work properly
+            main_frame.columnconfigure(0, weight=1)
+            main_frame.rowconfigure(1, weight=1)
+            
+            # Create summary panel (treeview with offers)
+            summary_frame = ttk.LabelFrame(main_frame, text="Summary", padding="10")
+            summary_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), padx=5, pady=5)
+            
+            # Populate with data using exact same formatting as comparison window
+            for i, row in display_df.iterrows():
+                formatted_values = []
+                for col in columns:
+                    val = row[col]
+                    
+                    # Apply exact same formatting as comparison window
+                    if pd.notna(val) and val != '':
+                        # Check if this is a comparison column (has [offer_name] pattern)
+                        is_comparison_col = '[' in col and ']' in col
+                        
+                        # Extract base column name for comparison columns
+                        base_col = col.split('[')[0] if is_comparison_col else col
+                        
+                        if base_col in ['unit_price', 'total_price', 'wage']:
+                            # Currency formatting (same as comparison window)
+                            val = format_number_eu(val)
+                        elif base_col in ['quantity', 'manhours']:
+                            # Number formatting (same as comparison window)
+                            val = format_number_eu(val)
+                        else:
+                            val = str(val)
+                    else:
+                        val = ''
+                    
+                    formatted_values.append(val)
+                
+                tree.insert('', 'end', values=formatted_values)
+            
+            # Configure summary frame
+            summary_frame.columnconfigure(0, weight=1)
+            summary_frame.rowconfigure(0, weight=1)
+            
+            # Create treeview for summary
+            summary_columns = ['Offer Name', 'Project Name', 'Project Size', 'Date', 'Total Price']
+            summary_tree = ttk.Treeview(summary_frame, columns=summary_columns, show='headings', height=3)
+            
+            # Apply light blue selection style to the summary treeview (same as column mapping)
+            summary_style = ttk.Style(summary_tree)
+            summary_style.map('Treeview', 
+                             background=[('selected', '#B3E5FC')])  # Light blue background
+            
+            # Configure columns
+            for col in summary_columns:
+                summary_tree.heading(col, text=col)
+                summary_tree.column(col, width=120, minwidth=80)
+            
+            # Add scrollbars for summary
+            summary_vsb = ttk.Scrollbar(summary_frame, orient="vertical", command=summary_tree.yview)
+            summary_hsb = ttk.Scrollbar(summary_frame, orient="horizontal", command=summary_tree.xview)
+            summary_tree.configure(yscrollcommand=summary_vsb.set, xscrollcommand=summary_hsb.set)
+            
+            # Grid layout for summary
+            summary_tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
+            summary_vsb.grid(row=0, column=1, sticky=(tk.N, tk.S))
+            summary_hsb.grid(row=1, column=0, sticky=(tk.W, tk.E))
+            
+            # Calculate summary data
+            total_cost = 0.0
+            if 'total_price' in display_df.columns:
+                try:
+                    numeric_prices = pd.to_numeric(display_df['total_price'], errors='coerce')
+                    total_cost = numeric_prices.sum()
+                except Exception as e:
+                    logger.warning(f"Error calculating total cost: {e}")
+                    total_cost = 0.0
+            
+            # Format total cost with European formatting (no currency symbol, dot for thousands, comma for decimals)
+            if total_cost > 0:
+                formatted_total_cost = format_number_eu(total_cost)
+            else:
+                formatted_total_cost = "0,00"
+            
+            # Get offer information from file mapping or use defaults
+            offer_name = "Current Offer"
+            project_name = "Current Project"
+            project_size = "N/A"
+            date = datetime.now().strftime('%Y-%m-%d')
+            
+            # Try to get actual offer info from file mapping
+            current_tab_path = self.notebook.select()
+            logger.debug(f"Looking for offer info for tab path: {current_tab_path}")
+            
+            # First, try to get offer info directly from the current file_mapping if available
+            if hasattr(self, 'current_file_mapping') and self.current_file_mapping and hasattr(self.current_file_mapping, 'offer_info'):
+                offer_info = self.current_file_mapping.offer_info
+                offer_name = offer_info.get('offer_name', offer_name)
+                project_name = offer_info.get('project_name', project_name)
+                project_size = offer_info.get('project_size', project_size)
+                date = offer_info.get('date', date)
+                logger.debug(f"Found offer info directly from current_file_mapping: {offer_info}")
+            elif hasattr(self, 'file_mapping') and self.file_mapping and hasattr(self.file_mapping, 'offer_info'):
+                offer_info = self.file_mapping.offer_info
+                offer_name = offer_info.get('offer_name', offer_name)
+                project_name = offer_info.get('project_name', project_name)
+                project_size = offer_info.get('project_size', project_size)
+                date = offer_info.get('date', date)
+                logger.debug(f"Found offer info directly from file_mapping: {offer_info}")
+            elif hasattr(self, 'current_offer_info') and self.current_offer_info:
+                # For Use Mapping workflow, check current_offer_info
+                offer_info = self.current_offer_info
+                offer_name = offer_info.get('offer_name', offer_name)
+                project_name = offer_info.get('project_name', project_name)
+                project_size = offer_info.get('project_size', project_size)
+                date = offer_info.get('date', date)
+                logger.debug(f"Found offer info from current_offer_info: {offer_info}")
+            else:
+                # Fallback: search through controller's current_files
+                logger.debug("No direct file_mapping offer_info, searching through controller files")
+                for file_key, file_data in self.controller.current_files.items():
+                    logger.debug(f"Checking file_key: {file_key}")
+                    logger.debug(f"File data keys: {list(file_data.keys())}")
+                    
+                    if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
+                        logger.debug(f"Found matching file data for tab path")
+                        # Try to get offer info from file mapping
+                        if hasattr(file_data['file_mapping'], 'offer_info') and file_data['file_mapping'].offer_info:
+                            offer_info = file_data['file_mapping'].offer_info
+                            offer_name = offer_info.get('offer_name', offer_name)
+                            project_name = offer_info.get('project_name', project_name)
+                            project_size = offer_info.get('project_size', project_size)
+                            date = offer_info.get('date', date)
+                            logger.debug(f"Found offer info in file_mapping: {offer_info}")
+                        # Also check in the controller's current_files
+                        elif 'offer_info' in file_data:
+                            offer_info = file_data['offer_info']
+                            offer_name = offer_info.get('offer_name', offer_name)
+                            project_name = offer_info.get('project_name', project_name)
+                            project_size = offer_info.get('project_size', project_size)
+                            date = offer_info.get('date', date)
+                            logger.debug(f"Found offer info in current_files: {offer_info}")
+                        else:
+                            logger.debug("No offer info found in either location")
+                        break
+                else:
+                    logger.debug("No matching file data found for current tab")
+            
+            # Clear existing summary data
+            for item in summary_tree.get_children():
+                summary_tree.delete(item)
+            
+            # Collect all offers and their total costs
+            offers_data = []
+            
+            # Add current offer
+            current_offer_data = {
+                'offer_name': offer_name,
+                'project_name': project_name,
+                'project_size': project_size,
+                'date': date,
+                'total_cost': total_cost,
+                'formatted_total_cost': formatted_total_cost
+            }
+            offers_data.append(current_offer_data)
+            
+            # Check for comparison offers in the current dataframe (regardless of workflow flag)
+            comparison_columns = [col for col in display_df.columns if '[' in col and ']' in col and 'total_price' in col]
+            logger.info(f"DEBUG: display_df columns: {list(display_df.columns)}")
+            logger.info(f"DEBUG: comparison_columns found: {comparison_columns}")
+            
+            if comparison_columns:
+                # Look for comparison offers in the current dataframe
+                
+                for col in comparison_columns:
+                    try:
+                        # Extract offer name from column name (e.g., "total_price[OfferName]" -> "OfferName")
+                        offer_name_from_col = col.split('[')[1].split(']')[0]
+                        
+                        # Calculate total cost for this offer
+                        offer_total_cost = 0.0
+                        if col in display_df.columns:
+                            numeric_prices = pd.to_numeric(display_df[col], errors='coerce')
+                            offer_total_cost = numeric_prices.sum()
+                        
+                        # Format total cost
+                        if offer_total_cost > 0:
+                            formatted_offer_cost = format_number_eu(offer_total_cost)
+                        else:
+                            formatted_offer_cost = "0,00"
+                        
+                        # Add comparison offer data - use the user's entered project info
+                        # Get the comparison offer info from the controller's current_files
+                        comparison_offer_info = None
+                        for file_key, file_data in self.controller.current_files.items():
+                            if 'offers' in file_data and offer_name_from_col in file_data['offers']:
+                                comparison_offer_info = file_data['offers'][offer_name_from_col]
+                                break
+                        
+                        # Use user's entered project info if available, otherwise use defaults
+                        if comparison_offer_info:
+                            project_name = comparison_offer_info.get('project_name', f"Project {offer_name_from_col}")
+                            project_size = comparison_offer_info.get('project_size', 'N/A')
+                            date = comparison_offer_info.get('date', date)
+                        else:
+                            project_name = f"Project {offer_name_from_col}"
+                            project_size = "N/A"
+                        
+                        comparison_offer_data = {
+                            'offer_name': offer_name_from_col,
+                            'project_name': project_name,
+                            'project_size': project_size,
+                            'date': date,
+                            'total_cost': offer_total_cost,
+                            'formatted_total_cost': formatted_offer_cost
+                        }
+                        offers_data.append(comparison_offer_data)
+                        
+                    except Exception as e:
+                        logger.warning(f"Error processing comparison offer column {col}: {e}")
+            
+            # Sort offers by total cost (lowest first)
+            offers_data.sort(key=lambda x: x['total_cost'])
+            
+            # Insert all offers into summary treeview
+            for offer_data in offers_data:
+                summary_tree.insert('', 'end', values=(
+                    offer_data['offer_name'],
+                    offer_data['project_name'],
+                    offer_data['project_size'],
+                    offer_data['date'],
+                    offer_data['formatted_total_cost']
+                ))
+            
+            # Configure grid weights for summary frame
+            summary_frame.columnconfigure(0, weight=1)
+            summary_frame.rowconfigure(0, weight=1)
+            
+            # Create button frame (centered)
+            button_frame = ttk.Frame(main_frame)
+            button_frame.grid(row=5, column=0, sticky=(tk.W, tk.E), padx=5, pady=10)
+            
+            # Create inner frame for centering buttons
+            inner_button_frame = ttk.Frame(button_frame)
+            inner_button_frame.pack(expand=True)
+            
+            # Action buttons (centered)
+            summarize_btn = ttk.Button(inner_button_frame, text="Summarize", 
+                                     command=lambda: self._summarize_categorized_data(final_dataframe))
+            summarize_btn.pack(side=tk.LEFT, padx=5)
+            
+            save_mapping_btn = ttk.Button(inner_button_frame, text="Save Mapping", 
+                                        command=lambda: self._save_mapping_for_categorized_data(final_dataframe))
+            save_mapping_btn.pack(side=tk.LEFT, padx=5)
+            
+            save_analysis_btn = ttk.Button(inner_button_frame, text="Save Analysis", 
+                                         command=lambda: self._save_analysis_for_categorized_data(final_dataframe, categorization_result))
+            save_analysis_btn.pack(side=tk.LEFT, padx=5)
+            
+            compare_full_btn = ttk.Button(inner_button_frame, text="Compare Full", 
+                                        command=lambda: self._compare_full_from_categorized_data(tab))
+            compare_full_btn.pack(side=tk.LEFT, padx=5)
+            
+            export_btn = ttk.Button(inner_button_frame, text="Export Data", 
+                                   command=lambda: self._export_categorized_data(final_dataframe))
+            export_btn.pack(side=tk.LEFT, padx=5)
+            
+        except Exception as e:
+            logger.error(f"Error showing final categorized data: {e}")
+            messagebox.showerror("Error", f"Failed to show categorized data: {str(e)}")
+
+    def _debug_export_datasets_before_merge(self, master_df, comparison_df, offer_info):
+        """DEBUG: Export both datasets to Excel for debugging merge process"""
+        try:
+            import pandas as pd
+            from datetime import datetime
+            import os
+            import logging
+            logger = logging.getLogger(__name__)
+            
+            # DEBUG: Log original columns
+            logger.info(f"Master DataFrame original columns: {list(master_df.columns)}")
+            logger.info(f"Comparison DataFrame original columns: {list(comparison_df.columns)}")
+            
+            # Get offer name
+            offer_name = offer_info.get('offer_name', 'Comparison')
+            
+            # Create filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"DEBUG_Datasets_Before_Merge_{offer_name}_{timestamp}.xlsx"
+            
+            # Get the directory of the current working directory
+            export_dir = os.getcwd()
+            filepath = os.path.join(export_dir, filename)
+            
+            # Function to determine MERGE/ADD decision for each comparison row
+            def determine_merge_add_decision(comparison_df, master_df):
+                """Determine whether each comparison row would be MERGE or ADD"""
+                decisions = []
+                
+                # Create a mapping of description to instance counts for correct ordering
+                description_instance_counts = {}
+                
+                for idx, comp_row in comparison_df.iterrows():
+                    description = str(comp_row.get('Description', '')).strip()
+                    
+                    if not description:
+                        decisions.append('INVALID - No Description')
+                        continue
+                    
+                    # Get master instances using normalized whitespace matching first
+                    # This handles cases where descriptions have different whitespace/newline characters
+                    normalized_desc = ' '.join(description.split())  # Normalize whitespace
+                    master_instances = master_df[
+                        master_df['Description'].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
+                    ]
+                    
+                    # If no matches found with normalized matching, try exact matching as fallback
+                    if len(master_instances) == 0:
+                        master_instances = master_df[master_df['Description'] == description]
+                        
+                        # If still no matches, try case-insensitive matching
+                        if len(master_instances) == 0:
+                            master_instances = master_df[
+                                master_df['Description'].str.lower() == description.lower()
+                            ]
+                    
+                    # Initialize instance count for this description if not seen before
+                    if description not in description_instance_counts:
+                        description_instance_counts[description] = 0
+                    
+                    # Get the current instance number for this description
+                    comp_instance_number = description_instance_counts[description]
+                    description_instance_counts[description] += 1
+                    
+                    # Decision logic: if instance number < master instances, MERGE; else ADD
+                    if comp_instance_number < len(master_instances):
+                        master_idx = master_instances.index[comp_instance_number]
+                        decisions.append(f'MERGE Instance {comp_instance_number + 1} (Master Row {master_idx + 2})')
+                    else:
+                        decisions.append(f'ADD Instance {comp_instance_number + 1} (New Row)')
+                
+                return decisions
+            
+            # Prepare datasets with proper formatting (same as main export)
+            def prepare_dataset_for_export(df):
+                """Prepare dataset with same formatting as main export"""
+                export_df = df.copy()
+                
+                # DEBUG: Log columns before filtering
+                logger.info(f"Columns before filtering: {list(export_df.columns)}")
+                
+                # Remove unwanted columns - comprehensive list of internal processing columns
+                # Note: Keep Source_Sheet for debug export to show which sheet each row comes from
+                columns_to_remove = [
+                    'ignore', 'Position', 'Labour', 
+                    'ignore_14', 'ignore_15', '_3', 'scope'
+                ]
+                
+                # Also remove any columns that start with 'ignore_' or are just numbers
+                # AND remove any columns that are just numbers (like _1, _2, _3, etc.)
+                for col in list(export_df.columns):
+                    if (col.startswith('ignore_') or 
+                        col.isdigit() or 
+                        col in columns_to_remove or
+                        (col.startswith('_') and col[1:].isdigit())):  # Remove _1, _2, _3, etc.
+                        export_df = export_df.drop(columns=[col])
+                
+                # DEBUG: Log columns after removing unwanted columns
+                logger.info(f"Columns after removing unwanted: {list(export_df.columns)}")
+                
+                # Define the correct essential column order (same as main export)
+                # Include Source_Sheet for debug export to show which sheet each row comes from
+                essential_columns = [
+                    'code', 'Category', 'Description', 'unit', 'quantity', 'unit_price', 'total_price',
+                    'manhours', 'wage', 'Source_Sheet'
+                ]
+                
+                # Keep only essential columns that exist in the dataframe
+                available_essential_columns = [col for col in essential_columns if col in export_df.columns]
+                
+                # Create final column list: ONLY essential columns, no remaining columns
+                final_columns = available_essential_columns.copy()
+                
+                # DEBUG: Log final columns
+                logger.info(f"Final columns: {final_columns}")
+                logger.info(f"Remaining non-essential columns: {[col for col in export_df.columns if col not in essential_columns]}")
+                
+                # Apply the column order
+                export_df = export_df[final_columns]
+                
+                # Convert numeric columns to proper numeric values for Excel
+                numeric_columns = ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']
+                for col in numeric_columns:
+                    if col in export_df.columns:
+                        # Convert to numeric, handling any formatting
+                        export_df[col] = pd.to_numeric(export_df[col], errors='coerce')
+                
+                return export_df
+            
+            # Prepare both datasets
+            master_export_df = prepare_dataset_for_export(master_df)
+            comparison_export_df = prepare_dataset_for_export(comparison_df)
+            
+            # Add MERGE/ADD decision column to comparison dataset
+            merge_add_decisions = determine_merge_add_decision(comparison_export_df, master_export_df)
+            comparison_export_df['MERGE_ADD_Decision'] = merge_add_decisions
+            
+            # Create Excel writer with proper formatting
+            with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
+                # Export master dataset
+                master_export_df.to_excel(writer, sheet_name='Master_Dataset', index=False)
+                
+                # Export comparison dataset
+                comparison_export_df.to_excel(writer, sheet_name='Comparison_Dataset', index=False)
+                
+                # Get the workbook
+                workbook = writer.book
+                
+                # Apply formatting to both sheets
+                for sheet_name in ['Master_Dataset', 'Comparison_Dataset']:
+                    worksheet = writer.sheets[sheet_name]
+                    
+                    # Apply European number formatting to numeric columns
+                    numeric_columns = ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']
+                    for col_idx, col_name in enumerate(worksheet[1], 1):
+                        if col_name.value in numeric_columns:
+                            # Apply European number format (dot for thousands, comma for decimals)
+                            from openpyxl.styles import NamedStyle
+                            from openpyxl.utils import get_column_letter
+                            
+                            # Create European number style
+                            euro_style = NamedStyle(name=f"euro_number_{col_name.value}")
+                            euro_style.number_format = '#,##0.00'
+                            
+                            # Apply to the column
+                            col_letter = get_column_letter(col_idx)
+                            for row in range(2, worksheet.max_row + 1):  # Skip header row
+                                cell = worksheet[f'{col_letter}{row}']
+                                cell.style = euro_style
+                    
+                    # Add data validation for Category column
+                    if 'Category' in [cell.value for cell in worksheet[1]]:
+                        category_col_idx = None
+                        for col_idx, cell in enumerate(worksheet[1], 1):
+                            if cell.value == 'Category':
+                                category_col_idx = col_idx
+                                break
+                        
+                        if category_col_idx:
+                            category_col_letter = get_column_letter(category_col_idx)
+                            
+                            # Get available categories in the correct order
+                            try:
+                                category_order = ['General Costs', 'Site Costs', 'Civil Works', 'Earth Movement', 'Roads', 'OEM Building', 'Electrical Works', 'Solar Cables', 'LV Cables', 'MV Cables', 'Trenching', 'PV Mod. Installation', 'Cleaning and Cabling of PV Mod.', 'Tracker Inst.', 'Other']
+                                available_categories = category_order
+                                
+                                # Create data validation for Category column
+                                from openpyxl.worksheet.datavalidation import DataValidation
+                                
+                                # Create validation rule
+                                dv = DataValidation(
+                                    type="list",
+                                    formula1=f'"{",".join(available_categories)}"',
+                                    allow_blank=True,
+                                    showErrorMessage=True,
+                                    errorTitle="Invalid Category",
+                                    error="Please select a category from the dropdown list.",
+                                    showInputMessage=True,
+                                    promptTitle="Category Selection",
+                                    prompt="Select a category from the dropdown list."
+                                )
+                                
+                                # Add validation to worksheet
+                                worksheet.add_data_validation(dv)
+                                
+                                # Apply validation to Category column (skip header row)
+                                for row in range(2, worksheet.max_row + 1):
+                                    dv.add(f'{category_col_letter}{row}')
+                                
+                            except Exception as e:
+                                logger.warning(f"Could not add category validation: {e}")
+                    
+                    # Auto-adjust column widths
+                    for column in worksheet.columns:
+                        max_length = 0
+                        column_letter = column[0].column_letter
+                        for cell in column:
+                            try:
+                                if len(str(cell.value)) > max_length:
+                                    max_length = len(str(cell.value))
+                            except:
+                                pass
+                        adjusted_width = min(max_length + 2, 50)  # Cap at 50 characters
+                        worksheet.column_dimensions[column_letter].width = adjusted_width
+                    
+                    # Format header row
+                    from openpyxl.styles import Font, PatternFill, Alignment
+                    header_font = Font(bold=True)
+                    header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+                    header_alignment = Alignment(horizontal="center", vertical="center")
+                    
+                    for cell in worksheet[1]:
+                        cell.font = header_font
+                        cell.fill = header_fill
+                        cell.alignment = header_alignment
+            
+            # Log the export
+            logger.info(f"DEBUG: Exported datasets to {filepath}")
+            logger.info(f"DEBUG: Master dataset shape: {master_export_df.shape}")
+            logger.info(f"DEBUG: Comparison dataset shape: {comparison_export_df.shape}")
+            
+            # Show success message
+            messagebox.showinfo("Debug Export", f"Datasets exported for debugging:\n{filepath}")
+            
+            # Note: File will be opened by the calling function, so we don't open it here
+                
+        except Exception as e:
+            logger.error(f"Error in debug export: {e}")
+            messagebox.showerror("Debug Export Error", f"Failed to export debug data: {str(e)}")
+
+    def _export_categorized_data(self, final_dataframe):
+        """Export categorized data to Excel with proper formatting and data validation"""
+        try:
+            filetypes = [("Excel files", "*.xlsx"), ("All files", "*.*")]
+            filename = filedialog.asksaveasfilename(
+                title="Export Categorized Data",
+                filetypes=filetypes,
+                defaultextension=".xlsx"
+            )
+            
+            if filename:
+                # Prepare data for export (same as display)
+                export_df = final_dataframe.copy()
+                
+                # Remove unwanted columns
+                columns_to_remove = ['ignore', 'Position']
+                for col in columns_to_remove:
+                    if col in export_df.columns:
+                        export_df = export_df.drop(columns=[col])
+                
+                # Define desired column order
+                desired_order = ['code', 'Category', 'Description', 'unit', 
+                               'quantity', 'unit_price', 'total_price', 'manhours', 'wage']
+                
+                # Reorder columns (only include columns that exist)
+                existing_columns = [col for col in desired_order if col in export_df.columns]
+                other_columns = [col for col in export_df.columns if col not in desired_order]
+                final_columns = existing_columns + other_columns
+                
+                export_df = export_df[final_columns]
+                
+                # Convert numeric columns to proper numeric values for Excel
+                numeric_columns = ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']
+                for col in numeric_columns:
+                    if col in export_df.columns:
+                        # Convert to numeric, handling any formatting
+                        export_df[col] = pd.to_numeric(export_df[col], errors='coerce')
+                
+                # Export with proper Excel formatting and data validation
+                with pd.ExcelWriter(filename, engine='openpyxl') as writer:
+                    export_df.to_excel(writer, index=False, sheet_name='BOQ Data')
+                    
+                    # Get the workbook and worksheet
+                    workbook = writer.book
+                    worksheet = writer.sheets['BOQ Data']
+                    
+                    # Apply European number formatting to numeric columns
+                    for col_idx, col_name in enumerate(export_df.columns, 1):
+                        if col_name in numeric_columns:
+                            # Apply European number format (dot for thousands, comma for decimals)
+                            from openpyxl.styles import NamedStyle
+                            from openpyxl.utils import get_column_letter
+                            
+                            # Create European number style
+                            euro_style = NamedStyle(name=f"euro_number_{col_name}")
+                            euro_style.number_format = '#,##0.00'
+                            
+                            # Apply to the column
+                            col_letter = get_column_letter(col_idx)
+                            for row in range(2, len(export_df) + 2):  # Skip header row
+                                cell = worksheet[f'{col_letter}{row}']
+                                cell.style = euro_style
+                    
+                    # Add data validation for Category column
+                    if 'Category' in export_df.columns:
+                        category_col_idx = list(export_df.columns).index('Category') + 1
+                        category_col_letter = get_column_letter(category_col_idx)
+                        
+                        # Get available categories in the correct order (from category_order)
+                        try:
+                            category_order = ['General Costs', 'Site Costs', 'Civil Works', 'Earth Movement', 'Roads', 'OEM Building', 'Electrical Works', 'Solar Cables', 'LV Cables', 'MV Cables', 'Trenching', 'PV Mod. Installation', 'Cleaning and Cabling of PV Mod.', 'Tracker Inst.', 'Other']
+                            available_categories = category_order
+                            
+                            # Create data validation for Category column
+                            from openpyxl.worksheet.datavalidation import DataValidation
+                            
+                            # Create validation rule
+                            dv = DataValidation(
+                                type="list",
+                                formula1=f'"{",".join(available_categories)}"',
+                                allow_blank=True,
+                                showErrorMessage=True,
+                                errorTitle="Invalid Category",
+                                error="Please select a category from the dropdown list.",
+                                showInputMessage=True,
+                                promptTitle="Category Selection",
+                                prompt="Select a category from the dropdown list."
+                            )
+                            
+                            # Add validation to worksheet
+                            worksheet.add_data_validation(dv)
+                            
+                            # Apply validation to Category column (skip header row)
+                            for row in range(2, len(export_df) + 2):
+                                dv.add(f'{category_col_letter}{row}')
+                            
+                        except Exception as e:
+                            logger.warning(f"Could not add category validation: {e}")
+                    
+                    # Auto-adjust column widths
+                    for column in worksheet.columns:
+                        max_length = 0
+                        column_letter = column[0].column_letter
+                        for cell in column:
+                            try:
+                                if len(str(cell.value)) > max_length:
+                                    max_length = len(str(cell.value))
+                            except:
+                                pass
+                        adjusted_width = min(max_length + 2, 50)  # Cap at 50 characters
+                        worksheet.column_dimensions[column_letter].width = adjusted_width
+                    
+                    # Format header row
+                    from openpyxl.styles import Font, PatternFill, Alignment
+                    header_font = Font(bold=True)
+                    header_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+                    header_alignment = Alignment(horizontal="center", vertical="center")
+                    
+                    for cell in worksheet[1]:
+                        cell.font = header_font
+                        cell.fill = header_fill
+                        cell.alignment = header_alignment
+                    
+                    # Get offer name for summary sheet
+                    offer_name = "Current Offer"
+                    current_tab_path = self.notebook.select()
+                    for file_key, file_data in self.controller.current_files.items():
+                        if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
+                            if hasattr(file_data['file_mapping'], 'offer_info') and file_data['file_mapping'].offer_info:
+                                offer_info = file_data['file_mapping'].offer_info
+                                offer_name = offer_info.get('offer_name', offer_name)
+                            elif 'offer_info' in file_data:
+                                offer_info = file_data['offer_info']
+                                offer_name = offer_info.get('offer_name', offer_name)
+                            break
+                    
+                    # Add summary sheet with formulas
+                    self._add_summary_sheet_with_formulas(workbook, export_df, offer_name)
+                
+                messagebox.showinfo("Export Complete", f"Categorized data exported to {filename}")
+                
+        except Exception as e:
+            logger.error(f"Error exporting categorized data: {e}")
+            messagebox.showerror("Export Error", f"Failed to export data: {str(e)}")
+
+    def _add_summary_sheet_with_formulas(self, workbook, dataframe, offer_name):
+        """Add a summary sheet with formulas that calculate totals for each category"""
+        try:
+            logger.info(f"Creating summary sheet for offer: {offer_name}")
+            # Create summary sheet
+            summary_sheet = workbook.create_sheet("Summary")
+            
+            # Define category order (same as in _summarize_categorized_data)
+            category_order = [
+                "General Costs",
+                "Site Costs", 
+                "Civil Works",
+                "Earth Movement",
+                "Roads",
+                "OEM Building",
+                "Electrical Works",
+                "Solar Cables",
+                "LV Cables", 
+                "MV Cables",
+                "Trenching",
+                "PV Mod. Installation",
+                "Cleaning and Cabling of PV Mod.",
+                "Tracker Inst.",
+                "Other"
+            ]
+            
+            # Create headers
+            headers = ['Offer Name'] + category_order
+            for col_idx, header in enumerate(headers, 1):
+                cell = summary_sheet.cell(row=1, column=col_idx, value=header)
+                cell.font = openpyxl.styles.Font(bold=True)
+                cell.fill = openpyxl.styles.PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+                cell.alignment = openpyxl.styles.Alignment(horizontal="center", vertical="center")
+            
+            # Add offer name
+            summary_sheet.cell(row=2, column=1, value=offer_name)
+            
+            # Add formulas for each category
+            for col_idx, category in enumerate(category_order, 2):  # Start from column 2 (after Offer Name)
+                # Find the Category column in the main data sheet
+                category_col_idx = None
+                for idx, col_name in enumerate(dataframe.columns, 1):
+                    if col_name == 'Category':
+                        category_col_idx = idx
+                        break
+                
+                # Find the total_price column in the main data sheet
+                total_price_col_idx = None
+                for idx, col_name in enumerate(dataframe.columns, 1):
+                    if col_name == 'total_price':
+                        total_price_col_idx = idx
+                        break
+                
+                if category_col_idx and total_price_col_idx:
+                    # Create SUMIFS formula: =SUMIFS('BOQ Data'!F:F,'BOQ Data'!C:C,"General Costs")
+                    # Where F is total_price column and C is Category column
+                    category_col_letter = openpyxl.utils.get_column_letter(category_col_idx)
+                    total_price_col_letter = openpyxl.utils.get_column_letter(total_price_col_idx)
+                    
+                    formula = f'=SUMIFS(\'BOQ Data\'!{total_price_col_letter}:{total_price_col_letter},\'BOQ Data\'!{category_col_letter}:{category_col_letter},"{category}")'
+                    
+                    cell = summary_sheet.cell(row=2, column=col_idx)
+                    cell.value = formula
+                    
+                    # Apply European number formatting
+                    cell.number_format = '#,##0.00'
+                else:
+                    # If columns not found, set to 0
+                    summary_sheet.cell(row=2, column=col_idx, value=0)
+                    summary_sheet.cell(row=2, column=col_idx).number_format = '#,##0.00'
+            
+            # Auto-adjust column widths
+            for column in summary_sheet.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 50)  # Cap at 50 characters
+                summary_sheet.column_dimensions[column_letter].width = adjusted_width
+                
+        except Exception as e:
+            logger.error(f"Error adding summary sheet with formulas: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            # Don't raise the exception, just log it so the main export can continue
+
+    def _add_summary_sheet_with_formulas_comparison(self, workbook, dataframe, offer_info):
+        """Add a summary sheet with formulas for comparison results"""
+        try:
+            offer_name = offer_info.get('offer_name', 'Comparison Results') if offer_info else 'Comparison Results'
+            logger.info(f"Creating summary sheet for comparison: {offer_name}")
+            # Create summary sheet
+            summary_sheet = workbook.create_sheet("Summary")
+            
+            # Define category order (same as in _summarize_categorized_data)
+            category_order = [
+                "General Costs",
+                "Site Costs", 
+                "Civil Works",
+                "Earth Movement",
+                "Roads",
+                "OEM Building",
+                "Electrical Works",
+                "Solar Cables",
+                "LV Cables", 
+                "MV Cables",
+                "Trenching",
+                "PV Mod. Installation",
+                "Cleaning and Cabling of PV Mod.",
+                "Tracker Inst.",
+                "Other"
+            ]
+            
+            # Create headers
+            headers = ['Offer Name'] + category_order
+            for col_idx, header in enumerate(headers, 1):
+                cell = summary_sheet.cell(row=1, column=col_idx, value=header)
+                cell.font = openpyxl.styles.Font(bold=True)
+                cell.fill = openpyxl.styles.PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+                cell.alignment = openpyxl.styles.Alignment(horizontal="center", vertical="center")
+            
+            # Add offer name
+            offer_name = offer_info.get('offer_name', 'Comparison Results') if offer_info else 'Comparison Results'
+            summary_sheet.cell(row=2, column=1, value=offer_name)
+            
+            # Add formulas for each category
+            for col_idx, category in enumerate(category_order, 2):  # Start from column 2 (after Offer Name)
+                # Find the Category column in the main data sheet
+                category_col_idx = None
+                for idx, col_name in enumerate(dataframe.columns, 1):
+                    if col_name == 'Category':
+                        category_col_idx = idx
+                        break
+                
+                # Find the total_price column in the main data sheet
+                total_price_col_idx = None
+                for idx, col_name in enumerate(dataframe.columns, 1):
+                    if col_name == 'total_price':
+                        total_price_col_idx = idx
+                        break
+                
+                if category_col_idx and total_price_col_idx:
+                    # Create SUMIFS formula: =SUMIFS('Comparison Results'!F:F,'Comparison Results'!C:C,"General Costs")
+                    # Where F is total_price column and C is Category column
+                    category_col_letter = openpyxl.utils.get_column_letter(category_col_idx)
+                    total_price_col_letter = openpyxl.utils.get_column_letter(total_price_col_idx)
+                    
+                    formula = f'=SUMIFS(\'Comparison Results\'!{total_price_col_letter}:{total_price_col_letter},\'Comparison Results\'!{category_col_letter}:{category_col_letter},"{category}")'
+                    
+                    cell = summary_sheet.cell(row=2, column=col_idx)
+                    cell.value = formula
+                    
+                    # Apply European number formatting
+                    cell.number_format = '#,##0.00'
+                else:
+                    # If columns not found, set to 0
+                    summary_sheet.cell(row=2, column=col_idx, value=0)
+                    summary_sheet.cell(row=2, column=col_idx).number_format = '#,##0.00'
+            
+            # Auto-adjust column widths
+            for column in summary_sheet.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 50)  # Cap at 50 characters
+                summary_sheet.column_dimensions[column_letter].width = adjusted_width
+                
+        except Exception as e:
+            logger.error(f"Error adding summary sheet with formulas for comparison: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            # Don't raise the exception, just log it so the main export can continue
+
+    def _summarize_categorized_data(self, dataframe):
+        # Use the dataframe with comparison columns if available
+        display_dataframe = getattr(self, '_current_dataframe_with_comparison', dataframe)
+        """Show detailed summary of categorized data in a new section below the summary"""
+        try:
+            # Get the current tab
+            current_tab_path = self.notebook.select()
+            current_tab = self.notebook.nametowidget(self.notebook.select())
+            
+            # Find the main frame in the current tab
+            main_frame = None
+            for widget in current_tab.winfo_children():
+                if isinstance(widget, ttk.Frame):
+                    main_frame = widget
+                    break
+            
+            if not main_frame:
+                logger.error("Could not find main frame")
+                return
+            
+            # Clear existing category summary if it exists
+            for widget in main_frame.winfo_children():
+                if hasattr(widget, 'category_summary'):
+                    widget.destroy()
+            
+            # Create category summary frame
+            category_frame = ttk.LabelFrame(main_frame, text="Category Summary", padding="5")
+            category_frame.grid(row=4, column=0, sticky=(tk.W, tk.E), padx=5, pady=5)
+            category_frame.columnconfigure(0, weight=1)
+            category_frame.rowconfigure(0, weight=1)
+            
+            # Define category order (from manual_categorizer.py)
+            category_order = [
+                "General Costs",
+                "Site Costs", 
+                "Civil Works",
+                "Earth Movement",
+                "Roads",
+                "OEM Building",
+                "Electrical Works",
+                "Solar Cables",
+                "LV Cables", 
+                "MV Cables",
+                "Trenching",
+                "PV Mod. Installation",
+                "Cleaning and Cabling of PV Mod.",
+                "Tracker Inst.",
+                "Other"
+            ]
+            
+            # Create treeview for categories
+            columns = ['Offer Name'] + category_order
+            category_tree = ttk.Treeview(category_frame, columns=columns, show='headings', height=5)
+            category_tree.category_summary = True  # Mark for identification
+            
+            # Configure columns
+            category_tree.heading('Offer Name', text='Offer Name')
+            category_tree.column('Offer Name', width=150, minwidth=100)
+            
+            for category in category_order:
+                category_tree.heading(category, text=category)
+                category_tree.column(category, width=120, minwidth=80)
+            
+            # Add scrollbars
+            category_vsb = ttk.Scrollbar(category_frame, orient="vertical", command=category_tree.yview)
+            category_hsb = ttk.Scrollbar(category_frame, orient="horizontal", command=category_tree.xview)
+            category_tree.configure(yscrollcommand=category_vsb.set, xscrollcommand=category_hsb.set)
+            
+            # Grid layout
+            category_tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
+            category_vsb.grid(row=0, column=1, sticky=(tk.N, tk.S))
+            category_hsb.grid(row=1, column=0, sticky=(tk.W, tk.E))
+            
+            # Collect all offers and their category costs
+            offers_data = []
+            
+            # Get current offer name
+            current_offer_name = "Current Offer"
+            
+            # First try to get from current_offer_info (for Use Mapping workflow)
+            if hasattr(self, 'current_offer_info') and self.current_offer_info:
+                offer_info = self.current_offer_info
+                current_offer_name = offer_info.get('offer_name', current_offer_name)
+                logger.debug(f"Found offer name from current_offer_info: {current_offer_name}")
+            else:
+                # Fallback: search through controller's current_files
+                for file_key, file_data in self.controller.current_files.items():
+                    if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
+                        if hasattr(file_data['file_mapping'], 'offer_info') and file_data['file_mapping'].offer_info:
+                            offer_info = file_data['file_mapping'].offer_info
+                            current_offer_name = offer_info.get('offer_name', current_offer_name)
+                            logger.debug(f"Found offer name from file_mapping: {current_offer_name}")
+                        elif 'offer_info' in file_data:
+                            offer_info = file_data['offer_info']
+                            current_offer_name = offer_info.get('offer_name', current_offer_name)
+                            logger.debug(f"Found offer name from current_files: {current_offer_name}")
+                        break
+            
+            # Calculate category costs for current offer
+            current_offer_data = [current_offer_name]
+            for category in category_order:
+                try:
+                    category_data = dataframe[dataframe['Category'] == category]
+                    if len(category_data) > 0:
+                        category_prices = pd.to_numeric(category_data['total_price'], errors='coerce')
+                        category_cost = category_prices.sum()
+                        if category_cost > 0:
+                            formatted_cost = format_number_eu(category_cost)
+                        else:
+                            formatted_cost = "0,00"
+                        current_offer_data.append(formatted_cost)
+                    else:
+                        current_offer_data.append("0,00")
+                except Exception as e:
+                    logger.warning(f"Error calculating cost for category {category}: {e}")
+                    current_offer_data.append("0,00")
+            
+            offers_data.append(current_offer_data)
+            
+            # Check for comparison offers in the current dataframe (regardless of workflow flag)
+            comparison_columns = [col for col in display_dataframe.columns if '[' in col and ']' in col and 'total_price' in col]
+            logger.info(f"DEBUG: display_dataframe columns: {list(display_dataframe.columns)}")
+            logger.info(f"DEBUG: comparison_columns found: {comparison_columns}")
+            
+            if comparison_columns:
+                # Look for comparison offers in the current dataframe
+                
+                for col in comparison_columns:
+                    try:
+                        # Extract offer name from column name (e.g., "total_price[OfferName]" -> "OfferName")
+                        offer_name_from_col = col.split('[')[1].split(']')[0]
+                        
+                        # Calculate category costs for this comparison offer
+                        comparison_offer_data = [offer_name_from_col]
+                        
+                        for category in category_order:
+                            try:
+                                category_data = display_dataframe[display_dataframe['Category'] == category]
+                                if len(category_data) > 0:
+                                    # Use the comparison column for this offer
+                                    category_prices = pd.to_numeric(category_data[col], errors='coerce')
+                                    category_cost = category_prices.sum()
+                                    if category_cost > 0:
+                                        formatted_cost = format_number_eu(category_cost)
+                                    else:
+                                        formatted_cost = "0,00"
+                                    comparison_offer_data.append(formatted_cost)
+                                else:
+                                    comparison_offer_data.append("0,00")
+                            except Exception as e:
+                                logger.warning(f"Error calculating cost for category {category} in comparison offer {offer_name_from_col}: {e}")
+                                comparison_offer_data.append("0,00")
+                        
+                        offers_data.append(comparison_offer_data)
+                        
+                    except Exception as e:
+                        logger.warning(f"Error processing comparison offer column {col}: {e}")
+            
+            # Insert all offers into category treeview
+            for offer_data in offers_data:
+                category_tree.insert('', 'end', values=offer_data)
+            
+            # Configure grid weights
+            category_frame.columnconfigure(0, weight=1)
+            category_frame.rowconfigure(0, weight=1)
+            
+        except Exception as e:
+            logger.error(f"Error summarizing categorized data: {e}")
+            messagebox.showerror("Error", f"Failed to summarize data: {str(e)}")
+
+    def _save_mapping_for_categorized_data(self, dataframe):
+        """Save the column mapping for future use"""
+        try:
+            filetypes = [("Pickle files", "*.pkl"), ("All files", "*.*")]
+            filename = filedialog.asksaveasfilename(
+                title="Save Column Mapping",
+                filetypes=filetypes,
+                defaultextension=".pkl"
+            )
+            
+            if filename:
+                # Get current sheet categories and column mappings
+                current_sheet_categories = getattr(self, 'current_sheet_categories', {})
+                current_column_mappings = {}
+                
+                # Get column mappings from current file mapping
+                current_tab_path = self.notebook.select()
+                for file_key, file_data in self.controller.current_files.items():
+                    if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
+                        if hasattr(file_data['file_mapping'], 'sheets'):
+                            for sheet in file_data['file_mapping'].sheets:
+                                if hasattr(sheet, 'column_mappings'):
+                                    current_column_mappings[sheet.sheet_name] = sheet.column_mappings
+                        break
+                
+                # Create mapping data
+                mapping_data = {
+                    'columns': list(dataframe.columns),
+                    'column_order': ['code', 'Source_Sheet', 'Category', 'Description', 'unit', 
+                                   'quantity', 'unit_price', 'total_price', 'manhours', 'wage'],
+                    'sheet_categories': current_sheet_categories,
+                    'column_mappings': current_column_mappings,
+                    'timestamp': time.time(),
+                    'dataframe_shape': dataframe.shape
+                }
+                
+                with open(filename, 'wb') as f:
+                    pickle.dump(mapping_data, f)
+                
+                messagebox.showinfo("Mapping Saved", f"Column mapping saved to {filename}")
+                
+        except Exception as e:
+            logger.error(f"Error saving mapping: {e}")
+            messagebox.showerror("Error", f"Failed to save mapping: {str(e)}")
+
+    def _save_analysis_for_categorized_data(self, dataframe, categorization_result):
+        """Save the complete analysis including categorization results"""
+        try:
+            filetypes = [("Pickle files", "*.pkl"), ("All files", "*.*")]
+            filename = filedialog.asksaveasfilename(
+                title="Save Analysis",
+                filetypes=filetypes,
+                defaultextension=".pkl"
+            )
+            
+            if filename:
+                # Create analysis data
+                total_cost = 0.0
+                if 'total_price' in dataframe.columns:
+                    try:
+                        numeric_prices = pd.to_numeric(dataframe['total_price'], errors='coerce')
+                        total_cost = numeric_prices.sum()
+                    except Exception as e:
+                        logger.warning(f"Error calculating total cost for analysis: {e}")
+                        total_cost = 0.0
+                
+                # Get the current offer info from the controller
+                current_offer_info = None
+                current_tab_path = self.notebook.select()
+                for file_key, file_data in self.controller.current_files.items():
+                    if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
+                        if 'offer_info' in file_data:
+                            current_offer_info = file_data['offer_info']
+                        elif hasattr(file_data['file_mapping'], 'offer_info'):
+                            current_offer_info = file_data['file_mapping'].offer_info
+                        break
+                
+                analysis_data = {
+                    'dataframe': dataframe,
+                    'categorization_result': categorization_result,
+                    'offer_info': current_offer_info or {
+                        'offer_name': 'Unknown',
+                        'project_name': 'Unknown',
+                        'project_size': 'N/A',
+                        'date': datetime.now().strftime('%Y-%m-%d')
+                    },
+                    'timestamp': time.time(),
+                    'total_rows': len(dataframe),
+                    'total_cost': total_cost,
+                    'category_counts': dataframe['Category'].value_counts().to_dict() if 'Category' in dataframe.columns else {}
+                }
+                
+                with open(filename, 'wb') as f:
+                    pickle.dump(analysis_data, f)
+                
+                messagebox.showinfo("Analysis Saved", f"Complete analysis saved to {filename}")
+                
+        except Exception as e:
+            logger.error(f"Error saving analysis: {e}")
+            messagebox.showerror("Error", f"Failed to save analysis: {str(e)}")
+
+    def _create_dataframe_from_mapping(self, file_mapping):
+        """Create a DataFrame from file mapping data"""
+        try:
+            import pandas as pd
+            
+            # First, try to use the dataframe attribute if it exists
+            if hasattr(file_mapping, 'dataframe') and file_mapping.dataframe is not None:
+                logger.debug(f"Using existing dataframe from file mapping with {len(file_mapping.dataframe)} rows")
+                return file_mapping.dataframe.copy()
+            
+            # Fallback: create DataFrame from sheet data
+            rows = []
+            for sheet in file_mapping.sheets:
+                if hasattr(sheet, 'sheet_data') and sheet.sheet_data:
+                    # Create a simple DataFrame from sheet data
+                    # This is a basic implementation - you might need to enhance it
+                    for i, row_data in enumerate(sheet.sheet_data):
+                        if i == 0:  # Skip header row
+                            continue
+                        row_dict = {
+                            'Source_Sheet': sheet.sheet_name,
+                            'Description': row_data[0] if len(row_data) > 0 else '',
+                            'code': row_data[1] if len(row_data) > 1 else '',
+                            'unit': row_data[2] if len(row_data) > 2 else '',
+                            'quantity': row_data[3] if len(row_data) > 3 else '',
+                            'unit_price': row_data[4] if len(row_data) > 4 else '',
+                            'total_price': row_data[5] if len(row_data) > 5 else '',
+                        }
+                        rows.append(row_dict)
             
             if rows:
                 df = pd.DataFrame(rows)
-                if 'description' in df.columns and 'Description' not in df.columns:
-                    df.rename(columns={'description': 'Description'}, inplace=True)
-                
-                file_mapping.dataframe = df
-                print(f"[DEBUG] Built DataFrame for categorization: {df.shape}")
-                
-                # Start categorization
-                self._start_categorization(file_mapping)
+                logger.debug(f"Created DataFrame with {len(df)} rows from file mapping sheet data")
+                return df
             else:
-                messagebox.showerror("Error", "No valid rows found for categorization")
+                logger.warning("No data found in file mapping")
+                return None
                 
         except Exception as e:
-            print(f"[DEBUG] Error in mapped file review confirmation: {e}")
-            import traceback
-            traceback.print_exc()
-            messagebox.showerror("Error", f"Failed to continue with categorization: {str(e)}")
+            logger.error(f"Error creating DataFrame from mapping: {e}")
+            return None
+
+    def _create_dataframe_from_boq_results(self, boq_results):
+        """Create a DataFrame from BOQ processor results"""
+        try:
+            import pandas as pd
+            
+            rows = []
+            
+            # Extract BOQ data from all sheets
+            for sheet_name, sheet_data in boq_results.get('sheets_data', {}).items():
+                if 'boq_data' in sheet_data and sheet_data['boq_data']:
+                    for item in sheet_data['boq_data']:
+                        row_dict = {
+                            'Source_Sheet': sheet_name,
+                            'Description': item.get('description', ''),
+                            'code': item.get('code', ''),
+                            'unit': item.get('unit', ''),
+                            'quantity': item.get('quantity', ''),
+                            'unit_price': item.get('unit_price', ''),
+                            'total_price': item.get('total_price', ''),
+                            'Category': item.get('classification', ''),
+                        }
+                        rows.append(row_dict)
+            
+            if rows:
+                df = pd.DataFrame(rows)
+                logger.debug(f"Created DataFrame with {len(df)} rows from BOQ results")
+                return df
+            else:
+                logger.warning("No data found in BOQ results")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error creating DataFrame from BOQ results: {e}")
+            return None
+
+    def _compare_full_from_categorized_data(self, tab):
+        """Start comparison workflow from categorized data"""
+        try:
+            # Store the current dataframe in the tab for comparison
+            current_tab_path = self.notebook.select()
+            current_tab = self.notebook.nametowidget(self.notebook.select())
+            
+            # Find the matching file data and store the dataframe
+            for file_key, file_data in self.controller.current_files.items():
+                if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
+                    # Get the dataframe from the current display
+                    # This would need to be passed from the button command
+                    # For now, we'll use the stored final_dataframe
+                    if 'final_dataframe' in file_data:
+                        file_data['file_mapping'].dataframe = file_data['final_dataframe']
+                        self._compare_full(tab)
+                    else:
+                        messagebox.showerror("Error", "No categorized data available for comparison")
+                    break
+            else:
+                messagebox.showerror("Error", "Could not find current file data")
+                
+        except Exception as e:
+            logger.error(f"Error starting comparison: {e}")
+            messagebox.showerror("Error", f"Failed to start comparison: {str(e)}")
+
+    def _process_comparison_file_optimized(self, filepath, offer_info, master_file_mapping):
+        """
+        Process comparison file using master BOQ mapping for maximum efficiency
+        
+        Args:
+            filepath: Path to comparison file
+            offer_info: Offer information dictionary
+            master_file_mapping: Master BOQ file mapping with known structure
+        
+        Returns:
+            FileMapping object or None if failed
+        """
+        try:
+            from core.file_processor import ExcelProcessor
+            import pandas as pd
+            
+            # Create Excel processor
+            excel_processor = ExcelProcessor()
+            
+            # Load the file
+            if not excel_processor.load_file(filepath):
+                return None
+            
+            # Get the exact sheets that exist in the master BOQ
+            master_sheet_names = set()
+            if hasattr(master_file_mapping, 'sheets') and master_file_mapping.sheets:
+                master_sheet_names = {sheet.sheet_name for sheet in master_file_mapping.sheets}
+            else:
+                # Fallback: get visible sheets
+                master_sheet_names = set(excel_processor.get_visible_sheets())
+            
+            # Get visible sheets from comparison file
+            visible_sheets = excel_processor.get_visible_sheets()
+            if not visible_sheets:
+                return None
+            
+            # Check if all master sheets exist in comparison file
+            missing_sheets = master_sheet_names - set(visible_sheets)
+            if missing_sheets:
+                error_msg = f"Comparison file is missing required sheets: {missing_sheets}"
+                logger.error(error_msg)
+                messagebox.showerror("Structure Mismatch", error_msg)
+                return None
+            
+            # Only process the exact sheets from master BOQ
+            sheets_to_process = list(master_sheet_names)
+            logger.info(f"Processing {len(sheets_to_process)} sheets based on master BOQ structure")
+            
+            # Extract data directly using master mapping information
+            all_data = []
+            
+            for sheet_name in sheets_to_process:
+                try:
+                    # Get sheet data with proper header detection
+                    sheet_data = excel_processor.get_sheet_data(sheet_name, max_rows=10000)
+                    if not sheet_data or len(sheet_data) < 2:  # Need at least header + 1 row
+                        continue
+                    
+                    # Find the actual header row (skip empty rows at the top)
+                    header_row_idx = 0
+                    for i, row in enumerate(sheet_data):
+                        if any(cell and str(cell).strip() for cell in row):
+                            header_row_idx = i
+                            break
+                    
+                    # Get headers and data
+                    headers = sheet_data[header_row_idx]
+                    data_rows = sheet_data[header_row_idx + 1:]
+                    
+                    # Clean headers (remove duplicates, handle empty headers)
+                    clean_headers = []
+                    for i, header in enumerate(headers):
+                        if not header or pd.isna(header) or str(header).strip() == '':
+                            # Try to find a meaningful header from the data
+                            meaningful_header = None
+                            for data_row in data_rows[:5]:  # Check first 5 rows
+                                if i < len(data_row) and data_row[i] and str(data_row[i]).strip():
+                                    meaningful_header = f"Column_{str(data_row[i]).strip()[:20]}"
+                                    break
+                            if not meaningful_header:
+                                meaningful_header = f'Column_{i}'
+                            clean_headers.append(meaningful_header)
+                        else:
+                            clean_headers.append(str(header).strip())
+                    
+                    # Ensure unique headers
+                    unique_headers = []
+                    seen_headers = set()
+                    for header in clean_headers:
+                        if header in seen_headers:
+                            counter = 1
+                            while f"{header}_{counter}" in seen_headers:
+                                counter += 1
+                            header = f"{header}_{counter}"
+                        unique_headers.append(header)
+                        seen_headers.add(header)
+                    
+                    # Convert to DataFrame with clean headers
+                    df = pd.DataFrame(data_rows, columns=unique_headers)
+                    if df.empty:
+                        continue
+                    
+                    # Add sheet name column
+                    df['Source_Sheet'] = sheet_name
+                    
+                    # Reset index to avoid conflicts
+                    df = df.reset_index(drop=True)
+                    
+                    # Append to all data
+                    all_data.append(df)
+                    
+                    logger.debug(f"Extracted {len(df)} rows from sheet '{sheet_name}' with headers: {unique_headers[:5]}...")
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to process sheet '{sheet_name}': {e}")
+                    continue
+            
+            if not all_data:
+                messagebox.showerror("Error", "No data could be extracted from comparison file")
+                return None
+            
+            # Combine all data with proper error handling
+            try:
+                combined_df = pd.concat(all_data, ignore_index=True, sort=False)
+                logger.info(f"Combined {len(combined_df)} total rows from comparison file")
+            except Exception as e:
+                logger.error(f"Error combining DataFrames: {e}")
+                # Fallback: try with different approach
+                try:
+                    # Create a list of dictionaries and then DataFrame
+                    all_rows = []
+                    for df in all_data:
+                        for _, row in df.iterrows():
+                            all_rows.append(row.to_dict())
+                    
+                    combined_df = pd.DataFrame(all_rows)
+                    logger.info(f"Combined {len(combined_df)} total rows using fallback method")
+                except Exception as e2:
+                    logger.error(f"Fallback method also failed: {e2}")
+                    messagebox.showerror("Error", f"Failed to combine data from comparison file: {str(e)}")
+                    return None
+            
+            # Create file mapping object
+            file_mapping = type('MockFileMapping', (), {
+                'dataframe': combined_df,
+                'offer_info': offer_info,
+                'sheets': []  # Add empty sheets list for compatibility
+            })()
+            
+            # Store offer information
+            file_mapping.offer_info = offer_info
+            
+            return file_mapping
+            
+        except Exception as e:
+            logger.error(f"Error processing comparison file: {e}")
+            return None
+
+    def _process_comparison_file_with_master_mappings(self, filepath, master_file_mapping, offer_info):
+        """
+        Process comparison file using master BOQ mappings (header row index and column mapping from master)
+        Args:
+            filepath: Path to comparison file
+            master_file_mapping: Master BOQ file mapping with known structure
+            offer_info: Offer information dictionary
+        Returns:
+            FileMapping object or None if failed
+        """
+        try:
+            from core.file_processor import ExcelProcessor
+            import pandas as pd
+            
+            excel_processor = ExcelProcessor()
+            if not excel_processor.load_file(filepath):
+                return None
+            
+            # Get master mapping info
+            master_sheets = getattr(master_file_mapping, 'sheets', [])
+            if not master_sheets:
+                logger.error("Master file mapping has no sheets info")
+                return None
+            
+            visible_sheets = excel_processor.get_visible_sheets()
+            if not visible_sheets:
+                return None
+            
+            all_data = []
+            for master_sheet in master_sheets:
+                sheet_name = getattr(master_sheet, 'sheet_name', None)
+                if not sheet_name or sheet_name not in visible_sheets:
+                    continue
+                header_row_idx = getattr(master_sheet, 'header_row_index', 0)
+                column_mappings = getattr(master_sheet, 'column_mappings', [])
+                if not column_mappings:
+                    logger.warning(f"No column mappings for sheet {sheet_name}")
+                    continue
+                
+                # Get sheet data
+                sheet_data = excel_processor.get_sheet_data(sheet_name, max_rows=10000)
+                if not sheet_data or len(sheet_data) <= header_row_idx:
+                    continue
+                
+                # Get raw headers and data (no enhancement needed - we'll use column indices)
+                headers = sheet_data[header_row_idx]
+                data_rows = sheet_data[header_row_idx + 1:]
+                
+                # Build mapping from column index to canonical name using master mapping
+                column_index_map = {}
+                for cm in column_mappings:
+                    col_idx = getattr(cm, 'column_index', None)
+                    canon = getattr(cm, 'mapped_type', None)
+                    if col_idx is not None and canon:
+                        # mapped_type may be an Enum or str
+                        canon_val = canon.value if hasattr(canon, 'value') else str(canon)
+                        # Ensure correct case for canonical names
+                        if canon_val.lower() == 'description':
+                            canon_val = 'Description'
+                        elif canon_val.lower() == 'quantity':
+                            canon_val = 'quantity'
+                        elif canon_val.lower() == 'unit_price':
+                            canon_val = 'unit_price'
+                        elif canon_val.lower() == 'total_price':
+                            canon_val = 'total_price'
+                        elif canon_val.lower() == 'unit':
+                            canon_val = 'unit'
+                        elif canon_val.lower() == 'code':
+                            canon_val = 'code'
+                        column_index_map[col_idx] = canon_val
+                
+                # Map columns by index - only include mapped columns
+                mapped_columns = []
+                for col_idx in sorted(column_index_map.keys()):
+                    if col_idx < len(headers):  # Ensure column index is valid
+                        mapped_columns.append(column_index_map[col_idx])
+                
+                # Ensure unique column names
+                unique_columns = []
+                seen_columns = set()
+                for col in mapped_columns:
+                    if col in seen_columns:
+                        counter = 1
+                        while f"{col}_{counter}" in seen_columns:
+                            counter += 1
+                        col = f"{col}_{counter}"
+                    unique_columns.append(col)
+                    seen_columns.add(col)
+                
+                # Filter data rows to match only mapped columns by index
+                filtered_data_rows = []
+                for row in data_rows:
+                    filtered_row = []
+                    for col_idx in sorted(column_index_map.keys()):
+                        if col_idx < len(row):  # Ensure column index is valid
+                            filtered_row.append(row[col_idx] if row[col_idx] is not None else '')
+                        else:
+                            filtered_row.append('')  # Fill missing columns
+                    filtered_data_rows.append(filtered_row)
+                
+                # Build DataFrame with only mapped columns
+                df = pd.DataFrame(filtered_data_rows, columns=unique_columns)
+                if df.empty:
+                    continue
+                
+                # Add required columns that may be missing
+                if 'Category' not in df.columns:
+                    df['Category'] = None
+                if 'Source_Sheet' not in df.columns:
+                    df['Source_Sheet'] = sheet_name
+                
+                df = df.reset_index(drop=True)
+                all_data.append(df)
+                logger.debug(f"Extracted {len(df)} rows from sheet '{sheet_name}' using master mapping")
+            
+            if not all_data:
+                logger.error("No data could be extracted from comparison file using master mappings")
+                return None
+            
+            # Combine all data
+            try:
+                combined_df = pd.concat(all_data, ignore_index=True, sort=False)
+                logger.info(f"Combined {len(combined_df)} total rows from comparison file (master mapping)")
+            except Exception as e:
+                logger.error(f"Error combining DataFrames: {e}")
+                return None
+            
+            file_mapping = type('MockFileMapping', (), {
+                'dataframe': combined_df,
+                'offer_info': offer_info,
+                'sheets': []
+            })()
+            file_mapping.offer_info = offer_info
+            return file_mapping
+        except Exception as e:
+            logger.error(f"Error processing comparison file with master mappings: {e}")
+            return None
+
+    def _create_unified_dataframe(self, file_mapping, is_master=True):
+        """
+        Create a unified DataFrame from file mapping data with consistent structure
+        
+        Args:
+            file_mapping: FileMapping object containing the data
+            is_master: Whether this is the master dataset (affects logging)
+            
+        Returns:
+            DataFrame with consistent column structure
+        """
+        try:
+            import pandas as pd
+            
+            dataset_type = "master" if is_master else "comparison"
+            logger.info(f"Creating unified DataFrame for {dataset_type} dataset")
+            
+            # First, try to use the dataframe attribute if it exists
+            if hasattr(file_mapping, 'dataframe') and file_mapping.dataframe is not None:
+                df = file_mapping.dataframe.copy()
+                logger.info(f"Using existing dataframe for {dataset_type}: {len(df)} rows, columns: {list(df.columns)}")
+                
+                # Ensure we have the required columns
+                required_columns = ['Description', 'code', 'unit', 'quantity', 'unit_price', 'total_price']
+                missing_columns = [col for col in required_columns if col not in df.columns]
+                
+                if missing_columns:
+                    logger.warning(f"Missing columns in {dataset_type} dataset: {missing_columns}")
+                    # Add missing columns with empty values
+                    for col in missing_columns:
+                        df[col] = ''
+                
+                # Ensure Source_Sheet column is populated for debug export
+                if 'Source_Sheet' not in df.columns:
+                    logger.info(f"Adding Source_Sheet column to {dataset_type} dataset")
+                    # Try to populate Source_Sheet from sheet information if available
+                    if hasattr(file_mapping, 'sheets') and file_mapping.sheets:
+                        # Create a mapping of row indices to sheet names
+                        sheet_mapping = {}
+                        current_row = 0
+                        for sheet in file_mapping.sheets:
+                            if hasattr(sheet, 'sheet_data') and sheet.sheet_data:
+                                sheet_rows = len(sheet.sheet_data) - 1  # Exclude header row
+                                for i in range(sheet_rows):
+                                    sheet_mapping[current_row + i] = sheet.sheet_name
+                                current_row += sheet_rows
+                        
+                        # Populate Source_Sheet column
+                        df['Source_Sheet'] = df.index.map(lambda x: sheet_mapping.get(x, 'Unknown'))
+                    else:
+                        # Fallback: use a default value
+                        df['Source_Sheet'] = 'Unknown'
+                elif df['Source_Sheet'].isna().all() or (df['Source_Sheet'] == '').all():
+                    logger.warning(f"Source_Sheet column exists but is empty in {dataset_type} dataset")
+                    # Try to populate from sheet information
+                    if hasattr(file_mapping, 'sheets') and file_mapping.sheets:
+                        sheet_mapping = {}
+                        current_row = 0
+                        for sheet in file_mapping.sheets:
+                            if hasattr(sheet, 'sheet_data') and sheet.sheet_data:
+                                sheet_rows = len(sheet.sheet_data) - 1  # Exclude header row
+                                for i in range(sheet_rows):
+                                    sheet_mapping[current_row + i] = sheet.sheet_name
+                                current_row += sheet_rows
+                        
+                        df['Source_Sheet'] = df.index.map(lambda x: sheet_mapping.get(x, 'Unknown'))
+                    else:
+                        df['Source_Sheet'] = 'Unknown'
+                
+                # Ensure consistent column order
+                final_columns = required_columns + [col for col in df.columns if col not in required_columns]
+                df = df[final_columns]
+                
+                # Log sample descriptions to verify they're not empty
+                if 'Description' in df.columns:
+                    sample_descriptions = df['Description'].head(5).tolist()
+                    logger.info(f"Sample descriptions in {dataset_type} dataset: {sample_descriptions}")
+                else:
+                    logger.error(f"No Description column found in {dataset_type} dataset!")
+                
+                return df
+            
+            # Fallback: create DataFrame from sheet data
+            logger.warning(f"No dataframe attribute found for {dataset_type}, falling back to sheet data")
+            rows = []
+            for sheet in file_mapping.sheets:
+                if hasattr(sheet, 'sheet_data') and sheet.sheet_data:
+                    for i, row_data in enumerate(sheet.sheet_data):
+                        if i == 0:  # Skip header row
+                            continue
+                        row_dict = {
+                            'Source_Sheet': sheet.sheet_name,
+                            'Description': row_data[0] if len(row_data) > 0 else '',
+                            'code': row_data[1] if len(row_data) > 1 else '',
+                            'unit': row_data[2] if len(row_data) > 2 else '',
+                            'quantity': row_data[3] if len(row_data) > 3 else '',
+                            'unit_price': row_data[4] if len(row_data) > 4 else '',
+                            'total_price': row_data[5] if len(row_data) > 5 else '',
+                        }
+                        rows.append(row_dict)
+            
+            if rows:
+                df = pd.DataFrame(rows)
+                logger.info(f"Created DataFrame from sheet data for {dataset_type}: {len(df)} rows")
+                return df
+            else:
+                logger.error(f"No data found in {dataset_type} file mapping")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error creating unified DataFrame for {dataset_type}: {e}")
+            return None
+
+    def run(self):
+        """Start the main window event loop"""
+        try:
+            # Start the main event loop
+            self.root.mainloop()
+        except Exception as e:
+            logger.error(f"Error in main window event loop: {e}")
+            raise
+    
+    def _process_comparison_file_with_sheet_structure(self, filepath, offer_info):
+        """Process comparison file with sheet structure, like master BOQ workflow."""
+        # Use the same logic as _process_file, but for the comparison file
+        file_mapping = self.controller.process_file(
+            Path(filepath),
+            progress_callback=lambda p, m: self.update_progress(p, m)
+        )
+        file_mapping.offer_info = offer_info
+        return file_mapping
+
+    def _show_comparison_row_review(self, file_mapping, offer_info):
+        """Show row review for comparison file, then create unified dataset and export after confirmation."""
+        # Show the row review dialog (reusing the master workflow)
+        self._show_row_review(file_mapping)
+        # After user confirms row review, _on_confirm_row_review will be called as usual
+        # We can hook into that to trigger the debug export for comparison
+        self._pending_comparison_export = True
+        self._pending_comparison_offer_info = offer_info
+
+    def _update_tab_with_comparison_data(self, tab, updated_df):
+        print("=== ENTERED _update_tab_with_comparison_data ===")
+        logger.info("Updating tab with comparison data")
+        logger.info(f"Tab children count: {len(tab.winfo_children())}")
+        
+        # Find the existing treeview in the tab
+        treeview = None
+        for widget in tab.winfo_children():
+            logger.info(f"Widget type: {type(widget)}")
+            if isinstance(widget, ttk.Frame):
+                logger.info(f"Frame children count: {len(widget.winfo_children())}")
+                for child in widget.winfo_children():
+                    logger.info(f"Child type: {type(child)}")
+                    if isinstance(child, ttk.Treeview):
+                        treeview = child
+                        logger.info("Found treeview!")
+                        break
+                if treeview:
+                    break
+        
+        if not treeview:
+            logger.warning("No treeview found in tab")
+            return
+        
+        # Clear existing data
+        for item in treeview.get_children():
+            treeview.delete(item)
+        
+        # Get the current columns from the treeview
+        current_columns = treeview['columns']
+        
+        # Filter out ignore columns from the updated dataframe
+        meaningful_columns = [col for col in updated_df.columns if not (col.startswith('ignore') or col == 'ignore')]
+        
+        # Normalize column names to handle case differences
+        # Map common variations to standard names
+        column_mapping = {
+            'description': 'Description',
+            'Description': 'Description',
+            'DESCRIPTION': 'Description',
+            'category': 'Category',
+            'Category': 'Category',
+            'CATEGORY': 'Category',
+            'code': 'code',
+            'unit': 'unit',
+            'quantity': 'quantity',
+            'unit_price': 'unit_price',
+            'total_price': 'total_price',
+            'manhours': 'manhours',
+            'wage': 'wage',
+            'source_sheet': 'Source_Sheet',
+            'Source_Sheet': 'Source_Sheet',
+            'SOURCE_SHEET': 'Source_Sheet'
+        }
+        
+        # Rename columns to standard names
+        for col in updated_df.columns:
+            if col.lower() in column_mapping:
+                new_name = column_mapping[col.lower()]
+                if col != new_name:
+                    updated_df = updated_df.rename(columns={col: new_name})
+        
+        # Update meaningful_columns after renaming
+        meaningful_columns = [col for col in updated_df.columns if not (col.startswith('ignore') or col == 'ignore')]
+        
+        # Define the exact column order from original master BOQ (same as main.py)
+        # Source_Sheet should be the first column
+        # Use consistent naming - match the actual DataFrame column names
+        display_column_order = ["Source_Sheet", "code", "Category", "Description", "scope", "unit", "quantity", "unit_price", "total_price", "manhours", "wage"]
+         
+        # Debug: Log column information
+        logger.info(f"Updated dataframe columns: {list(updated_df.columns)}")
+        logger.info(f"Meaningful columns: {meaningful_columns}")
+        logger.info(f"Display column order: {display_column_order}")
+        
+        # Check which display columns are actually in meaningful_columns
+        available_display_columns = [col for col in display_column_order if col in meaningful_columns]
+        logger.info(f"Available display columns: {available_display_columns}")
+        
+        # Ensure Source_Sheet column is present
+        if 'Source_Sheet' not in meaningful_columns:
+            # Add Source_Sheet column with default value
+            updated_df['Source_Sheet'] = 'Unknown'
+            meaningful_columns.append('Source_Sheet')
+            logger.info("Added Source_Sheet column with default value")
+        
+        # Add any offer-specific columns (those with [offer_name] pattern)
+        offer_columns = [col for col in meaningful_columns if '[' in col and ']' in col]
+        
+        # Create final column order: standard columns first, then offer-specific columns
+        final_columns = []
+        for col in display_column_order:
+            if col in meaningful_columns:
+                final_columns.append(col)
+        
+        # Add offer-specific columns at the end
+        for col in offer_columns:
+            if col not in final_columns:
+                final_columns.append(col)
+        
+        # Store the updated dataframe with comparison columns for summary methods
+        # This ensures the comparison columns are available when summary methods are called
+        self._current_dataframe_with_comparison = updated_df.copy()
+        
+        # Add any remaining meaningful columns
+        for col in meaningful_columns:
+            if col not in final_columns:
+                final_columns.append(col)
+        
+        logger.info(f"Final column order: {final_columns}")
+        
+        # Update treeview columns if needed
+        if list(treeview['columns']) != final_columns:
+            treeview['columns'] = final_columns
+            
+            # Apply light blue selection style to the treeview
+            style = ttk.Style(treeview)
+            style.map('Treeview', 
+                     background=[('selected', '#B3E5FC')])  # Light blue background
+            
+            # Configure columns with appropriate widths (same as master window)
+            column_widths = {
+                'Source_Sheet': 120,
+                'code': 100,
+                'Category': 150,
+                'Description': 400,  # Wider for descriptions
+                'scope': 100,
+                'unit': 80,
+                'quantity': 100,
+                'unit_price': 120,
+                'total_price': 120,
+                'manhours': 100,
+                'wage': 80
+            }
+            
+            # Set default width for offer-specific columns
+            default_offer_width = 120
+            
+            for col in final_columns:
+                # Display pretty names in headers
+                pretty_name = self._get_pretty_column_name(col)
+                treeview.heading(col, text=pretty_name)
+                
+                # Use specific width if defined, otherwise use default for offer columns
+                if col in column_widths:
+                    width = column_widths[col]
+                elif '[' in col and ']' in col:
+                    width = default_offer_width
+                else:
+                    width = 100
+                treeview.column(col, width=width, minwidth=80, stretch=False)
+        
+        # Populate with data using exact same formatting as row review
+        for idx, row in updated_df.iterrows():
+            values = []
+            for col in final_columns:
+                val = row.get(col, '')
+                
+                # Apply exact same formatting as row review
+                if pd.notna(val) and val != '':
+                    # Check if this is a comparison column (has [offer_name] pattern)
+                    is_comparison_col = '[' in col and ']' in col
+                    
+                    # Extract base column name for comparison columns
+                    base_col = col.split('[')[0] if is_comparison_col else col
+                    
+                    if base_col in ['unit_price', 'total_price', 'wage']:
+                        # Currency formatting (same as row review) - applies to both master and comparison
+                        val = format_number_eu(val)
+                    elif base_col in ['quantity', 'manhours']:
+                        # Use standard European number formatting for both quantity and manhours
+                        val = format_number_eu(val)
+                    else:
+                        val = str(val)
+                else:
+                    val = ''
+                
+                values.append(val)
+            
+            treeview.insert('', 'end', values=values)
+        
+        logger.info("Tab updated successfully with comparison data")
+        
+        # Refresh the summary to show all offers including comparison offers
+        try:
+            self._refresh_summary_after_comparison(tab, updated_df)
+            logger.info("Summary refreshed after comparison data update")
+        except Exception as e:
+            logger.error(f"Error refreshing summary after comparison: {e}")
+        
+    def _refresh_summary_after_comparison(self, tab, updated_df):
+        """Refresh the summary frame to show all offers after comparison data is loaded"""
+        try:
+            # Find the summary frame in the current tab
+            main_frame = None
+            for widget in tab.winfo_children():
+                if isinstance(widget, ttk.Frame):
+                    main_frame = widget
+                    break
+            
+            if not main_frame:
+                logger.error("Could not find main frame for summary refresh")
+                return
+            
+            # Find the summary frame
+            summary_frame = None
+            for widget in main_frame.winfo_children():
+                if isinstance(widget, ttk.LabelFrame) and widget.cget('text') == 'Summary':
+                    summary_frame = widget
+                    break
+            
+            if not summary_frame:
+                logger.error("Could not find summary frame")
+                return
+            
+            # Find the summary treeview
+            summary_tree = None
+            for widget in summary_frame.winfo_children():
+                if isinstance(widget, ttk.Treeview):
+                    summary_tree = widget
+                    break
+            
+            if not summary_tree:
+                logger.error("Could not find summary treeview")
+                return
+            
+            # Clear existing summary data
+            for item in summary_tree.get_children():
+                summary_tree.delete(item)
+            
+            # Collect all offers and their total costs
+            offers_data = []
+            
+            # Get current offer info
+            current_tab_path = self.notebook.select()
+            offer_name = "Current Offer"
+            project_name = "Current Project"
+            project_size = "N/A"
+            date = datetime.now().strftime('%Y-%m-%d')
+            
+            
+            # Try to get actual offer info
+            if hasattr(self, 'current_file_mapping') and self.current_file_mapping and hasattr(self.current_file_mapping, 'offer_info'):
+                offer_info = self.current_file_mapping.offer_info
+                offer_name = offer_info.get('offer_name', offer_name)
+                project_name = offer_info.get('project_name', project_name)
+                project_size = offer_info.get('project_size', project_size)
+                date = offer_info.get('date', date)
+            elif hasattr(self, 'file_mapping') and self.file_mapping and hasattr(self.file_mapping, 'offer_info'):
+                offer_info = self.file_mapping.offer_info
+                offer_name = offer_info.get('offer_name', offer_name)
+                project_name = offer_info.get('project_name', project_name)
+                project_size = offer_info.get('project_size', project_size)
+                date = offer_info.get('date', date)
+            elif hasattr(self, 'current_offer_info') and self.current_offer_info:
+                offer_info = self.current_offer_info
+                offer_name = offer_info.get('offer_name', offer_name)
+                project_name = offer_info.get('project_name', project_name)
+                project_size = offer_info.get('project_size', project_size)
+                date = offer_info.get('date', date)
+            
+            # Calculate total cost for current offer
+            total_cost = 0.0
+            if 'total_price' in updated_df.columns:
+                try:
+                    numeric_prices = pd.to_numeric(updated_df['total_price'], errors='coerce')
+                    total_cost = numeric_prices.sum()
+                except Exception as e:
+                    logger.warning(f"Error calculating total cost: {e}")
+                    total_cost = 0.0
+            
+            # Format total cost
+            if total_cost > 0:
+                formatted_total_cost = format_number_eu(total_cost)
+            else:
+                formatted_total_cost = "0,00"
+            
+            # Add current offer
+            current_offer_data = {
+                'offer_name': offer_name,
+                'project_name': project_name,
+                'project_size': project_size,
+                'date': date,
+                'total_cost': total_cost,
+                'formatted_total_cost': formatted_total_cost
+            }
+            offers_data.append(current_offer_data)
+            
+            # Add comparison offers
+            comparison_columns = [col for col in updated_df.columns if '[' in col and ']' in col and 'total_price' in col]
+            
+            for col in comparison_columns:
+                try:
+                    # Extract offer name from column name
+                    offer_name_from_col = col.split('[')[1].split(']')[0]
+                    
+                    # Calculate total cost for this offer
+                    offer_total_cost = 0.0
+                    if col in updated_df.columns:
+                        numeric_prices = pd.to_numeric(updated_df[col], errors='coerce')
+                        offer_total_cost = numeric_prices.sum()
+                    
+                    # Format total cost
+                    if offer_total_cost > 0:
+                        formatted_offer_cost = format_number_eu(offer_total_cost)
+                    else:
+                        formatted_offer_cost = "0,00"
+                    
+                    # Add comparison offer data - use the user's entered project info
+                    # Get the comparison offer info from the controller's current_files
+                    comparison_offer_info = None
+                    for file_key, file_data in self.controller.current_files.items():
+                        if 'offers' in file_data and offer_name_from_col in file_data['offers']:
+                            comparison_offer_info = file_data['offers'][offer_name_from_col]
+                            break
+                    
+                    # Use user's entered project info if available, otherwise use defaults
+                    if comparison_offer_info:
+                        project_name = comparison_offer_info.get('project_name', f"Project {offer_name_from_col}")
+                        project_size = comparison_offer_info.get('project_size', 'N/A')
+                        date = comparison_offer_info.get('date', date)
+                    else:
+                        project_name = f"Project {offer_name_from_col}"
+                        project_size = "N/A"
+                    
+                    comparison_offer_data = {
+                        'offer_name': offer_name_from_col,
+                        'project_name': project_name,
+                        'project_size': project_size,
+                        'date': date,
+                        'total_cost': offer_total_cost,
+                        'formatted_total_cost': formatted_offer_cost
+                    }
+                    offers_data.append(comparison_offer_data)
+                    
+                except Exception as e:
+                    logger.warning(f"Error processing comparison offer column {col}: {e}")
+            
+            # Sort offers by total cost (lowest first)
+            offers_data.sort(key=lambda x: x['total_cost'])
+            
+            # Insert all offers into summary treeview (ONLY ONCE)
+            for offer_data in offers_data:
+                summary_tree.insert('', 'end', values=(
+                    offer_data['offer_name'],
+                    offer_data['project_name'],
+                    offer_data['project_size'],
+                    offer_data['date'],
+                    offer_data['formatted_total_cost']
+                ))
+            
+            logger.info(f"Summary refreshed with {len(offers_data)} offers")
+            
+        except Exception as e:
+            logger.error(f"Error refreshing summary after comparison: {e}")
+            messagebox.showerror("Error", f"Failed to refresh summary: {str(e)}")
+
+    def _get_pretty_column_name(self, column_name):
+        """
+        Convert internal column names to pretty display names
+        
+        Args:
+            column_name: Internal column name
+            
+        Returns:
+            Pretty display name for the column
+        """
+        # Handle comparison columns (those with [offer_name] pattern)
+        if '[' in column_name and ']' in column_name:
+            base_col = column_name.split('[')[0]
+            offer_name = column_name.split('[')[1].split(']')[0]
+            pretty_base = self._get_pretty_column_name(base_col)
+            return f"{pretty_base} [{offer_name}]"
+        
+        # Map internal names to pretty names
+        pretty_names = {
+            'source_sheet': 'Source Sheet',
+            'Source_Sheet': 'Source Sheet',
+            'code': 'Code',
+            'category': 'Category',
+            'Category': 'Category',
+            'description': 'Description',
+            'Description': 'Description',
+            'scope': 'Scope',
+            'unit': 'Unit',
+            'quantity': 'Quantity',
+            'unit_price': 'Unit Price',
+            'total_price': 'Total Price',
+            'manhours': 'Man Hours',
+            'wage': 'Wage'
+        }
+        
+        return pretty_names.get(column_name, column_name)
+
+
+

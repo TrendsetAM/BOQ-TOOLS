@@ -4,11 +4,12 @@
     "desc",
     "item description",
     "work description",
-    "scope",
-    "item",
     "activity",
     "task",
-    "DESCRIPTION ITEM"
+    "DESCRIPTION ITEM",
+    "DESCRIPTION",
+    "ITEM DESCRIPTION",
+    "Practice Details"
   ],
   "quantity": [
     "quantity",
@@ -18,7 +19,9 @@
     "number",
     "count",
     "nos",
-    "Quantity"
+    "Quantity",
+    "QUANTITY",
+    "ESTIMATED \nQUANTITY"
   ],
   "unit_price": [
     "unit price",
@@ -28,7 +31,11 @@
     "rate",
     "unit rate",
     "price per unit",
-    "Unit Price"
+    "Unit Price",
+    "UNIT\nPRICE",
+    "UNITARY \nPRICE",
+    "UNIT PRICE",
+    "UNITARY \nPRICE USD"
   ],
   "total_price": [
     "total price",
@@ -39,7 +46,11 @@
     "sum",
     "cost",
     "value",
-    "Total Price"
+    "Total Price",
+    "TOTAL \nPRICE",
+    "TOTAL PRICE",
+    "TOTAL",
+    "TOTAL USD"
   ],
   "unit": [
     "unit",
@@ -48,7 +59,10 @@
     "unit of measure",
     "units",
     "measurement",
-    "Unit of measure"
+    "Unit of measure",
+    "UNIT\n(SI)",
+    "Measurement \nUnit",
+    "Quantity"
   ],
   "code": [
     "code",
@@ -59,6 +73,35 @@
     "item number",
     "boq code",
     "schedule no",
-    "Code"
+    "Code",
+    "CODE",
+    "Item",
+    "Cod. REFERENCE",
+    "REFERENCE",
+    "Title"
+  ],
+  "scope": [
+    "scope",
+    "SCOPE",
+    "B=Base Contract\nO=optional"
+  ],
+  "manhours": [
+    "ore",
+    "manhours",
+    "man hours",
+    "labour ore/u.m.",
+    "labor ore/u.m.",
+    "Labour ORE/U.M.",
+    "UNITARY \nPRICE",
+    "UNITARY \nPRICE COP"
+  ],
+  "wage": [
+    "wage",
+    "hourly rate",
+    "labour euro/hour",
+    "labor euro/hour",
+    "Labour EURO/Hour",
+    "TOTAL",
+    "TOTAL COP"
   ]
 }

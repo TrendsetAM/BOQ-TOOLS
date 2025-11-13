@@ -61,7 +61,13 @@ class CategoryDictionary:
         Args:
             dictionary_file: Path to JSON file containing the category dictionary
         """
-        self.dictionary_file = dictionary_file or Path("config/category_dictionary.json")
+        if dictionary_file is None:
+            # Use the user config directory for standalone executable compatibility
+            from utils.config import get_user_config_path
+            user_config_file = get_user_config_path('category_dictionary.json')
+            self.dictionary_file = Path(user_config_file)
+        else:
+            self.dictionary_file = dictionary_file
         self.mappings: Dict[str, CategoryMapping] = {}
         self.categories: Set[str] = set()
         self._load_dictionary()
@@ -88,12 +94,23 @@ class CategoryDictionary:
                 
                 logger.info(f"Loaded {len(self.mappings)} mappings from {self.dictionary_file}")
             else:
-                logger.info(f"Dictionary file not found, creating new: {self.dictionary_file}")
-                self._create_default_dictionary()
+                logger.info(f"Dictionary file not found at {self.dictionary_file}")
+                # Try to copy from bundled default if running as executable
+                self._try_copy_bundled_dictionary()
+                
+                # If still no file, create minimal default
+                if not self.dictionary_file.exists():
+                    logger.info("Creating minimal default dictionary")
+                    self._create_default_dictionary()
+                    self.save_dictionary()  # Save the default to user directory
+                else:
+                    # Reload after copying bundled version
+                    self._load_dictionary()
                 
         except Exception as e:
             logger.error(f"Error loading dictionary: {e}")
             self._create_default_dictionary()
+            self.save_dictionary()  # Save the default to user directory
     
     def _create_default_dictionary(self) -> None:
         """Create default category dictionary with common BOQ categories"""
@@ -143,6 +160,27 @@ class CategoryDictionary:
             self.categories.add(category)
         
         logger.info("Created default category dictionary with pretty categories")
+    
+    def _try_copy_bundled_dictionary(self) -> None:
+        """Try to copy bundled dictionary from executable to user directory"""
+        try:
+            import os
+            # Check if running as executable with bundled config
+            if 'BOQ_TOOLS_BUNDLE_DIR' in os.environ:
+                bundle_dict_path = Path(os.environ['BOQ_TOOLS_BUNDLE_DIR']) / 'config' / 'category_dictionary.json'
+                if bundle_dict_path.exists():
+                    # Ensure user config directory exists
+                    self.dictionary_file.parent.mkdir(parents=True, exist_ok=True)
+                    # Copy the bundled dictionary to user directory
+                    import shutil
+                    shutil.copy2(bundle_dict_path, self.dictionary_file)
+                    logger.info(f"Copied bundled dictionary from {bundle_dict_path} to {self.dictionary_file}")
+                else:
+                    logger.debug(f"No bundled dictionary found at {bundle_dict_path}")
+            else:
+                logger.debug("Not running as executable, skipping bundled dictionary copy")
+        except Exception as e:
+            logger.warning(f"Could not copy bundled dictionary: {e}")
     
     def save_dictionary(self) -> bool:
         """Save dictionary to JSON file"""

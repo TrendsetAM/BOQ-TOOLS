@@ -24,10 +24,11 @@ class ColumnType(Enum):
     QUANTITY = "quantity"
     UNIT_PRICE = "unit_price"
     TOTAL_PRICE = "total_price"
-    CLASSIFICATION = "classification"
     UNIT = "unit"
     CODE = "code"
-    REMARKS = "remarks"
+    SCOPE = "scope"
+    MANHOURS = "manhours"
+    WAGE = "wage"
     IGNORE = "ignore"
 
 
@@ -126,19 +127,11 @@ class BOQConfig:
             
             ColumnType.TOTAL_PRICE: ColumnMapping(
                 keywords=["total", "total price", "total cost", "value",
-                         "total amount", "sum", "total value", "cost", "price"],
+                         "total amount", "sum", "total value", "price", "amount"],
                 weight=1.0,
                 required=True,
                 data_type="currency",
                 validation_pattern=r"^\d+(\.\d{1,2})?$"
-            ),
-            
-            ColumnType.CLASSIFICATION: ColumnMapping(
-                keywords=["type", "category", "class", "mandatory", "optional", "priority",
-                         "classification", "group", "section", "division", "class type"],
-                weight=0.8,
-                required=False,
-                data_type="text"
             ),
             
             ColumnType.UNIT: ColumnMapping(
@@ -157,12 +150,27 @@ class BOQConfig:
                 data_type="text"
             ),
             
-            ColumnType.REMARKS: ColumnMapping(
-                keywords=["remarks", "notes", "comments", "observation", "note",
-                         "remarks:", "notes:", "comments:", "observation:"],
+            ColumnType.SCOPE: ColumnMapping(
+                keywords=["scope"],
                 weight=0.5,
                 required=False,
                 data_type="text"
+            ),
+            
+            ColumnType.MANHOURS: ColumnMapping(
+                keywords=["ore/u.m.", "ore", "manhours", "man hours"],
+                weight=0.6,
+                required=False,
+                data_type="numeric",
+                validation_pattern=r"^\d+(\.\d+)?$"
+            ),
+            
+            ColumnType.WAGE: ColumnMapping(
+                keywords=["euro/hour", "wage", "hourly rate"],
+                weight=0.6,
+                required=False,
+                data_type="numeric",
+                validation_pattern=r"^\d+(\.\d{1,2})?$"
             )
         }
     
@@ -436,20 +444,38 @@ def validate_and_log_config() -> bool:
 
 def get_user_config_path(filename: str) -> str:
     app_name = "BOQ-TOOLS"
-    if user_config_dir:
+    
+    # Check if running as standalone executable with custom config dir
+    if 'BOQ_TOOLS_CONFIG_DIR' in os.environ:
+        config_dir = os.environ['BOQ_TOOLS_CONFIG_DIR']
+    elif 'BOQ_TOOLS_APP_DIR' in os.environ:
+        config_dir = os.path.join(os.environ['BOQ_TOOLS_APP_DIR'], 'config')
+    elif user_config_dir:
         config_dir = user_config_dir(app_name)
     else:
         if os.name == 'nt':
             config_dir = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), app_name)
         else:
             config_dir = os.path.join(os.path.expanduser('~/.config'), app_name)
+    
     os.makedirs(config_dir, exist_ok=True)
     return os.path.join(config_dir, filename)
 
 
-def ensure_default_config(filename: str, default_path: str, default_data: dict = None):
+def ensure_default_config(filename: str, default_path: str, default_data: Optional[dict] = None):
     user_path = get_user_config_path(filename)
     if not os.path.exists(user_path):
+        # Check if running as executable and look for bundled config
+        if 'BOQ_TOOLS_BUNDLE_DIR' in os.environ:
+            bundle_config_path = os.path.join(os.environ['BOQ_TOOLS_BUNDLE_DIR'], 'config', filename)
+            if os.path.exists(bundle_config_path):
+                with open(bundle_config_path, 'r', encoding='utf-8') as fsrc:
+                    data = fsrc.read()
+                with open(user_path, 'w', encoding='utf-8') as fdst:
+                    fdst.write(data)
+                return user_path
+        
+        # Try the provided default path
         if os.path.exists(default_path):
             with open(default_path, 'r', encoding='utf-8') as fsrc:
                 data = fsrc.read()

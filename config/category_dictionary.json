@@ -7415,31 +7415,197 @@
       "created_date": null,
       "usage_count": 0,
       "notes": null
+    },
+    {
+      "description": "cleanup of explosive remnants of war",
+      "category": "Civil Works",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "fence and gate",
+      "category": "Civil Works",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "other civil works",
+      "category": "Civil Works",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "fields sensors and meteo station supply, transportation, delivery and commissioning",
+      "category": "Electrical Works",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "active anti-rodent system [l] -  supply",
+      "category": "Electrical Works",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "supply and installat of the structural pre-fabricated box of the delivery cabin in vibrated reinforced concrete (cabina di consegna) in accordance with the local regulation of tso (in italy is e-distribuzione technical specification dg 2061) - consisting of two rooms: mv room, measurement room. all electrical internal equipment is excluded. \n\nincludes elevation structure and foundation (including excavation, backfilling, disposal, and concretes), ground zero slab all fully completed at civil level as indicated in the specification.\nearthworks and drainages for platform and area finishing (e.g. sidewalk if needed) excluded.",
+      "category": "Other",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "installation and interconnection of user cabin (cabina utente) -  including plant scada cabinet (out of scope of sup) and all types of connections from outside the cabin: mv cables, lv cables, communication and control, primary earth grid, i&c communication panel.",
+      "category": "Other",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "mechanical assembly of trackers  structures (pv panels installation excluded) -1x120\nincluding all materials (e.g. coupling nuts and bolts, anchor bolts with specially provided inserts, expansion bolts, welding materials, shims, etc.) and activities necessary to carry out the mechanical installation (e.g. drillings; renovation of hot-dip galvanizing according to the structure manufacturer, if removed/damaged during installation; installation of motor, drive arm mechanism, dampers, spring and any other device necessary for the perfect functioning of the structure; implementation of defense procedures during construction phasis; etc.)",
+      "category": "Tracker Inst.",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "supply of cooper communication cable",
+      "category": "Electrical Works",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "testing of cooper communication cables",
+      "category": "Electrical Works",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "supply of fiber optic cable (single-mode, 12 wires, direct buried)",
+      "category": "Electrical Works",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "installation of fiber optic cable (single-mode, 12 wires, direct buried)",
+      "category": "Electrical Works",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "supply of insulated grounding cables, crosss section 70 mm2, connectors excluded",
+      "category": "Electrical Works",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical zt trench oe - 60 x 40 cm (min) - only earth",
+      "category": "Trenching",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical mv trench 1c - 110 x 40 cm (min) - n.1 three-phase mv line",
+      "category": "Trenching",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical mv trench 3c - 110 x 180 cm (min) - n.3 three-phase mv lines",
+      "category": "Trenching",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical mv trench 3c-a - 110 x 220 cm (min) - n.3 three-phase mv lines",
+      "category": "Trenching",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical lv-ac trench 1c 95 x 40 cm (min)",
+      "category": "Trenching",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical lv-ac trench 3c-a  95 x 70 cm (min)",
+      "category": "Trenching",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical lv-ac trench 4c  95 x 120 cm (min)",
+      "category": "Trenching",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
+    },
+    {
+      "description": "complete installation and cabling of string inverters with all accessories requested.",
+      "category": "Electrical Works",
+      "confidence": 1.0,
+      "created_date": null,
+      "usage_count": 0,
+      "notes": null
     }
   ],
   "categories": [
-    "Site Costs",
     "LV Cables",
-    "Cleaning and Cabling of PV Mod.",
     "General Costs",
-    "MV Cables",
-    "Solar Cables",
     "Trenching",
-    "Earth Movement",
-    "Tracker Inst.",
-    "Equipment",
     "Electrical Works",
-    "Other",
     "Roads",
     "PV Mod. Installation",
+    "MV Cables",
+    "Other",
+    "Civil Works",
+    "Cleaning and Cabling of PV Mod.",
+    "Tracker Inst.",
+    "Site Costs",
+    "Earth Movement",
     "OEM Building",
-    "Civil Works"
+    "Solar Cables",
+    "Equipment"
   ],
   "metadata": {
-    "total_mappings": 927,
+    "total_mappings": 948,
     "total_categories": 16,
-    "last_updated": "C:\\Users\\Admin\\Documents\\GitHub\\BOQ-TOOLS",
-    "migrated_to_pretty_categories": true,
-    "migration_backup": "config\\category_dictionary.backup.json"
+    "last_updated": "C:\\Users\\Admin\\Documents\\GitHub\\BOQ-TOOLS"
   }
 }

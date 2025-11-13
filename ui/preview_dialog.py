@@ -177,11 +177,13 @@ class PreviewDialog:
             self.summary_tree.heading(col, text=col)
             self.summary_tree.column(col, width=150)
         
-        summary_tree_scroll = ttk.Scrollbar(summary_frame_inner, orient=tk.VERTICAL, command=self.summary_tree.yview)
-        self.summary_tree.configure(yscrollcommand=summary_tree_scroll.set)
+        summary_vsb = ttk.Scrollbar(summary_frame_inner, orient=tk.VERTICAL, command=self.summary_tree.yview)
+        summary_hsb = ttk.Scrollbar(summary_frame_inner, orient=tk.HORIZONTAL, command=self.summary_tree.xview)
+        self.summary_tree.configure(yscrollcommand=summary_vsb.set, xscrollcommand=summary_hsb.set)
         
         self.summary_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        summary_tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        summary_vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        summary_hsb.pack(side=tk.BOTTOM, fill=tk.X)
 
     def _create_sheets_tab(self):
         """Create the sheets tab"""
@@ -201,12 +203,14 @@ class PreviewDialog:
             else:
                 self.sheets_tree.column(col, width=120)
         
-        # Scrollbar
-        sheets_scroll = ttk.Scrollbar(sheets_frame, orient=tk.VERTICAL, command=self.sheets_tree.yview)
-        self.sheets_tree.configure(yscrollcommand=sheets_scroll.set)
+        # Scrollbars
+        sheets_vsb = ttk.Scrollbar(sheets_frame, orient=tk.VERTICAL, command=self.sheets_tree.yview)
+        sheets_hsb = ttk.Scrollbar(sheets_frame, orient=tk.HORIZONTAL, command=self.sheets_tree.xview)
+        self.sheets_tree.configure(yscrollcommand=sheets_vsb.set, xscrollcommand=sheets_hsb.set)
         
         self.sheets_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-        sheets_scroll.pack(side=tk.RIGHT, fill=tk.Y, pady=5)
+        sheets_vsb.pack(side=tk.RIGHT, fill=tk.Y, pady=5)
+        sheets_hsb.pack(side=tk.BOTTOM, fill=tk.X, padx=5)
         
         # Bind double-click for sheet details
         self.sheets_tree.bind('<Double-1>', self._on_sheet_double_click)
@@ -239,12 +243,14 @@ class PreviewDialog:
             else:
                 self.mappings_tree.column(col, width=150)
         
-        # Scrollbar
-        mappings_scroll = ttk.Scrollbar(mappings_frame, orient=tk.VERTICAL, command=self.mappings_tree.yview)
-        self.mappings_tree.configure(yscrollcommand=mappings_scroll.set)
+        # Scrollbars
+        mappings_vsb = ttk.Scrollbar(mappings_frame, orient=tk.VERTICAL, command=self.mappings_tree.yview)
+        mappings_hsb = ttk.Scrollbar(mappings_frame, orient=tk.HORIZONTAL, command=self.mappings_tree.xview)
+        self.mappings_tree.configure(yscrollcommand=mappings_vsb.set, xscrollcommand=mappings_hsb.set)
         
         self.mappings_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-        mappings_scroll.pack(side=tk.RIGHT, fill=tk.Y, pady=5)
+        mappings_vsb.pack(side=tk.RIGHT, fill=tk.Y, pady=5)
+        mappings_hsb.pack(side=tk.BOTTOM, fill=tk.X, padx=5)
 
     def _create_preview_tab(self):
         """Create the data preview tab"""

@@ -268,7 +268,7 @@ class DataValidator:
                             row_index=row_idx,
                             column_index=col_idx,
                             validation_type=ValidationType.DATA_TYPE,
-                            level=ValidationLevel.ERROR,
+                            level=ValidationLevel.WARNING, # Changed from ERROR to WARNING
                             message=f"Invalid quantity format: {value}",
                             expected_value="Numeric value",
                             actual_value=value,

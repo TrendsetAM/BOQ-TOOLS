@@ -85,3 +85,9 @@ logs/boq_tools.log
 examples/export.xlsx
 logs/boq_tools.log
 *.log
+/examples
+/logs
+/logs
+logs/boq_tools.log
+*.log
+/test_outputs

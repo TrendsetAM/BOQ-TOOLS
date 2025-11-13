@@ -1,7 +1,7 @@
 # BOQ Tools Implementation Summary
 
 ## Overview
-Successfully implemented a comprehensive Bill of Quantities (BoQ) Excel processor with intelligent column mapping, sheet classification, and validation capabilities.
+Successfully implemented a comprehensive Bill of Quantities (BoQ) Excel processor with intelligent column mapping, sheet classification, validation capabilities, and advanced comparison engine for analyzing multiple BOQ files.
 
 ## ✅ Completed Components
 
@@ -17,10 +17,12 @@ BOQ-TOOLS/
 ├── core/                  # Core business logic
 │   ├── __init__.py
 │   ├── boq_processor.py   # Main BOQ processor (396 lines)
-│   └── file_processor.py  # Excel file processor (567 lines)
+│   ├── file_processor.py  # Excel file processor (567 lines)
+│   └── comparison_engine.py # Advanced comparison engine (621 lines)
 ├── ui/                    # User interface
 │   ├── __init__.py
-│   └── main_window.py     # Tkinter UI skeleton
+│   ├── main_window.py     # Tkinter UI with comparison workflow
+│   └── comparison_row_review_dialog.py # Comparison row review dialog
 ├── utils/                 # Utilities
 │   ├── __init__.py
 │   ├── config.py          # Configuration system (400+ lines)
@@ -34,7 +36,7 @@ BOQ-TOOLS/
 ```
 
 ### 2. **Configuration System (`utils/config.py`)**
-- **8 Column Types**: Description, Quantity, Unit Price, Total Price, Classification, Unit, Code, Remarks
+- **9 Column Types**: Description, Quantity, Unit Price, Total Price, Unit, Code, Scope, Manhours, Wage
 - **Extensive Keyword Mappings**: 80+ keywords across all column types
 - **Sheet Classifications**: 8 sheet types (BOQ main, summary, preliminaries, etc.)
 - **Validation Thresholds**: Configurable confidence scores and limits
@@ -61,7 +63,24 @@ BOQ-TOOLS/
 - **Error Handling**: Robust error handling and logging
 - **Integration**: Seamless integration with configuration system
 
-### 5. **Demo Scripts**
+### 5. **Advanced Comparison Engine (`core/comparison_engine.py`)**
+- **ComparisonProcessor Class**: Orchestrates the complete comparison workflow
+- **MERGE Operations**: Update existing master rows with comparison data
+- **ADD Operations**: Add new items from comparison files
+- **Row Validation**: Comprehensive validation of comparison rows
+- **Instance Management**: Handle multiple instances of the same item
+- **Offer-Specific Columns**: Create offer-specific data columns
+- **Data Cleanup**: Finalize and clean up merged datasets
+- **Error Handling**: Robust error handling throughout comparison process
+
+### 6. **Comparison UI Components**
+- **ComparisonRowReviewDialog**: Interactive dialog for reviewing comparison rows
+- **Manual Validity Toggle**: Allow users to manually validate/invalidate rows
+- **Visual Feedback**: Color-coded rows (green for valid, red for invalid)
+- **Summary Statistics**: Real-time summary of valid/invalid rows
+- **Integration**: Seamless integration with main window workflow
+
+### 7. **Demo Scripts**
 - **Configuration Demo**: Shows column mapping and sheet classification
 - **File Processor Demo**: Demonstrates Excel file handling capabilities
 - **BOQ Processor Demo**: Complete end-to-end processing pipeline
@@ -93,13 +112,24 @@ validation = {
 }
 ```
 
-### **4. Memory Management**
+### **4. Advanced Comparison Workflow**
+```python
+# Complete comparison workflow
+processor = ComparisonProcessor()
+processor.load_master_dataset(master_df)
+processor.load_comparison_data(comparison_df)
+row_results = processor.process_comparison_rows()
+instance_results = processor.process_valid_rows()
+cleanup_results = processor.cleanup_comparison_data()
+```
+
+### **5. Memory Management**
 ```python
 # Efficient processing with limits
 processor = ExcelProcessor(max_memory_mb=512, chunk_size=1000)
 ```
 
-### **5. Error Handling**
+### **6. Error Handling**
 ```python
 # Robust error handling throughout
 try:
@@ -117,14 +147,17 @@ except (FileNotFoundError, InvalidFileException, MemoryError) as e:
 - ✅ **Memory Usage**: Efficient processing within 512MB limit
 - ✅ **Error Handling**: Graceful handling of all error scenarios
 - ✅ **Validation**: Comprehensive validation with scoring
+- ✅ **Comparison Workflow**: Complete end-to-end comparison processing
+- ✅ **UI Integration**: Seamless integration of comparison workflow
 
 ### **Processing Capabilities**
 - **File Formats**: .xlsx (primary), .xls (legacy support)
 - **Sheet Types**: 8 different BOQ sheet classifications
-- **Column Types**: 8 standard BOQ column types
+- **Column Types**: 9 standard BOQ column types
 - **Data Limits**: 10,000 rows × 50 columns per sheet
 - **Memory Limits**: Configurable up to 512MB
 - **Processing Speed**: ~1000 rows/second on standard hardware
+- **Comparison Support**: Multiple BOQ files with offer-specific data
 
 ## 🚀 Usage Examples
 
@@ -136,6 +169,25 @@ with BOQProcessor() as processor:
     if processor.load_excel("boq_file.xlsx"):
         results = processor.process()
         print(f"Processed {results['summary']['total_items']} items")
+```
+
+### **Comparison Workflow**
+```python
+from core.comparison_engine import ComparisonProcessor
+
+# Initialize comparison processor
+processor = ComparisonProcessor()
+
+# Load master dataset
+processor.load_master_dataset(master_df)
+
+# Load comparison data
+processor.load_comparison_data(comparison_df)
+
+# Process comparison
+row_results = processor.process_comparison_rows()
+instance_results = processor.process_valid_rows()
+cleanup_results = processor.cleanup_comparison_data()
 ```
 
 ### **Configuration Access**
@@ -174,7 +226,21 @@ print(f"Found {len(analysis['visible_sheets'])} sheets")
 - Data validation and scoring
 - Structured data extraction
 
-### **4. Logging and Error Handling**
+### **4. Comparison Engine**
+- Master dataset management
+- Comparison file processing
+- Row validation and matching
+- MERGE/ADD operations
+- Instance management
+- Data cleanup
+
+### **5. UI Integration**
+- Comparison workflow integration
+- Row review dialog
+- Progress tracking
+- Error handling and user feedback
+
+### **6. Logging and Error Handling**
 - Comprehensive logging throughout
 - Graceful error handling
 - Detailed error messages
@@ -191,6 +257,8 @@ print(f"Found {len(analysis['visible_sheets'])} sheets")
 6. **API Interface**: REST API for web integration
 7. **Machine Learning**: Enhanced classification accuracy
 8. **Template System**: Custom BOQ templates
+9. **Advanced Comparison**: More sophisticated matching algorithms
+10. **Comparison Templates**: Save and reuse comparison configurations
 
 ### **Performance Optimizations**
 1. **Parallel Processing**: Multi-threaded file processing
@@ -222,6 +290,8 @@ print(f"Found {len(analysis['visible_sheets'])} sheets")
 ✅ **Sheet Classification**: AI-powered sheet type identification
 ✅ **Memory Management**: Efficient processing of large files
 ✅ **Validation System**: Comprehensive validation with scoring
+✅ **Advanced Comparison Engine**: Complete comparison workflow with MERGE/ADD operations
+✅ **UI Integration**: Seamless integration of comparison workflow with user interface
 ✅ **Modular Architecture**: Clean, extensible code structure
 ✅ **Documentation**: Complete documentation and examples
 ✅ **Error Handling**: Robust error handling throughout
@@ -234,7 +304,9 @@ The BOQ Tools project has been successfully implemented with all requested featu
 1. **ExcelProcessor Class**: Comprehensive Excel file handling with metadata extraction
 2. **Configuration System**: Flexible configuration for different BOQ formats
 3. **BOQ Processor**: Intelligent processing pipeline with validation
-4. **Demo Scripts**: Complete examples showcasing all functionality
-5. **Documentation**: Comprehensive documentation and usage examples
+4. **Advanced Comparison Engine**: Complete comparison workflow with MERGE/ADD operations
+5. **UI Integration**: Seamless integration of comparison workflow
+6. **Demo Scripts**: Complete examples showcasing all functionality
+7. **Documentation**: Comprehensive documentation and usage examples
 
-The system is production-ready and can be easily extended for additional features and requirements. 
+The system is production-ready and can be easily extended for additional features and requirements. The new comparison workflow provides powerful capabilities for analyzing multiple BOQ files and merging offer-specific data. 

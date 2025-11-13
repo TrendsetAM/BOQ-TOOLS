@@ -74,7 +74,20 @@ class RowReviewDialog:
             for col in columns:
                 tree.heading(col, text=col)
                 tree.column(col, width=120 if col != "#" else 40, anchor=tk.W)
-            tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            # Add scrollbars
+            vsb = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
+            hsb = ttk.Scrollbar(frame, orient="horizontal", command=tree.xview)
+            tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+            
+            # Grid layout
+            tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
+            vsb.grid(row=0, column=1, sticky=(tk.N, tk.S))
+            hsb.grid(row=1, column=0, sticky=(tk.W, tk.E))
+            
+            # Configure grid weights
+            frame.columnconfigure(0, weight=1)
+            frame.rowconfigure(0, weight=1)
             self.treeviews[sheet] = tree
             # Populate rows
             for idx, row in enumerate(rows):

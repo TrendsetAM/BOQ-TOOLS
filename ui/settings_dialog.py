@@ -21,7 +21,8 @@ DEFAULT_SETTINGS = {
             "confidence_minimum": 0.6,
             "validation_error_limit": 10,
             "missing_data_threshold": 0.3,
-            "ambiguous_mapping_threshold": 0.7
+            "ambiguous_mapping_threshold": 0.7,
+            "max_header_rows": 20
         },
         "performance": {
             "max_memory_mb": 512,
@@ -80,6 +81,7 @@ VALIDATION_RULES = {
     "validation_error_limit": {"min": 0, "max": 1000, "type": int},
     "missing_data_threshold": {"min": 0.0, "max": 1.0, "type": float},
     "ambiguous_mapping_threshold": {"min": 0.0, "max": 1.0, "type": float},
+    "max_header_rows": {"min": 5, "max": 50, "type": int},
     "max_memory_mb": {"min": 64, "max": 8192, "type": int},
     "chunk_size_rows": {"min": 100, "max": 10000, "type": int},
     "max_concurrent_sheets": {"min": 1, "max": 16, "type": int},
@@ -264,6 +266,13 @@ class SettingsDialog:
         missing_data_scale.configure(command=lambda v: self.missing_data_label.configure(text=f"{float(v):.1f}"))
         tooltip(missing_data_scale, "Threshold for flagging rows with missing required data")
         
+        # Max header rows
+        ttk.Label(thresholds_frame, text="Max Header Search Rows:").grid(row=3, column=0, sticky=tk.W, pady=2)
+        self.max_header_rows_var = tk.IntVar()
+        max_header_rows_spin = ttk.Spinbox(thresholds_frame, from_=5, to=50, textvariable=self.max_header_rows_var, width=10)
+        max_header_rows_spin.grid(row=3, column=1, sticky=tk.W, padx=5, pady=2)
+        tooltip(max_header_rows_spin, "Maximum number of rows to search for headers (increase for sheets with headers lower down)")
+        
         # Performance settings
         performance_frame = ttk.LabelFrame(pref_frame, text="Performance Settings", padding=10)
         performance_frame.pack(fill=tk.X, padx=5, pady=5)
@@ -440,6 +449,7 @@ class SettingsDialog:
         self.confidence_var.set(thresholds.get("confidence_minimum", 0.6))
         self.error_limit_var.set(thresholds.get("validation_error_limit", 10))
         self.missing_data_var.set(thresholds.get("missing_data_threshold", 0.3))
+        self.max_header_rows_var.set(thresholds.get("max_header_rows", 20))
         
         performance = user_prefs.get("performance", {})
         self.memory_var.set(performance.get("max_memory_mb", 512))
@@ -552,6 +562,7 @@ class SettingsDialog:
             ("confidence_minimum", self.confidence_var.get()),
             ("validation_error_limit", self.error_limit_var.get()),
             ("missing_data_threshold", self.missing_data_var.get()),
+            ("max_header_rows", self.max_header_rows_var.get()),
             ("max_memory_mb", self.memory_var.get()),
             ("chunk_size_rows", self.chunk_size_var.get()),
             ("backup_interval_hours", self.backup_interval_var.get())
@@ -591,7 +602,8 @@ class SettingsDialog:
                     "confidence_minimum": self.confidence_var.get(),
                     "validation_error_limit": self.error_limit_var.get(),
                     "missing_data_threshold": self.missing_data_var.get(),
-                    "ambiguous_mapping_threshold": 0.7  # Default
+                    "ambiguous_mapping_threshold": 0.7,  # Default
+                    "max_header_rows": self.max_header_rows_var.get()
                 },
                 "performance": {
                     "max_memory_mb": self.memory_var.get(),

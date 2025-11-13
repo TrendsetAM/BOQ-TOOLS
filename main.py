@@ -83,6 +83,11 @@ class BOQApplicationController:
         self.settings = {}
         self.auto_save_timer = None
         
+        # Comparison workflow state
+        self.comparison_processor = None
+        self.master_file_mapping = None
+        self.is_comparison_mode = False
+        
         # Threading
         self.processing_lock = threading.Lock()
         self.shutdown_event = threading.Event()
@@ -124,7 +129,7 @@ class BOQApplicationController:
         # Setup logging
         self.logger = setup_logging(
             log_file=self.log_file,
-            level=logging.INFO,
+            level=logging.DEBUG,  # Temporarily set to DEBUG to see offer info logs
             console_output=True
         )
         
@@ -144,10 +149,13 @@ class BOQApplicationController:
         """Initialize all core processing components"""
         assert self.logger is not None
         try:
+            # Get max_header_rows from user preferences
+            max_header_rows = self.settings.get("user_preferences", {}).get("processing_thresholds", {}).get("max_header_rows", 20)
+            
             # Initialize processors
             self.processor = ExcelProcessor()
             self.sheet_classifier = SheetClassifier()
-            self.column_mapper = ColumnMapper()
+            self.column_mapper = ColumnMapper(max_header_rows=max_header_rows)
             self.row_classifier = RowClassifier()
             self.validator = DataValidator()
             self.mapping_generator = MappingGenerator()
@@ -267,7 +275,7 @@ class BOQApplicationController:
             }
             
             row_classifications = {
-                name: self.row_classifier.classify_rows(data, column_mappings_dict.get(name, {}))
+                name: self.row_classifier.classify_rows(data, column_mappings_dict.get(name, {}), name)
                 for name, data in sheet_data.items()
             }
             if progress_callback: progress_callback(70, "Rows classified")
@@ -397,10 +405,167 @@ class BOQApplicationController:
             ])
         }
     
+    def get_current_dataframe(self):
+        """Get the current DataFrame from the most recently processed file"""
+        try:
+            if not self.current_files:
+                return None
+            
+            # Get the most recently processed file
+            latest_file_key = max(self.current_files.keys(), 
+                                key=lambda k: self.current_files[k].get('processing_time', 0))
+            
+            file_data = self.current_files[latest_file_key]
+            file_mapping = file_data.get('file_mapping')
+            
+            if not file_mapping:
+                return None
+            
+            # Try to get DataFrame from file mapping
+            if hasattr(file_mapping, 'dataframe'):
+                return file_mapping.dataframe
+            elif hasattr(file_mapping, 'get_processed_dataframe'):
+                return file_mapping.get_processed_dataframe()
+            else:
+                # Create DataFrame from the file mapping data
+                return self._create_dataframe_from_mapping(file_mapping)
+                
+        except Exception as e:
+            assert self.logger is not None
+            self.logger.error(f"Error getting current DataFrame: {e}")
+            return None
+    
+    def _create_dataframe_from_mapping(self, file_mapping):
+        """Create a DataFrame from file mapping data"""
+        try:
+            import pandas as pd
+            import logging
+            logger = logging.getLogger(__name__)
+            
+            rows = []
+            for sheet in getattr(file_mapping, 'sheets', []):
+                if getattr(sheet, 'sheet_type', 'BOQ') != 'BOQ':
+                    continue
+                
+                col_headers = [cm.mapped_type for cm in getattr(sheet, 'column_mappings', [])]
+                sheet_name = sheet.sheet_name
+                
+                # DEBUG: Log column mappings for this sheet
+                logger.info(f"Sheet '{sheet_name}' column mappings: {col_headers}")
+                logger.info(f"Sheet '{sheet_name}' ignore columns: {[cm.mapped_type for cm in getattr(sheet, 'column_mappings', []) if cm.mapped_type == 'ignore']}")
+                
+                # Get row validity for this sheet
+                sheet_validity = getattr(file_mapping, 'row_validity', {}).get(sheet_name, {})
+                
+                for rc in getattr(sheet, 'row_classifications', []):
+                    # Only include valid rows
+                    if not sheet_validity.get(rc.row_index, True):
+                        continue
+                    
+                    row_data = getattr(rc, 'row_data', None)
+                    if row_data is None and hasattr(sheet, 'sheet_data'):
+                        try:
+                            row_data = sheet.sheet_data[rc.row_index]
+                        except Exception:
+                            row_data = None
+                    
+                    if row_data is None:
+                        row_data = []
+                    
+                    row_dict = {}
+                    # Add Source_Sheet column for each row
+                    row_dict['Source_Sheet'] = sheet_name
+                    
+                    for cm in sheet.column_mappings:
+                        mapped_type = getattr(cm, 'mapped_type', None)
+                        if not mapped_type:
+                            continue
+                        # Skip columns mapped to 'ignore' - they shouldn't be in the DataFrame
+                        if mapped_type == 'ignore':
+                            continue
+                        idx = cm.column_index
+                        row_dict[mapped_type] = row_data[idx] if idx < len(row_data) else ''
+                    
+
+                    
+                    # Only add essential columns that are not 'ignore'
+                    essential_columns = ['description', 'quantity', 'unit_price', 'total_price', 'unit', 'code', 'scope', 'manhours', 'wage', 'category']
+                    for mt in col_headers:
+                        if mt not in row_dict and mt in essential_columns:
+                            row_dict[mt] = ''
+                    
+                    rows.append(row_dict)
+            
+            if rows:
+                df = pd.DataFrame(rows)
+                
+                # DEBUG: Log DataFrame columns before normalization
+                logger.info(f"DataFrame columns before normalization: {list(df.columns)}")
+                
+                # Normalize column names to be case-insensitive
+                # Map common variations to standard names
+                column_mapping = {
+                    'description': 'Description',
+                    'Description': 'Description',
+                    'DESCRIPTION': 'Description',
+                    'category': 'Category',
+                    'Category': 'Category',
+                    'CATEGORY': 'Category',
+                    'code': 'code',
+                    'unit': 'unit',
+                    'quantity': 'quantity',
+                    'unit_price': 'unit_price',
+                    'total_price': 'total_price'
+                }
+                
+                # Rename columns to standard names
+                df_renamed = df.copy()
+                for col in df.columns:
+                    if col.lower() in column_mapping:
+                        new_name = column_mapping[col.lower()]
+                        if col != new_name:
+                            df_renamed = df_renamed.rename(columns={col: new_name})
+                
+                # DEBUG: Log DataFrame columns after normalization
+                logger.info(f"DataFrame columns after normalization: {list(df_renamed.columns)}")
+                
+                # Reorder columns to the correct sequence (Source_Sheet is now added during DataFrame creation)
+                desired_order = ['Source_Sheet', 'code', 'Category', 'Description', 'unit', 'quantity', 'unit_price', 'total_price', 'manhours', 'wage']
+                
+                # Add any missing columns with empty values
+                for col in desired_order:
+                    if col not in df_renamed.columns:
+                        df_renamed[col] = ''
+                
+                # Reorder columns to match desired sequence
+                available_columns = [col for col in desired_order if col in df_renamed.columns]
+                remaining_columns = [col for col in df_renamed.columns if col not in desired_order]
+                final_columns = available_columns + remaining_columns
+                
+                df_renamed = df_renamed[final_columns]
+                
+                # DEBUG: Log final column order
+                logger.info(f"Final DataFrame columns in order: {list(df_renamed.columns)}")
+                
+                return df_renamed
+            else:
+                return None
+                
+        except Exception as e:
+            assert self.logger is not None
+            self.logger.error(f"Error creating DataFrame from mapping: {e}")
+            return None
+    
     def update_settings(self, new_settings: Dict[str, Any]):
         """Update application settings"""
         self.settings.update(new_settings)
         self._save_settings()
+        
+        # Update ColumnMapper with new max_header_rows setting if it changed
+        if self.column_mapper:
+            max_header_rows = self.settings.get("user_preferences", {}).get("processing_thresholds", {}).get("max_header_rows", 20)
+            self.column_mapper.max_header_rows = max_header_rows
+        
         assert self.logger is not None
         self.logger.info("Settings updated and saved")
     
@@ -455,6 +620,69 @@ class BOQApplicationController:
         
         assert self.logger is not None
         self.logger.info("Application shutdown completed")
+    
+    def start_comparison_workflow(self, master_file_mapping: FileMapping):
+        """
+        Start comparison workflow with master file mapping
+        
+        Args:
+            master_file_mapping: FileMapping for the master BoQ
+        """
+        assert self.logger is not None
+        self.logger.info("Starting comparison workflow")
+        
+        self.is_comparison_mode = True
+        self.master_file_mapping = master_file_mapping
+        
+        # Initialize comparison processor
+        from core.comparison_engine import ComparisonProcessor
+        self.comparison_processor = ComparisonProcessor()
+        
+        self.logger.info("Comparison workflow initialized")
+    
+    def process_comparison_file(self, file_path: Path, offer_info: Dict[str, Any]) -> Optional[FileMapping]:
+        """
+        Process comparison file in comparison workflow
+        
+        Args:
+            file_path: Path to comparison file
+            offer_info: Offer information for comparison
+            
+        Returns:
+            FileMapping for comparison file or None if failed
+        """
+        assert self.logger is not None
+        
+        if not self.is_comparison_mode:
+            self.logger.error("Not in comparison mode")
+            return None
+        
+        try:
+            # Process the comparison file using normal file processing
+            comparison_mapping = self.process_file(file_path)
+            
+            # Store offer information
+            comparison_mapping.offer_info = offer_info
+            
+            self.logger.info(f"Comparison file processed: {file_path}")
+            return comparison_mapping
+            
+        except Exception as e:
+            self.logger.error(f"Error processing comparison file {file_path}: {e}")
+            return None
+    
+    def get_comparison_processor(self) -> Optional[Any]:
+        """Get the current comparison processor"""
+        return self.comparison_processor
+    
+    def end_comparison_workflow(self):
+        """End comparison workflow and reset state"""
+        assert self.logger is not None
+        self.logger.info("Ending comparison workflow")
+        
+        self.is_comparison_mode = False
+        self.master_file_mapping = None
+        self.comparison_processor = None
 
 
 class BOQApplication:
@@ -722,12 +950,18 @@ def main():
     
     try:
         # Determine mode and run
+        # Check if running as executable (PyInstaller sets sys.frozen)
+        is_executable = getattr(sys, 'frozen', False)
+        
         if args.gui:
             app.run_gui()
         elif args.file or args.batch:
             app.run_cli(args)
+        elif is_executable:
+            # When running as executable, default to GUI mode
+            app.run_gui()
         else:
-            # Interactive CLI mode
+            # Interactive CLI mode (only when running as Python script)
             app.run_cli()
             
     except KeyboardInterrupt:
