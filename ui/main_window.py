@@ -15,6 +15,7 @@ import dataclasses
 import pandas as pd
 import openpyxl
 from core.row_classifier import RowType
+from core.category_dictionary import CategoryDictionary
 from datetime import datetime
 import pickle
 import re
@@ -240,6 +241,14 @@ try:
 except ImportError:
     CATEGORIZATION_AVAILABLE = False
 
+# Import category dictionary manager dialog
+try:
+    from ui.category_dictionary_manager import CategoryDictionaryManager
+    CATEGORY_DICTIONARY_MANAGER_AVAILABLE = True
+except ImportError:
+    CATEGORY_DICTIONARY_MANAGER_AVAILABLE = False
+    CategoryDictionaryManager = None
+
 # Color coding for confidence
 def confidence_color(score):
     if score >= 0.8:
@@ -303,6 +312,7 @@ class MainWindow:
         self.current_offer_info = None
         self.previous_offer_info = None  # For subsequent BOQs in comparison
         self.current_sheet_categories = None
+        self._category_dictionary_instance = None
         # Create widgets
         self._create_main_widgets()
         self._setup_drag_and_drop()
@@ -352,6 +362,11 @@ class MainWindow:
         menubar.add_cascade(label="View", menu=view_menu)
         # Tools
         tools_menu = tk.Menu(menubar, tearoff=0)
+        tools_menu.add_command(
+            label="Manage Category Dictionary",
+            command=self.open_category_dictionary_manager,
+        )
+        tools_menu.add_separator()
         tools_menu.add_command(label="Settings", command=self.open_settings)
         menubar.add_cascade(label="Tools", menu=tools_menu)
         self.root.config(menu=menubar)
@@ -454,6 +469,33 @@ class MainWindow:
             show_settings_dialog(self.root)
         else:
             self._not_implemented()
+
+    def _get_category_dictionary(self) -> CategoryDictionary:
+        if self._category_dictionary_instance is None:
+            self._category_dictionary_instance = CategoryDictionary()
+        return self._category_dictionary_instance
+
+    def open_category_dictionary_manager(self):
+        if not CATEGORY_DICTIONARY_MANAGER_AVAILABLE:
+            messagebox.showerror(
+                "Unavailable",
+                "The category dictionary manager is not available in this build.",
+                parent=self.root,
+            )
+            return
+
+        try:
+            dictionary = self._get_category_dictionary()
+        except Exception as exc:
+            logger.exception("Unable to initialize category dictionary.")
+            messagebox.showerror(
+                "Error",
+                f"Unable to load the category dictionary:\n{exc}",
+                parent=self.root,
+            )
+            return
+
+        CategoryDictionaryManager(self.root, dictionary)
 
     def export_file(self):
         # Get the currently selected tab

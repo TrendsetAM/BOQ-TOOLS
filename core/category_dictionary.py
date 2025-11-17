@@ -5,10 +5,11 @@ Manages predefined dictionary mapping descriptions to categories for automatic r
 
 import json
 import logging
-import re
+import shutil
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Any
-from dataclasses import dataclass, asdict, field
+from typing import Dict, Iterable, List, Optional, Set, Tuple, Any, Union
+from dataclasses import dataclass, asdict, field, replace
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,7 @@ class CategoryMapping:
     created_date: Optional[str] = None
     usage_count: int = 0
     notes: Optional[str] = None
+    original_description: Optional[str] = None
 
 
 @dataclass
@@ -187,24 +189,29 @@ class CategoryDictionary:
         try:
             # Ensure directory exists
             self.dictionary_file.parent.mkdir(parents=True, exist_ok=True)
-            
+
+            sorted_mappings = [
+                asdict(self.mappings[key])
+                for key in sorted(self.mappings.keys())
+            ]
+
             # Prepare data for saving
             data = {
-                'mappings': [asdict(mapping) for mapping in self.mappings.values()],
-                'categories': list(self.categories),
+                'mappings': sorted_mappings,
+                'categories': sorted(self.categories),
                 'metadata': {
                     'total_mappings': len(self.mappings),
                     'total_categories': len(self.categories),
-                    'last_updated': str(Path().cwd())
+                    'last_updated': datetime.now(timezone.utc).isoformat()
                 }
             }
-            
+
             with open(self.dictionary_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
-            
+
             logger.info(f"Dictionary saved to {self.dictionary_file}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error saving dictionary: {e}")
             return False
@@ -239,7 +246,8 @@ class CategoryDictionary:
                 description=normalized_desc,
                 category=pretty_category,  # Store in pretty format
                 confidence=confidence,
-                notes=notes
+                notes=notes,
+                original_description=description
             )
             
             # Add to dictionary
@@ -317,9 +325,193 @@ class CategoryDictionary:
         if normalized_desc in self.mappings:
             del self.mappings[normalized_desc]
             logger.info(f"Removed mapping: '{description}'")
+            self._prune_unused_categories()
             return True
         
         return False
+
+    def list_mappings(self) -> List[Dict[str, Any]]:
+        """
+        Return a snapshot list of mappings for deterministic UI display.
+
+        Returns:
+            A list of dictionaries sorted by description. Mutating the returned
+            structures will not affect the in-memory mappings.
+        """
+        snapshot = []
+        for mapping in self.mappings.values():
+            mapping_dict = asdict(mapping)
+            mapping_dict["description"] = mapping.original_description or mapping.description
+            mapping_dict["normalized_description"] = mapping.description
+            snapshot.append(mapping_dict)
+
+        return sorted(snapshot, key=lambda item: item["description"])
+
+    def upsert_mappings(
+        self,
+        mapped_pairs: Iterable[Union[CategoryMapping, Dict[str, Any]]],
+    ) -> Tuple[int, int]:
+        """
+        Insert or update mappings in bulk.
+
+        Args:
+            mapped_pairs: Iterable of CategoryMapping instances or dictionaries
+                containing at minimum `description` and `category`.
+
+        Returns:
+            Tuple (added_count, updated_count).
+        """
+        added = 0
+        updated = 0
+
+        for item in mapped_pairs:
+            if isinstance(item, CategoryMapping):
+                mapping = replace(item)  # Defensive copy
+            elif isinstance(item, dict):
+                raw_description = str(item.get("description", ""))
+                normalized_desc = raw_description.lower().strip()
+                mapping = CategoryMapping(
+                    description=normalized_desc,
+                    category=str(item.get("category", "")).strip(),
+                    confidence=float(item.get("confidence", 1.0)),
+                    created_date=item.get("created_date"),
+                    usage_count=int(item.get("usage_count", 0)),
+                    notes=item.get("notes"),
+                    original_description=item.get("original_description") or raw_description,
+                )
+            else:
+                logger.warning(f"Unsupported mapping payload type: {type(item)}")
+                continue
+
+            normalized_desc = mapping.description.lower().strip()
+            if not normalized_desc:
+                logger.debug("Skipping upsert for empty description")
+                continue
+
+            mapping.description = normalized_desc
+            if mapping.original_description is None:
+                mapping.original_description = normalized_desc
+
+            if normalized_desc in self.mappings:
+                existing = self.mappings[normalized_desc]
+                old_category = existing.category
+                self.mappings[normalized_desc] = mapping
+                updated += 1
+                if old_category != mapping.category:
+                    self._prune_unused_categories({old_category})
+            else:
+                self.mappings[normalized_desc] = mapping
+                added += 1
+
+            if mapping.category:
+                self.categories.add(mapping.category)
+
+        return added, updated
+
+    def delete_mappings(self, descriptions: Iterable[str]) -> int:
+        """
+        Remove mappings for the given descriptions.
+
+        Args:
+            descriptions: Iterable of descriptions to remove.
+
+        Returns:
+            Number of mappings removed.
+        """
+        removed = 0
+        affected_categories: Set[str] = set()
+
+        for description in descriptions:
+            normalized_desc = description.lower().strip()
+            mapping = self.mappings.pop(normalized_desc, None)
+            if mapping:
+                removed += 1
+                affected_categories.add(mapping.category)
+                logger.debug(f"Deleted mapping for '{description}'")
+
+        if affected_categories:
+            self._prune_unused_categories(affected_categories)
+
+        return removed
+
+    def rename_category_for_descriptions(
+        self, descriptions: Iterable[str], new_category: str
+    ) -> int:
+        """
+        Apply a new category to the provided descriptions.
+
+        Args:
+            descriptions: Iterable of descriptions whose category will be updated.
+            new_category: New category label.
+
+        Returns:
+            Number of mappings updated.
+        """
+        updated = 0
+        affected_categories: Set[str] = set()
+        normalized_category = new_category.strip()
+
+        for description in descriptions:
+            normalized_desc = description.lower().strip()
+            mapping = self.mappings.get(normalized_desc)
+            if not mapping:
+                continue
+            if mapping.category == normalized_category:
+                continue
+            affected_categories.add(mapping.category)
+            mapping.category = normalized_category
+            self.categories.add(normalized_category)
+            updated += 1
+
+        if affected_categories:
+            self._prune_unused_categories(affected_categories)
+
+        return updated
+
+    def backup_current_file(self) -> Optional[Path]:
+        """
+        Create a timestamped backup copy of the current dictionary file.
+
+        Returns:
+            Path to the backup file if created, otherwise None.
+        """
+        if not self.dictionary_file.exists():
+            logger.debug("No dictionary file exists yet; skipping backup.")
+            return None
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        backup_name = f"{self.dictionary_file.stem}_{timestamp}.backup.json"
+        backup_path = self.dictionary_file.with_name(backup_name)
+
+        try:
+            shutil.copy2(self.dictionary_file, backup_path)
+            logger.info(f"Created dictionary backup at {backup_path}")
+            return backup_path
+        except Exception as exc:
+            logger.warning(f"Failed to create dictionary backup: {exc}")
+            return None
+
+    def _prune_unused_categories(self, candidate_categories: Optional[Iterable[str]] = None) -> None:
+        """
+        Remove categories that are no longer referenced by any mapping.
+
+        Args:
+            candidate_categories: Optional iterable of category names to re-evaluate.
+        """
+        if candidate_categories is None:
+            categories_to_check = set(self.categories)
+        else:
+            categories_to_check = {cat for cat in candidate_categories if cat}
+
+        if not categories_to_check:
+            return
+
+        active_categories = {mapping.category for mapping in self.mappings.values()}
+        removed = categories_to_check - active_categories
+        if removed:
+            self.categories.difference_update(removed)
+            for category in removed:
+                logger.debug(f"Pruned unused category '{category}'")
     
     def update_mapping(self, description: str, new_category: str, 
                       new_confidence: Optional[float] = None,
@@ -329,6 +521,7 @@ class CategoryDictionary:
         
         if normalized_desc in self.mappings:
             mapping = self.mappings[normalized_desc]
+            old_category = mapping.category
             mapping.category = new_category.strip()  # Store in pretty format
             
             if new_confidence is not None:
@@ -338,6 +531,8 @@ class CategoryDictionary:
                 mapping.notes = new_notes
             
             self.categories.add(new_category.strip())  # Store pretty category
+            if old_category != new_category.strip():
+                self._prune_unused_categories({old_category})
             logger.info(f"Updated mapping: '{description}' -> '{new_category}'")
             return True
         
