@@ -2946,6 +2946,36 @@ class MainWindow:
             
             logger.info(f"Updating master dataset with {len(updated_df)} rows and {len(updated_df.columns)} columns")
             
+            # CRITICAL FIX: Rename master columns to include master offer name for consistency
+            # This ensures both master and comparison offers have offer-specific column names
+            master_offer_info = getattr(file_mapping, 'offer_info', None)
+            if master_offer_info:
+                master_offer_name = master_offer_info.get('offer_name', 'Master')
+                logger.info(f"Master offer name: {master_offer_name}")
+                
+                # Define columns that should have offer names
+                offer_specific_columns = ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']
+                
+                # Only rename base columns (those without brackets) to include master offer name
+                columns_to_rename = {}
+                for base_col in offer_specific_columns:
+                    if base_col in updated_df.columns:
+                        # Check if this column already has an offer name (contains brackets)
+                        if '[' not in base_col and ']' not in base_col:
+                            # Base column exists without offer name, rename it
+                            offer_col = f'{base_col}[{master_offer_name}]'
+                            # Only rename if the offer column doesn't already exist
+                            if offer_col not in updated_df.columns:
+                                columns_to_rename[base_col] = offer_col
+                
+                if columns_to_rename:
+                    logger.info(f"Renaming master columns to include offer name: {columns_to_rename}")
+                    updated_df = updated_df.rename(columns=columns_to_rename)
+                else:
+                    logger.info("Master columns already have offer names or don't need renaming")
+            else:
+                logger.warning("No master offer info found, skipping master column renaming")
+            
             # Update the file mapping's dataframe with the merged data
             file_mapping.dataframe = updated_df.copy()
             
@@ -4159,21 +4189,14 @@ Offer Information:
             # Collect all offers and their total costs
             offers_data = []
             
-            # Add current offer
-            current_offer_data = {
-                'offer_name': offer_name,
-                'project_name': project_name,
-                'project_size': project_size,
-                'date': date,
-                'total_cost': total_cost,
-                'formatted_total_cost': formatted_total_cost
-            }
-            offers_data.append(current_offer_data)
-            
             # Check for comparison offers in the current dataframe (regardless of workflow flag)
             comparison_columns = [col for col in display_df.columns if '[' in col and ']' in col and 'total_price' in col]
             logger.info(f"DEBUG: display_df columns: {list(display_df.columns)}")
             logger.info(f"DEBUG: comparison_columns found: {comparison_columns}")
+            logger.info(f"DEBUG: Current offer_name: {offer_name}")
+            
+            # Track which offers we've already added to avoid duplicates (store lowercase for case-insensitive comparison)
+            added_offer_names_lower = set()
             
             if comparison_columns:
                 # Look for comparison offers in the current dataframe
@@ -4182,6 +4205,13 @@ Offer Information:
                     try:
                         # Extract offer name from column name (e.g., "total_price[OfferName]" -> "OfferName")
                         offer_name_from_col = col.split('[')[1].split(']')[0]
+                        offer_name_from_col_lower = offer_name_from_col.lower()
+                        logger.debug(f"Processing offer from column {col}: offer_name_from_col='{offer_name_from_col}', current offer_name='{offer_name}'")
+                        
+                        # Skip if we've already added this offer (case-insensitive comparison)
+                        if offer_name_from_col_lower in added_offer_names_lower:
+                            logger.debug(f"Skipping duplicate offer: {offer_name_from_col}")
+                            continue
                         
                         # Calculate total cost for this offer
                         offer_total_cost = 0.0
@@ -4195,35 +4225,68 @@ Offer Information:
                         else:
                             formatted_offer_cost = "0,00"
                         
-                        # Add comparison offer data - use the user's entered project info
-                        # Get the comparison offer info from the controller's current_files
-                        comparison_offer_info = None
+                        # Get the offer info from the controller's current_files
+                        offer_info_for_col = None
                         for file_key, file_data in self.controller.current_files.items():
                             if 'offers' in file_data and offer_name_from_col in file_data['offers']:
-                                comparison_offer_info = file_data['offers'][offer_name_from_col]
+                                offer_info_for_col = file_data['offers'][offer_name_from_col]
                                 break
                         
-                        # Use user's entered project info if available, otherwise use defaults
-                        if comparison_offer_info:
-                            project_name = comparison_offer_info.get('project_name', f"Project {offer_name_from_col}")
-                            project_size = comparison_offer_info.get('project_size', 'N/A')
-                            date = comparison_offer_info.get('date', date)
+                        # Use offer info if available, otherwise use defaults
+                        if offer_info_for_col:
+                            project_name_for_col = offer_info_for_col.get('project_name', f"Project {offer_name_from_col}")
+                            project_size_for_col = offer_info_for_col.get('project_size', 'N/A')
+                            date_for_col = offer_info_for_col.get('date', date)
                         else:
-                            project_name = f"Project {offer_name_from_col}"
-                            project_size = "N/A"
+                            project_name_for_col = f"Project {offer_name_from_col}"
+                            project_size_for_col = "N/A"
+                            date_for_col = date
                         
-                        comparison_offer_data = {
-                            'offer_name': offer_name_from_col,
-                            'project_name': project_name,
-                            'project_size': project_size,
-                            'date': date,
-                            'total_cost': offer_total_cost,
-                            'formatted_total_cost': formatted_offer_cost
-                        }
-                        offers_data.append(comparison_offer_data)
+                        # Check if this is the current/master offer (case-insensitive comparison)
+                        if offer_name_from_col_lower == offer_name.lower():
+                            # This is the master offer - use the current offer data we already have
+                            current_offer_data = {
+                                'offer_name': offer_name,  # Use the original offer_name (preserves case)
+                                'project_name': project_name,
+                                'project_size': project_size,
+                                'date': date,
+                                'total_cost': offer_total_cost,  # Use calculated cost from column
+                                'formatted_total_cost': formatted_offer_cost
+                            }
+                            offers_data.append(current_offer_data)
+                            added_offer_names_lower.add(offer_name_from_col_lower)
+                            logger.debug(f"Added master offer: {offer_name}")
+                        else:
+                            # This is a comparison offer
+                            comparison_offer_data = {
+                                'offer_name': offer_name_from_col,
+                                'project_name': project_name_for_col,
+                                'project_size': project_size_for_col,
+                                'date': date_for_col,
+                                'total_cost': offer_total_cost,
+                                'formatted_total_cost': formatted_offer_cost
+                            }
+                            offers_data.append(comparison_offer_data)
+                            added_offer_names_lower.add(offer_name_from_col_lower)
+                            logger.debug(f"Added comparison offer: {offer_name_from_col}")
                         
                     except Exception as e:
                         logger.warning(f"Error processing comparison offer column {col}: {e}")
+            else:
+                # No comparison columns found - add current offer only (master hasn't been compared yet)
+                # But only if we haven't already added it
+                if offer_name.lower() not in added_offer_names_lower:
+                    current_offer_data = {
+                        'offer_name': offer_name,
+                        'project_name': project_name,
+                        'project_size': project_size,
+                        'date': date,
+                        'total_cost': total_cost,
+                        'formatted_total_cost': formatted_total_cost
+                    }
+                    offers_data.append(current_offer_data)
+                    added_offer_names_lower.add(offer_name.lower())
+                    logger.debug(f"Added current offer (no comparison columns): {offer_name}")
             
             # Sort offers by total cost (lowest first)
             offers_data.sort(key=lambda x: x['total_cost'])
@@ -4950,26 +5013,8 @@ Offer Information:
                             logger.debug(f"Found offer name from current_files: {current_offer_name}")
                         break
             
-            # Calculate category costs for current offer
-            current_offer_data = [current_offer_name]
-            for category in category_order:
-                try:
-                    category_data = dataframe[dataframe['Category'] == category]
-                    if len(category_data) > 0:
-                        category_prices = pd.to_numeric(category_data['total_price'], errors='coerce')
-                        category_cost = category_prices.sum()
-                        if category_cost > 0:
-                            formatted_cost = format_number_eu(category_cost)
-                        else:
-                            formatted_cost = "0,00"
-                        current_offer_data.append(formatted_cost)
-                    else:
-                        current_offer_data.append("0,00")
-                except Exception as e:
-                    logger.warning(f"Error calculating cost for category {category}: {e}")
-                    current_offer_data.append("0,00")
-            
-            offers_data.append(current_offer_data)
+            # Track which offers we've already added to avoid duplicates
+            added_offer_names_lower = set()
             
             # Check for comparison offers in the current dataframe (regardless of workflow flag)
             comparison_columns = [col for col in display_dataframe.columns if '[' in col and ']' in col and 'total_price' in col]
@@ -4983,9 +5028,15 @@ Offer Information:
                     try:
                         # Extract offer name from column name (e.g., "total_price[OfferName]" -> "OfferName")
                         offer_name_from_col = col.split('[')[1].split(']')[0]
+                        offer_name_from_col_lower = offer_name_from_col.lower()
                         
-                        # Calculate category costs for this comparison offer
-                        comparison_offer_data = [offer_name_from_col]
+                        # Skip if we've already added this offer
+                        if offer_name_from_col_lower in added_offer_names_lower:
+                            logger.debug(f"Skipping duplicate offer in summarize: {offer_name_from_col}")
+                            continue
+                        
+                        # Calculate category costs for this offer
+                        offer_data = [offer_name_from_col]
                         
                         for category in category_order:
                             try:
@@ -4998,17 +5049,53 @@ Offer Information:
                                         formatted_cost = format_number_eu(category_cost)
                                     else:
                                         formatted_cost = "0,00"
-                                    comparison_offer_data.append(formatted_cost)
+                                    offer_data.append(formatted_cost)
                                 else:
-                                    comparison_offer_data.append("0,00")
+                                    offer_data.append("0,00")
                             except Exception as e:
-                                logger.warning(f"Error calculating cost for category {category} in comparison offer {offer_name_from_col}: {e}")
-                                comparison_offer_data.append("0,00")
+                                logger.warning(f"Error calculating cost for category {category} in offer {offer_name_from_col}: {e}")
+                                offer_data.append("0,00")
                         
-                        offers_data.append(comparison_offer_data)
+                        # Check if this is the current/master offer
+                        if offer_name_from_col_lower == current_offer_name.lower():
+                            # This is the master offer - use current_offer_name to preserve case
+                            offer_data[0] = current_offer_name
+                            offers_data.append(offer_data)
+                            added_offer_names_lower.add(offer_name_from_col_lower)
+                            logger.debug(f"Added master offer in summarize: {current_offer_name}")
+                        else:
+                            # This is a comparison offer
+                            offers_data.append(offer_data)
+                            added_offer_names_lower.add(offer_name_from_col_lower)
+                            logger.debug(f"Added comparison offer in summarize: {offer_name_from_col}")
                         
                     except Exception as e:
                         logger.warning(f"Error processing comparison offer column {col}: {e}")
+            else:
+                # No comparison columns found - add current offer only (master hasn't been compared yet)
+                if current_offer_name.lower() not in added_offer_names_lower:
+                    # Calculate category costs for current offer
+                    current_offer_data = [current_offer_name]
+                    for category in category_order:
+                        try:
+                            category_data = dataframe[dataframe['Category'] == category]
+                            if len(category_data) > 0:
+                                category_prices = pd.to_numeric(category_data['total_price'], errors='coerce')
+                                category_cost = category_prices.sum()
+                                if category_cost > 0:
+                                    formatted_cost = format_number_eu(category_cost)
+                                else:
+                                    formatted_cost = "0,00"
+                                current_offer_data.append(formatted_cost)
+                            else:
+                                current_offer_data.append("0,00")
+                        except Exception as e:
+                            logger.warning(f"Error calculating cost for category {category}: {e}")
+                            current_offer_data.append("0,00")
+                    
+                    offers_data.append(current_offer_data)
+                    added_offer_names_lower.add(current_offer_name.lower())
+                    logger.debug(f"Added current offer in summarize (no comparison columns): {current_offer_name}")
             
             # Insert all offers into category treeview
             for offer_data in offers_data:
@@ -5973,66 +6060,97 @@ Offer Information:
             else:
                 formatted_total_cost = "0,00"
             
-            # Add current offer
-            current_offer_data = {
-                'offer_name': offer_name,
-                'project_name': project_name,
-                'project_size': project_size,
-                'date': date,
-                'total_cost': total_cost,
-                'formatted_total_cost': formatted_total_cost
-            }
-            offers_data.append(current_offer_data)
+            # Track which offers we've already added to avoid duplicates (store lowercase for case-insensitive comparison)
+            added_offer_names_lower = set()
             
-            # Add comparison offers
+            # Add comparison offers (including master offer if it has renamed columns)
             comparison_columns = [col for col in updated_df.columns if '[' in col and ']' in col and 'total_price' in col]
             
-            for col in comparison_columns:
-                try:
-                    # Extract offer name from column name
-                    offer_name_from_col = col.split('[')[1].split(']')[0]
-                    
-                    # Calculate total cost for this offer
-                    offer_total_cost = 0.0
-                    if col in updated_df.columns:
-                        numeric_prices = pd.to_numeric(updated_df[col], errors='coerce')
-                        offer_total_cost = numeric_prices.sum()
-                    
-                    # Format total cost
-                    if offer_total_cost > 0:
-                        formatted_offer_cost = format_number_eu(offer_total_cost)
-                    else:
-                        formatted_offer_cost = "0,00"
-                    
-                    # Add comparison offer data - use the user's entered project info
-                    # Get the comparison offer info from the controller's current_files
-                    comparison_offer_info = None
-                    for file_key, file_data in self.controller.current_files.items():
-                        if 'offers' in file_data and offer_name_from_col in file_data['offers']:
-                            comparison_offer_info = file_data['offers'][offer_name_from_col]
-                            break
-                    
-                    # Use user's entered project info if available, otherwise use defaults
-                    if comparison_offer_info:
-                        project_name = comparison_offer_info.get('project_name', f"Project {offer_name_from_col}")
-                        project_size = comparison_offer_info.get('project_size', 'N/A')
-                        date = comparison_offer_info.get('date', date)
-                    else:
-                        project_name = f"Project {offer_name_from_col}"
-                        project_size = "N/A"
-                    
-                    comparison_offer_data = {
-                        'offer_name': offer_name_from_col,
+            if comparison_columns:
+                for col in comparison_columns:
+                    try:
+                        # Extract offer name from column name
+                        offer_name_from_col = col.split('[')[1].split(']')[0]
+                        offer_name_from_col_lower = offer_name_from_col.lower()
+                        
+                        # Skip if we've already added this offer
+                        if offer_name_from_col_lower in added_offer_names_lower:
+                            logger.debug(f"Skipping duplicate offer in summary refresh: {offer_name_from_col}")
+                            continue
+                        
+                        # Calculate total cost for this offer
+                        offer_total_cost = 0.0
+                        if col in updated_df.columns:
+                            numeric_prices = pd.to_numeric(updated_df[col], errors='coerce')
+                            offer_total_cost = numeric_prices.sum()
+                        
+                        # Format total cost
+                        if offer_total_cost > 0:
+                            formatted_offer_cost = format_number_eu(offer_total_cost)
+                        else:
+                            formatted_offer_cost = "0,00"
+                        
+                        # Get the offer info from the controller's current_files
+                        offer_info_for_col = None
+                        for file_key, file_data in self.controller.current_files.items():
+                            if 'offers' in file_data and offer_name_from_col in file_data['offers']:
+                                offer_info_for_col = file_data['offers'][offer_name_from_col]
+                                break
+                        
+                        # Use offer info if available, otherwise use defaults
+                        if offer_info_for_col:
+                            project_name_for_col = offer_info_for_col.get('project_name', f"Project {offer_name_from_col}")
+                            project_size_for_col = offer_info_for_col.get('project_size', 'N/A')
+                            date_for_col = offer_info_for_col.get('date', date)
+                        else:
+                            project_name_for_col = f"Project {offer_name_from_col}"
+                            project_size_for_col = "N/A"
+                            date_for_col = date
+                        
+                        # Check if this is the current/master offer
+                        if offer_name_from_col_lower == offer_name.lower():
+                            # This is the master offer - use the current offer data
+                            current_offer_data = {
+                                'offer_name': offer_name,  # Use original offer_name (preserves case)
+                                'project_name': project_name,
+                                'project_size': project_size,
+                                'date': date,
+                                'total_cost': offer_total_cost,  # Use calculated cost from column
+                                'formatted_total_cost': formatted_offer_cost
+                            }
+                            offers_data.append(current_offer_data)
+                            added_offer_names_lower.add(offer_name_from_col_lower)
+                            logger.debug(f"Added master offer in summary refresh: {offer_name}")
+                        else:
+                            # This is a comparison offer
+                            comparison_offer_data = {
+                                'offer_name': offer_name_from_col,
+                                'project_name': project_name_for_col,
+                                'project_size': project_size_for_col,
+                                'date': date_for_col,
+                                'total_cost': offer_total_cost,
+                                'formatted_total_cost': formatted_offer_cost
+                            }
+                            offers_data.append(comparison_offer_data)
+                            added_offer_names_lower.add(offer_name_from_col_lower)
+                            logger.debug(f"Added comparison offer in summary refresh: {offer_name_from_col}")
+                        
+                    except Exception as e:
+                        logger.warning(f"Error processing comparison offer column {col}: {e}")
+            else:
+                # No comparison columns found - add current offer only (master hasn't been compared yet)
+                if offer_name.lower() not in added_offer_names_lower:
+                    current_offer_data = {
+                        'offer_name': offer_name,
                         'project_name': project_name,
                         'project_size': project_size,
                         'date': date,
-                        'total_cost': offer_total_cost,
-                        'formatted_total_cost': formatted_offer_cost
+                        'total_cost': total_cost,
+                        'formatted_total_cost': formatted_total_cost
                     }
-                    offers_data.append(comparison_offer_data)
-                    
-                except Exception as e:
-                    logger.warning(f"Error processing comparison offer column {col}: {e}")
+                    offers_data.append(current_offer_data)
+                    added_offer_names_lower.add(offer_name.lower())
+                    logger.debug(f"Added current offer in summary refresh (no comparison columns): {offer_name}")
             
             # Sort offers by total cost (lowest first)
             offers_data.sort(key=lambda x: x['total_cost'])
