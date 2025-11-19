@@ -2517,11 +2517,34 @@ class MainWindow:
                     logger.warning(f"Could not find master file mapping for tab: {current_tab_id}")
                     return
             
+            # CRITICAL: Verify file_mapping.dataframe has the updated columns before creating master_df
+            if hasattr(master_file_mapping, 'dataframe') and master_file_mapping.dataframe is not None:
+                existing_cols_before = [col for col in master_file_mapping.dataframe.columns if '[' in col and ']' in col]
+                logger.info(f"file_mapping.dataframe before _create_unified_dataframe has {len(master_file_mapping.dataframe.columns)} columns")
+                logger.info(f"Existing offer columns in file_mapping.dataframe: {existing_cols_before}")
+            else:
+                logger.warning("file_mapping.dataframe is None or doesn't exist before creating master_df")
+            
             # Create unified master dataset with consistent structure
             master_df = self._create_unified_dataframe(master_file_mapping, is_master=True)
             if master_df is None or master_df.empty:
                 messagebox.showerror("Error", "No data available for comparison")
                 return
+            
+            # CRITICAL: Log existing offer columns to verify they're preserved
+            existing_offer_cols = [col for col in master_df.columns if '[' in col and ']' in col]
+            logger.info(f"Master dataframe before comparison has {len(master_df.columns)} columns")
+            logger.info(f"Existing offer columns in master_df: {existing_offer_cols}")
+            
+            # Verify we didn't lose any columns
+            if hasattr(master_file_mapping, 'dataframe') and master_file_mapping.dataframe is not None:
+                original_cols = set(master_file_mapping.dataframe.columns)
+                master_df_cols = set(master_df.columns)
+                lost_cols = original_cols - master_df_cols
+                if lost_cols:
+                    logger.error(f"CRITICAL: Columns lost when creating master_df: {lost_cols}")
+                else:
+                    logger.info("All columns preserved when creating master_df")
             
             # Prompt for comparison offer information FIRST (same as master workflow)
             comparison_offer_info = self._prompt_offer_info(is_first_boq=False)
@@ -2564,6 +2587,20 @@ class MainWindow:
             
             # Load master dataset
             self.comparison_processor.load_master_dataset(master_df)
+            
+            # CRITICAL: Verify that all existing offer columns are preserved in processor
+            processor_offer_cols = [col for col in self.comparison_processor.master_dataset.columns if '[' in col and ']' in col]
+            logger.info(f"Processor master_dataset has {len(self.comparison_processor.master_dataset.columns)} columns")
+            logger.info(f"Offer columns in processor.master_dataset: {processor_offer_cols}")
+            
+            # Verify all existing offer columns are present
+            missing_cols = set(existing_offer_cols) - set(processor_offer_cols)
+            if missing_cols:
+                logger.error(f"CRITICAL: Missing offer columns in processor: {missing_cols}")
+                logger.error(f"Master df columns: {list(master_df.columns)}")
+                logger.error(f"Processor columns: {list(self.comparison_processor.master_dataset.columns)}")
+            else:
+                logger.info("All existing offer columns preserved in processor")
             
             # Create unified comparison dataset with consistent structure
             comparison_df = self._create_unified_dataframe(comparison_file_mapping, is_master=False)
@@ -2944,7 +2981,24 @@ class MainWindow:
                 logger.warning("No updated dataframe available from processor")
                 return
             
+            # CRITICAL: Log all columns before updating to verify existing offer columns are preserved
+            all_columns = list(updated_df.columns)
+            offer_columns = [col for col in all_columns if '[' in col and ']' in col]
             logger.info(f"Updating master dataset with {len(updated_df)} rows and {len(updated_df.columns)} columns")
+            logger.info(f"All columns in updated_df: {all_columns}")
+            logger.info(f"Offer columns in updated_df: {offer_columns}")
+            
+            # Also log what columns were in file_mapping.dataframe before update
+            if hasattr(file_mapping, 'dataframe') and file_mapping.dataframe is not None:
+                old_offer_cols = [col for col in file_mapping.dataframe.columns if '[' in col and ']' in col]
+                logger.info(f"Offer columns in file_mapping.dataframe BEFORE update: {old_offer_cols}")
+                
+                # Check if any offer columns are being lost
+                lost_cols = set(old_offer_cols) - set(offer_columns)
+                if lost_cols:
+                    logger.error(f"CRITICAL: Offer columns being lost during update: {lost_cols}")
+                else:
+                    logger.info("All existing offer columns preserved in updated_df")
             
             # CRITICAL FIX: Rename master columns to include master offer name for consistency
             # This ensures both master and comparison offers have offer-specific column names
@@ -2977,7 +3031,28 @@ class MainWindow:
                 logger.warning("No master offer info found, skipping master column renaming")
             
             # Update the file mapping's dataframe with the merged data
+            # CRITICAL: This must preserve ALL existing offer columns from previous comparisons
             file_mapping.dataframe = updated_df.copy()
+            
+            # CRITICAL: Also update final_dataframe if it exists (used by some workflows)
+            if hasattr(file_mapping, 'final_dataframe'):
+                file_mapping.final_dataframe = updated_df.copy()
+            
+            # CRITICAL: Ensure the updated dataframe is also stored in controller.current_files
+            # This ensures consistency across all storage locations
+            for file_key, file_data in self.controller.current_files.items():
+                if 'file_mapping' in file_data and file_data['file_mapping'] == file_mapping:
+                    file_data['final_dataframe'] = updated_df.copy()
+                    logger.info(f"Updated final_dataframe in current_files for file_key: {file_key}")
+                    break
+            
+            # Verify the update was successful
+            if hasattr(file_mapping, 'dataframe') and file_mapping.dataframe is not None:
+                final_offer_cols = [col for col in file_mapping.dataframe.columns if '[' in col and ']' in col]
+                logger.info(f"file_mapping.dataframe updated with {len(file_mapping.dataframe.columns)} columns")
+                logger.info(f"Final offer columns in file_mapping.dataframe: {final_offer_cols}")
+            else:
+                logger.error("CRITICAL: file_mapping.dataframe is None after update!")
             
             # CRITICAL FIX: Store comparison offer info in controller's current_files
             # This ensures the comparison offer info is available for summary display
@@ -3638,10 +3713,32 @@ Offer Information:
                         recommendations=[]
                     )
                     
-                    # Create file_mapping with minimal structure
+                    # Extract sheet names from Source_Sheet column if available
+                    # Create minimal sheet objects (just need sheet_name attribute for comparison workflow)
+                    sheet_names = set()
+                    if 'Source_Sheet' in analysis_data['dataframe'].columns:
+                        sheet_names = set(analysis_data['dataframe']['Source_Sheet'].dropna().unique())
+                    elif 'source_sheet' in analysis_data['dataframe'].columns:
+                        sheet_names = set(analysis_data['dataframe']['source_sheet'].dropna().unique())
+                    
+                    # Create minimal sheet objects (just need sheet_name attribute)
+                    sheets = []
+                    for sheet_name in sheet_names:
+                        if sheet_name:  # Skip empty/None values
+                            # Create minimal sheet object with just sheet_name attribute
+                            # This is sufficient for the comparison workflow which only needs sheet names
+                            sheet_obj = type('Sheet', (), {'sheet_name': str(sheet_name)})()
+                            sheets.append(sheet_obj)
+                    
+                    # If no sheets found, create a default sheet
+                    if not sheets:
+                        default_sheet = type('Sheet', (), {'sheet_name': 'Unknown'})()
+                        sheets = [default_sheet]
+                    
+                    # Create file_mapping with sheet information
                     file_mapping = FileMapping(
                         metadata=metadata,
-                        sheets=[],  # Empty sheets list - data is already categorized
+                        sheets=sheets,  # Include sheet info for comparison workflow
                         global_confidence=1.0,
                         processing_summary=processing_summary,
                         review_flags=[],
@@ -3654,6 +3751,7 @@ Offer Information:
                     file_mapping.categorization_result = analysis_data['categorization_result']
                     file_mapping.offer_info = offer_info
                     file_mapping.tab = tab
+                    file_mapping.dataframe = analysis_data['dataframe']  # Also set dataframe attribute
                     
                     # Store the analysis data in controller for summary display
                     file_key = f"loaded_analysis_{int(time.time())}"
@@ -5639,8 +5737,30 @@ Offer Information:
             # Get master mapping info
             master_sheets = getattr(master_file_mapping, 'sheets', [])
             if not master_sheets:
-                logger.error("Master file mapping has no sheets info")
-                return None
+                # Fallback: extract sheet names from Source_Sheet column in dataframe if available
+                logger.warning("Master file mapping has no sheets info, attempting to extract from dataframe")
+                if hasattr(master_file_mapping, 'dataframe') and master_file_mapping.dataframe is not None:
+                    if 'Source_Sheet' in master_file_mapping.dataframe.columns:
+                        sheet_names = set(master_file_mapping.dataframe['Source_Sheet'].dropna().unique())
+                        logger.info(f"Extracted {len(sheet_names)} sheet names from Source_Sheet column: {sheet_names}")
+                        # Create minimal sheet info for comparison
+                        master_sheets = [type('Sheet', (), {'sheet_name': name})() for name in sheet_names if name]
+                    elif 'source_sheet' in master_file_mapping.dataframe.columns:
+                        sheet_names = set(master_file_mapping.dataframe['source_sheet'].dropna().unique())
+                        logger.info(f"Extracted {len(sheet_names)} sheet names from source_sheet column: {sheet_names}")
+                        master_sheets = [type('Sheet', (), {'sheet_name': name})() for name in sheet_names if name]
+                
+                # If still no sheets, use fallback: get visible sheets from comparison file
+                if not master_sheets:
+                    logger.warning("Could not extract sheet names from dataframe, using comparison file sheets as fallback")
+                    visible_sheets = excel_processor.get_visible_sheets()
+                    if visible_sheets:
+                        master_sheets = [type('Sheet', (), {'sheet_name': name})() for name in visible_sheets]
+                        logger.info(f"Using {len(master_sheets)} sheets from comparison file as master sheets")
+                
+                if not master_sheets:
+                    logger.error("Master file mapping has no sheets info and could not determine sheets from dataframe or comparison file")
+                    return None
             
             visible_sheets = excel_processor.get_visible_sheets()
             if not visible_sheets:
@@ -5775,17 +5895,31 @@ Offer Information:
             
             # First, try to use the dataframe attribute if it exists
             if hasattr(file_mapping, 'dataframe') and file_mapping.dataframe is not None:
-                df = file_mapping.dataframe.copy()
+                # CRITICAL: Make a deep copy to avoid any reference issues
+                df = file_mapping.dataframe.copy(deep=True)
                 logger.info(f"Using existing dataframe for {dataset_type}: {len(df)} rows, columns: {list(df.columns)}")
                 
-                # Ensure we have the required columns
-                required_columns = ['Description', 'code', 'unit', 'quantity', 'unit_price', 'total_price']
-                missing_columns = [col for col in required_columns if col not in df.columns]
+                # CRITICAL: Preserve all existing offer-specific columns (those with brackets)
+                # These represent previous comparison offers and must be preserved
+                existing_offer_columns = [col for col in df.columns if '[' in col and ']' in col]
+                logger.info(f"Preserving {len(existing_offer_columns)} existing offer columns: {existing_offer_columns}")
                 
-                if missing_columns:
-                    logger.warning(f"Missing columns in {dataset_type} dataset: {missing_columns}")
-                    # Add missing columns with empty values
-                    for col in missing_columns:
+                # Verify we're not losing any columns
+                if len(df.columns) != len(file_mapping.dataframe.columns):
+                    logger.error(f"CRITICAL: Column count mismatch! Original: {len(file_mapping.dataframe.columns)}, Copy: {len(df.columns)}")
+                    logger.error(f"Original columns: {list(file_mapping.dataframe.columns)}")
+                    logger.error(f"Copy columns: {list(df.columns)}")
+                
+                # Ensure we have the required base columns (but don't overwrite offer columns)
+                required_columns = ['Description', 'code', 'unit', 'quantity', 'unit_price', 'total_price']
+                # Only check for base columns (without brackets)
+                base_required_columns = [col for col in required_columns if '[' not in col and ']' not in col]
+                missing_base_columns = [col for col in base_required_columns if col not in df.columns]
+                
+                if missing_base_columns:
+                    logger.warning(f"Missing base columns in {dataset_type} dataset: {missing_base_columns}")
+                    # Add missing base columns with empty values
+                    for col in missing_base_columns:
                         df[col] = ''
                 
                 # Ensure Source_Sheet column is populated for debug export
@@ -5825,8 +5959,55 @@ Offer Information:
                     else:
                         df['Source_Sheet'] = 'Unknown'
                 
-                # Ensure consistent column order
-                final_columns = required_columns + [col for col in df.columns if col not in required_columns]
+                # Ensure consistent column order: base columns first, then existing offer columns, then other columns
+                # CRITICAL: Build final_columns from ALL existing columns to ensure nothing is lost
+                base_columns = [col for col in base_required_columns if col in df.columns]
+                other_columns = [col for col in df.columns if col not in base_columns and col not in existing_offer_columns and col != 'Source_Sheet']
+                
+                # Build final_columns ensuring ALL columns from df are included
+                final_columns = []
+                seen = set()
+                
+                # Add base columns first
+                for col in base_columns:
+                    if col not in seen:
+                        final_columns.append(col)
+                        seen.add(col)
+                
+                # Add Source_Sheet if it exists
+                if 'Source_Sheet' in df.columns and 'Source_Sheet' not in seen:
+                    final_columns.append('Source_Sheet')
+                    seen.add('Source_Sheet')
+                
+                # Add existing offer columns
+                for col in existing_offer_columns:
+                    if col not in seen:
+                        final_columns.append(col)
+                        seen.add(col)
+                
+                # Add all other columns
+                for col in other_columns:
+                    if col not in seen:
+                        final_columns.append(col)
+                        seen.add(col)
+                
+                # CRITICAL: Add any remaining columns that weren't caught (safety net)
+                all_original_cols = set(df.columns)
+                all_final_cols = set(final_columns)
+                missing_cols = all_original_cols - all_final_cols
+                if missing_cols:
+                    logger.warning(f"Found {len(missing_cols)} columns not in final_columns, adding them: {missing_cols}")
+                    final_columns.extend(sorted(missing_cols))  # Sort for consistency
+                
+                # Verify we have all columns
+                if len(final_columns) != len(df.columns):
+                    logger.error(f"CRITICAL: Column count mismatch! Original: {len(df.columns)}, Final list: {len(final_columns)}")
+                    logger.error(f"Original columns: {list(df.columns)}")
+                    logger.error(f"Final columns: {final_columns}")
+                else:
+                    logger.info(f"Column reordering successful: {len(final_columns)} columns preserved")
+                
+                # Apply the column order
                 df = df[final_columns]
                 
                 # Log sample descriptions to verify they're not empty

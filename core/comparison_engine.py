@@ -507,24 +507,28 @@ class ComparisonProcessor:
             df: pandas DataFrame for the master BoQ
             manual_invalidations: set of row keys or tracker (optional)
         """
-        self.master_dataset = df
+        # CRITICAL: Make a copy to avoid modifying the original dataframe
+        # This ensures all existing offer columns are preserved
+        self.master_dataset = df.copy()
+        
+        # Log existing offer columns to verify they're preserved
+        existing_offer_columns = [col for col in self.master_dataset.columns if '[' in col and ']' in col]
+        logger.info(f"Master dataset loaded with {len(self.master_dataset)} rows and {len(self.master_dataset.columns)} columns")
+        logger.info(f"Preserving {len(existing_offer_columns)} existing offer columns: {existing_offer_columns}")
+        
         if manual_invalidations is not None:
             self.manual_invalidations = set(manual_invalidations)
         else:
             self.manual_invalidations = set()
         
-        # logger.info(f"Master dataset loaded with {len(df)} rows")
-        # logger.info(f"Master dataset columns: {list(df.columns)}")
-        # logger.info(f"Master dataset shape: {df.shape}")
-        
         # Log some sample descriptions for debugging
-        if 'Description' in df.columns:
-            sample_descriptions = df['Description'].head(5).tolist()
+        if 'Description' in self.master_dataset.columns:
+            sample_descriptions = self.master_dataset['Description'].head(5).tolist()
             # logger.info(f"Master dataset sample descriptions: {sample_descriptions}")
             
             # Check for any descriptions that might be problematic
-            if len(df) > 190:  # If we have enough rows to check row 195
-                row_195_desc = df.iloc[194]['Description'] if 194 < len(df) else "N/A"
+            if len(self.master_dataset) > 190:  # If we have enough rows to check row 195
+                row_195_desc = self.master_dataset.iloc[194]['Description'] if 194 < len(self.master_dataset) else "N/A"
                 # logger.info(f"Master dataset row 195 description: '{row_195_desc}'")
 
     def load_comparison_data(self, df):
