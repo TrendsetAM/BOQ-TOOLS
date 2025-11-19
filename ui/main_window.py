@@ -16,6 +16,7 @@ import pandas as pd
 import openpyxl
 from core.row_classifier import RowType
 from core.category_dictionary import CategoryDictionary
+from core.validator import ValidationType
 from datetime import datetime
 import pickle
 import re
@@ -464,6 +465,120 @@ class MainWindow:
         # Instead of a dialog, just update the status bar
         self._update_status("This feature is not implemented yet.")
 
+    def _get_current_tab_id(self):
+        """
+        Get the current tab ID as a string consistently.
+        
+        Returns:
+            str: The current tab ID as a string, or None if no tab is selected
+        """
+        try:
+            tab_id = self.notebook.select()
+            if tab_id:
+                return str(tab_id)
+            return None
+        except Exception as e:
+            logger.warning(f"Error getting current tab ID: {e}")
+            return None
+
+    def _store_file_mapping_for_tab(self, tab_id, file_mapping, file_key=None):
+        """
+        Store file_mapping in both tracking dictionaries for consistency.
+        
+        Args:
+            tab_id: Tab ID (will be converted to string)
+            file_mapping: FileMapping object to store
+            file_key: Optional file key for controller.current_files. If None, will try to find existing entry
+        """
+        try:
+            if not tab_id:
+                logger.warning("Cannot store file_mapping: tab_id is None")
+                return
+            
+            if not file_mapping:
+                logger.warning("Cannot store file_mapping: file_mapping is None")
+                return
+            
+            tab_id_str = str(tab_id)
+            
+            # Ensure file_mapping has tab reference
+            try:
+                file_mapping.tab = self.notebook.nametowidget(tab_id) if tab_id else None
+            except Exception as e:
+                logger.warning(f"Could not set tab reference on file_mapping: {e}")
+                # Continue anyway - tab reference is optional
+            
+            # Store in tab_id_to_file_mapping
+            self.tab_id_to_file_mapping[tab_id_str] = file_mapping
+            logger.debug(f"Stored file_mapping in tab_id_to_file_mapping for tab: {tab_id_str}")
+            
+            # Store in controller.current_files if file_key provided or found
+            if file_key:
+                if file_key not in self.controller.current_files:
+                    self.controller.current_files[file_key] = {}
+                self.controller.current_files[file_key]['file_mapping'] = file_mapping
+                logger.debug(f"Stored file_mapping in current_files with key: {file_key}")
+            else:
+                # Try to find existing entry by matching tab
+                found = False
+                for key, file_data in self.controller.current_files.items():
+                    if 'file_mapping' in file_data:
+                        existing_mapping = file_data['file_mapping']
+                        if hasattr(existing_mapping, 'tab') and str(existing_mapping.tab) == tab_id_str:
+                            file_data['file_mapping'] = file_mapping
+                            logger.debug(f"Updated existing file_mapping in current_files with key: {key}")
+                            found = True
+                            break
+                if not found:
+                    logger.debug(f"No existing entry found in current_files for tab: {tab_id_str}")
+        except Exception as e:
+            logger.error(f"Error storing file_mapping for tab: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _get_file_mapping_for_current_tab(self):
+        """
+        Get file_mapping for the current tab using standardized lookup algorithm.
+        Checks tab_id_to_file_mapping first, then falls back to controller.current_files.
+        
+        Returns:
+            FileMapping object if found, None otherwise
+        """
+        try:
+            current_tab_id = self._get_current_tab_id()
+            if not current_tab_id:
+                logger.warning("No current tab ID available")
+                return None
+            
+            # Step 1: Check tab_id_to_file_mapping first (most reliable)
+            file_mapping = self.tab_id_to_file_mapping.get(current_tab_id)
+            if file_mapping:
+                logger.debug(f"Found file_mapping in tab_id_to_file_mapping for tab: {current_tab_id}")
+                return file_mapping
+            
+            # Step 2: Iterate through controller.current_files
+            for file_key, file_data in self.controller.current_files.items():
+                if 'file_mapping' in file_data:
+                    existing_mapping = file_data['file_mapping']
+                    # Check if tab matches
+                    if hasattr(existing_mapping, 'tab'):
+                        tab_str = str(existing_mapping.tab)
+                        if tab_str == current_tab_id:
+                            # Found it! Also store in tab_id_to_file_mapping for future lookups
+                            self.tab_id_to_file_mapping[current_tab_id] = existing_mapping
+                            logger.debug(f"Found file_mapping in current_files, also stored in tab_id_to_file_mapping")
+                            return existing_mapping
+            
+            # Step 3: Not found
+            logger.warning(f"File mapping not found for current tab: {current_tab_id}")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting file_mapping for current tab: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
     def open_settings(self):
         if SETTINGS_AVAILABLE:
             show_settings_dialog(self.root)
@@ -755,6 +870,11 @@ class MainWindow:
         file_mapping.offer_info = offer_info_enhanced
         logger.debug(f"Stored offer info directly in file_mapping: {offer_info_enhanced}")
         
+        # Store file mapping using helper method for consistent tracking
+        current_tab_id = self._get_current_tab_id()
+        if current_tab_id:
+            self._store_file_mapping_for_tab(current_tab_id, file_mapping, file_key)
+        
         # Also store in the current instance for immediate access
         self.current_file_mapping = file_mapping
         logger.debug(f"Stored current_file_mapping reference")
@@ -836,11 +956,19 @@ class MainWindow:
         self.row_review_treeviews = {}
         self.row_validity = {}
 
-        # Ensure file_mapping knows its tab for later lookup
-        file_mapping.tab = tab
-        # Store mapping from tab ID to file_mapping for robust lookup
-        tab_id = str(tab)
-        self.tab_id_to_file_mapping[tab_id] = file_mapping
+        # Store file_mapping using helper method for consistent tracking
+        tab_id = self.notebook.select()
+        # Try to find existing file_key in current_files
+        file_key = None
+        for key, file_data in self.controller.current_files.items():
+            if 'file_mapping' in file_data and file_data['file_mapping'] == file_mapping:
+                file_key = key
+                break
+        # If not found and file_mapping has filepath, use it
+        if not file_key and hasattr(file_mapping, 'filepath') and file_mapping.filepath:
+            file_key = str(Path(file_mapping.filepath).resolve())
+        
+        self._store_file_mapping_for_tab(tab_id, file_mapping, file_key)
 
     def _populate_sheet_tab(self, sheet_frame, sheet):
         """Populate an individual sheet tab with its data and column mappings."""
@@ -2184,7 +2312,7 @@ class MainWindow:
     def _on_categorization_complete(self, final_dataframe, categorization_result):
         """Handle categorization completion"""
         try:
-            current_tab_path = self.notebook.select()
+            current_tab_path = self._get_current_tab_id()
             
             # Get the actual tab widget using nametowidget
             current_tab = self.notebook.nametowidget(self.notebook.select())
@@ -2200,6 +2328,10 @@ class MainWindow:
                     # Store the final dataframe and categorization result
                     file_data['final_dataframe'] = final_dataframe
                     file_data['categorization_result'] = categorization_result
+                    
+                    # Ensure file_mapping is stored in tab_id_to_file_mapping using helper
+                    file_mapping = file_data['file_mapping']
+                    self._store_file_mapping_for_tab(current_tab_path, file_mapping, file_key)
                     
                     # Update the tab with the final categorized data
                     logger.debug(f"Calling _show_final_categorized_data with tab type: {type(current_tab)}")
@@ -2242,6 +2374,9 @@ class MainWindow:
                         'categorization_result': categorization_result,
                         'offer_info': offer_info
                     }
+                    
+                    # Ensure file_mapping is stored in tab_id_to_file_mapping using helper
+                    self._store_file_mapping_for_tab(current_tab_path, file_mapping, file_key)
                     
                     # Update the tab with the final categorized data
                     logger.debug(f"Calling _show_final_categorized_data with tab type: {type(current_tab)}")
@@ -2368,13 +2503,19 @@ class MainWindow:
             from core.comparison_engine import ComparisonProcessor
             import pandas as pd
             
-            # Get the current tab ID and file mapping
-            current_tab_id = self.notebook.select()
-            master_file_mapping = self.tab_id_to_file_mapping.get(current_tab_id)
+            # Get the current tab ID and file mapping using helper method
+            current_tab_id = self._get_current_tab_id()
+            master_file_mapping = self._get_file_mapping_for_current_tab()
             
             if not master_file_mapping:
-                messagebox.showerror("Error", "Could not find master file mapping")
-                return
+                # Fallback: try direct lookup
+                if current_tab_id:
+                    master_file_mapping = self.tab_id_to_file_mapping.get(current_tab_id)
+                
+                if not master_file_mapping:
+                    messagebox.showerror("Error", "Could not find master file mapping")
+                    logger.warning(f"Could not find master file mapping for tab: {current_tab_id}")
+                    return
             
             # Create unified master dataset with consistent structure
             master_df = self._create_unified_dataframe(master_file_mapping, is_master=True)
@@ -2539,35 +2680,70 @@ class MainWindow:
                 self.comparison_processor.comparison_warnings.clear()
             
             if all_warnings:
-                warning_messages = []
-                for warning in all_warnings:
-                    # Extract sheet name and row index from the warning object
-                    # The row_index in ValidationIssue is 0-based, convert to 1-based for display
-                    # The suggestion field might contain the sheet name for unit mismatches
-                    sheet_name = "Unknown Sheet"
-                    row_display_index = warning.row_index + 2 # Convert to Excel row number
-                    
-                    if warning.suggestion and "sheet" in warning.suggestion:
-                        try:
-                            # Extract sheet name from suggestion string
-                            match = re.search(r"sheet '([^']+)'", warning.suggestion)
-                            if match:
-                                sheet_name = match.group(1)
-                        except Exception:
-                            pass # Fallback to "Unknown Sheet"
-                    
-                    # Format message based on warning type
-                    if warning.validation_type == ValidationType.CONSISTENCY: # Unit mismatch
-                        message = f"Unit Mismatch: Sheet '{sheet_name}', Row {row_display_index}. Master unit '{warning.expected_value}' vs. Comparison unit '{warning.actual_value}'."
-                    elif warning.validation_type == ValidationType.DATA_TYPE: # Invalid data type
-                        message = f"Invalid Data: Sheet '{sheet_name}', Row {row_display_index}, Column '{warning.column_index}'. Value '{warning.actual_value}' is not valid. Suggestion: {warning.suggestion}"
-                    else:
-                        message = f"Warning: Sheet '{sheet_name}', Row {row_display_index}. {warning.message}"
-                    
-                    warning_messages.append(message)
+                # Filter out less important warnings - only show actionable ones
+                # Filter out BUSINESS_RULE warnings about invalid rows (user already reviewed these)
+                important_warnings = [
+                    w for w in all_warnings 
+                    if w.validation_type != ValidationType.BUSINESS_RULE or 
+                       "does not meet master BOQ validity criteria" not in w.message
+                ]
                 
-                full_warning_message = "The comparison completed with the following warnings:\n\n" + "\n".join(warning_messages)
-                messagebox.showwarning("Comparison Warnings", full_warning_message)
+                if important_warnings:
+                    warning_messages = []
+                    for warning in important_warnings:
+                        # Extract sheet name and row index from the warning object
+                        # The row_index in ValidationIssue is 0-based, convert to 1-based for display
+                        # The suggestion field might contain the sheet name for unit mismatches
+                        sheet_name = "Unknown Sheet"
+                        row_display_index = warning.row_index + 2 # Convert to Excel row number
+                        
+                        # Try to get Source_Sheet from comparison data if available
+                        if hasattr(self.comparison_processor, 'comparison_data') and self.comparison_processor.comparison_data is not None:
+                            try:
+                                if warning.row_index < len(self.comparison_processor.comparison_data):
+                                    source_sheet = self.comparison_processor.comparison_data.iloc[warning.row_index].get('Source_Sheet', None)
+                                    if source_sheet:
+                                        sheet_name = str(source_sheet)
+                            except Exception:
+                                pass
+                        
+                        # Also try to extract from suggestion field
+                        if sheet_name == "Unknown Sheet" and warning.suggestion and "sheet" in warning.suggestion.lower():
+                            try:
+                                # Extract sheet name from suggestion string
+                                match = re.search(r"sheet '([^']+)'", warning.suggestion, re.IGNORECASE)
+                                if match:
+                                    sheet_name = match.group(1)
+                            except Exception:
+                                pass # Fallback to "Unknown Sheet"
+                        
+                        # Format message based on warning type
+                        if warning.validation_type == ValidationType.CONSISTENCY: # Unit mismatch
+                            message = f"Unit Mismatch: Sheet '{sheet_name}', Row {row_display_index}. Master unit '{warning.expected_value}' vs. Comparison unit '{warning.actual_value}'."
+                        elif warning.validation_type == ValidationType.DATA_TYPE: # Invalid data type
+                            message = f"Invalid Data: Sheet '{sheet_name}', Row {row_display_index}, Column '{warning.column_index}'. Value '{warning.actual_value}' is not valid. Suggestion: {warning.suggestion}"
+                        else:
+                            message = f"Warning: Sheet '{sheet_name}', Row {row_display_index}. {warning.message}"
+                        
+                        warning_messages.append(message)
+                    
+                    # Show summary if there are many warnings
+                    if len(warning_messages) > 20:
+                        summary = f"The comparison completed with {len(warning_messages)} warnings.\n\n"
+                        summary += "Most common issues:\n"
+                        # Count warning types
+                        unit_mismatches = sum(1 for w in important_warnings if w.validation_type == ValidationType.CONSISTENCY)
+                        data_type_errors = sum(1 for w in important_warnings if w.validation_type == ValidationType.DATA_TYPE)
+                        if unit_mismatches > 0:
+                            summary += f"- {unit_mismatches} unit mismatches\n"
+                        if data_type_errors > 0:
+                            summary += f"- {data_type_errors} data type errors\n"
+                        summary += f"\nFirst 10 warnings:\n" + "\n".join(warning_messages[:10])
+                        summary += f"\n\n... and {len(warning_messages) - 10} more warnings (see logs for details)"
+                        messagebox.showwarning("Comparison Warnings", summary)
+                    else:
+                        full_warning_message = "The comparison completed with the following warnings:\n\n" + "\n".join(warning_messages)
+                        messagebox.showwarning("Comparison Warnings", full_warning_message)
             
             # Clean up data
             self._update_status("Cleaning up data...")
@@ -3371,26 +3547,76 @@ Offer Information:
                     self.notebook.add(tab, text=f"Loaded Analysis - {os.path.basename(filename)}")
                     self.notebook.select(tab)
                     
+                    # Get offer info from loaded analysis
+                    offer_info = analysis_data.get('offer_info', {
+                        'offer_name': 'Loaded Analysis',
+                        'project_name': 'Loaded Project',
+                        'project_size': 'N/A',
+                        'date': datetime.now().strftime('%Y-%m-%d')
+                    })
+                    
+                    # Create a minimal but functional file_mapping structure
+                    # Import FileMapping and related classes
+                    from core.mapping_generator import FileMapping, FileMetadata, ProcessingSummary
+                    
+                    # Create minimal metadata
+                    metadata = FileMetadata(
+                        filename=os.path.basename(filename),
+                        file_path=filename,
+                        file_size_mb=0.0,
+                        file_format='pkl',
+                        processing_date=datetime.now(),
+                        total_sheets=0,
+                        visible_sheets=0,
+                        processing_version='1.0.0'
+                    )
+                    
+                    # Create minimal processing summary
+                    processing_summary = ProcessingSummary(
+                        total_rows_processed=len(analysis_data['dataframe']),
+                        total_columns_mapped=0,
+                        successful_sheets=0,
+                        partial_sheets=0,
+                        failed_sheets=0,
+                        sheets_needing_review=0,
+                        average_confidence=1.0,
+                        average_data_quality=1.0,
+                        total_validation_errors=0,
+                        total_validation_warnings=0,
+                        processing_time_total=0.0,
+                        processing_notes=[],
+                        recommendations=[]
+                    )
+                    
+                    # Create file_mapping with minimal structure
+                    file_mapping = FileMapping(
+                        metadata=metadata,
+                        sheets=[],  # Empty sheets list - data is already categorized
+                        global_confidence=1.0,
+                        processing_summary=processing_summary,
+                        review_flags=[],
+                        export_ready=True,
+                        column_mapper=None
+                    )
+                    
+                    # Add additional attributes that may be needed
+                    file_mapping.final_dataframe = analysis_data['dataframe']
+                    file_mapping.categorization_result = analysis_data['categorization_result']
+                    file_mapping.offer_info = offer_info
+                    file_mapping.tab = tab
+                    
                     # Store the analysis data in controller for summary display
                     file_key = f"loaded_analysis_{int(time.time())}"
                     self.controller.current_files[file_key] = {
-                        'file_mapping': type('MockFileMapping', (), {
-                            'tab': tab,
-                            'offer_info': analysis_data.get('offer_info', {
-                                'offer_name': 'Loaded Analysis',
-                                'project_name': 'Loaded Project',
-                                'project_size': 'N/A',
-                                'date': datetime.now().strftime('%Y-%m-%d')
-                            })
-                        })(),
+                        'file_mapping': file_mapping,
                         'final_dataframe': analysis_data['dataframe'],
-                        'offer_info': analysis_data.get('offer_info', {
-                            'offer_name': 'Loaded Analysis',
-                            'project_name': 'Loaded Project',
-                            'project_size': 'N/A',
-                            'date': datetime.now().strftime('%Y-%m-%d')
-                        })
+                        'categorization_result': analysis_data['categorization_result'],
+                        'offer_info': offer_info
                     }
+                    
+                    # Store file_mapping using helper method for consistent tracking
+                    tab_id = self.notebook.select()
+                    self._store_file_mapping_for_tab(tab_id, file_mapping, file_key)
                     
                     # Show the final categorized data directly
                     final_dataframe = analysis_data['dataframe']
@@ -3582,9 +3808,10 @@ Offer Information:
                 
                 logger.debug(f"Stored offer info for mapping workflow: {offer_info_enhanced}")
             
-            # Store file mapping in tab_id_to_file_mapping for row review
-            current_tab_id = self.notebook.select()
-            self.tab_id_to_file_mapping[current_tab_id] = file_mapping
+            # Store file mapping using helper method for consistent tracking
+            current_tab_id = self._get_current_tab_id()
+            file_key = str(Path(filepath).resolve())
+            self._store_file_mapping_for_tab(current_tab_id, file_mapping, file_key)
             
             # Remove loading widget and go straight to row review
             loading_widget.destroy()
@@ -4810,15 +5037,14 @@ Offer Information:
                 current_sheet_categories = getattr(self, 'current_sheet_categories', {})
                 current_column_mappings = {}
                 
-                # Get column mappings from current file mapping
-                current_tab_path = self.notebook.select()
-                for file_key, file_data in self.controller.current_files.items():
-                    if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
-                        if hasattr(file_data['file_mapping'], 'sheets'):
-                            for sheet in file_data['file_mapping'].sheets:
-                                if hasattr(sheet, 'column_mappings'):
-                                    current_column_mappings[sheet.sheet_name] = sheet.column_mappings
-                        break
+                # Get column mappings from current file mapping using helper method
+                file_mapping = self._get_file_mapping_for_current_tab()
+                if file_mapping and hasattr(file_mapping, 'sheets'):
+                    for sheet in file_mapping.sheets:
+                        if hasattr(sheet, 'column_mappings'):
+                            current_column_mappings[sheet.sheet_name] = sheet.column_mappings
+                else:
+                    logger.warning("Could not find file_mapping for current tab when saving mappings")
                 
                 # Create mapping data
                 mapping_data = {
@@ -4861,16 +5087,21 @@ Offer Information:
                         logger.warning(f"Error calculating total cost for analysis: {e}")
                         total_cost = 0.0
                 
-                # Get the current offer info from the controller
+                # Get the current offer info using helper method
                 current_offer_info = None
-                current_tab_path = self.notebook.select()
-                for file_key, file_data in self.controller.current_files.items():
-                    if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
-                        if 'offer_info' in file_data:
-                            current_offer_info = file_data['offer_info']
-                        elif hasattr(file_data['file_mapping'], 'offer_info'):
-                            current_offer_info = file_data['file_mapping'].offer_info
-                        break
+                file_mapping = self._get_file_mapping_for_current_tab()
+                if file_mapping:
+                    # Try to get from file_data first
+                    for file_key, file_data in self.controller.current_files.items():
+                        if 'file_mapping' in file_data and file_data['file_mapping'] == file_mapping:
+                            if 'offer_info' in file_data:
+                                current_offer_info = file_data['offer_info']
+                                break
+                    # Fallback to file_mapping attribute
+                    if not current_offer_info and hasattr(file_mapping, 'offer_info'):
+                        current_offer_info = file_mapping.offer_info
+                else:
+                    logger.warning("Could not find file_mapping for current tab when saving analysis")
                 
                 analysis_data = {
                     'dataframe': dataframe,
@@ -4976,27 +5207,56 @@ Offer Information:
     def _compare_full_from_categorized_data(self, tab):
         """Start comparison workflow from categorized data"""
         try:
-            # Store the current dataframe in the tab for comparison
-            current_tab_path = self.notebook.select()
-            current_tab = self.notebook.nametowidget(self.notebook.select())
+            # Get file_mapping using helper method
+            file_mapping = self._get_file_mapping_for_current_tab()
             
-            # Find the matching file data and store the dataframe
+            if not file_mapping:
+                # Try to find in current_files as fallback
+                current_tab_path = self._get_current_tab_id()
+                for file_key, file_data in self.controller.current_files.items():
+                    if 'file_mapping' in file_data:
+                        existing_mapping = file_data['file_mapping']
+                        if hasattr(existing_mapping, 'tab') and str(existing_mapping.tab) == str(current_tab_path):
+                            file_mapping = existing_mapping
+                            # Ensure it's stored in tab_id_to_file_mapping
+                            self._store_file_mapping_for_tab(current_tab_path, file_mapping, file_key)
+                            break
+                
+                if not file_mapping:
+                    messagebox.showerror("Error", "Could not find file mapping for current tab")
+                    return
+            
+            # Get the dataframe from file_data or file_mapping
+            final_dataframe = None
             for file_key, file_data in self.controller.current_files.items():
-                if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
-                    # Get the dataframe from the current display
-                    # This would need to be passed from the button command
-                    # For now, we'll use the stored final_dataframe
+                if 'file_mapping' in file_data and file_data['file_mapping'] == file_mapping:
                     if 'final_dataframe' in file_data:
-                        file_data['file_mapping'].dataframe = file_data['final_dataframe']
-                        self._compare_full(tab)
-                    else:
-                        messagebox.showerror("Error", "No categorized data available for comparison")
+                        final_dataframe = file_data['final_dataframe']
                     break
+            
+            # Also check file_mapping attributes
+            if final_dataframe is None and hasattr(file_mapping, 'final_dataframe'):
+                final_dataframe = file_mapping.final_dataframe
+            
+            if final_dataframe is not None:
+                # Store dataframe in file_mapping for comparison
+                file_mapping.dataframe = final_dataframe
+                if hasattr(file_mapping, 'final_dataframe'):
+                    file_mapping.final_dataframe = final_dataframe
+                
+                # Ensure file_mapping is in tab_id_to_file_mapping
+                current_tab_id = self._get_current_tab_id()
+                if current_tab_id:
+                    self.tab_id_to_file_mapping[current_tab_id] = file_mapping
+                
+                self._compare_full(tab)
             else:
-                messagebox.showerror("Error", "Could not find current file data")
+                messagebox.showerror("Error", "No categorized data available for comparison")
                 
         except Exception as e:
             logger.error(f"Error starting comparison: {e}")
+            import traceback
+            traceback.print_exc()
             messagebox.showerror("Error", f"Failed to start comparison: {str(e)}")
 
     def _process_comparison_file_optimized(self, filepath, offer_info, master_file_mapping):

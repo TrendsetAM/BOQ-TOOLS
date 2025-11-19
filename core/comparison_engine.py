@@ -598,7 +598,7 @@ class ComparisonProcessor:
         if key_columns is None:
             key_columns = ['Description']
         if row_classifier is None:
-            from core.row_classifier import RowClassifier, RowType # Added RowType
+            from core.row_classifier import RowClassifier
             row_classifier = RowClassifier()
         results = []
         for idx, row in self.comparison_data.iterrows():
@@ -646,40 +646,19 @@ class ComparisonProcessor:
                 
                 row_values = [str(row[col]) if row[col] is not None else '' for col in self.comparison_data.columns]
                 
-                # Call classify_rows to get detailed validation results
-                # Pass the sheet name for better context in warnings
-                row_classification_result = row_classifier.classify_rows(
-                    [row_values], # Pass as a list of one row
-                    column_mapping,
-                    sheet_name=row.get('Source_Sheet', 'Comparison') # Get source sheet from row data
-                )
+                # Use ROW_VALIDITY function to match master BOQ validation criteria
+                # This ensures comparison rows are validated using the same criteria as master BOQ rows
+                is_valid = row_classifier.ROW_VALIDITY(row_values, column_mapping)
                 
-                # Extract validity and reason from the classification result
-                if row_classification_result.classifications:
-                    classification = row_classification_result.classifications[0]
-                    # A row is considered valid if it's a PRIMARY_LINE_ITEM and has no ERROR level validation issues
-                    is_valid = (classification.row_type == RowType.PRIMARY_LINE_ITEM and
-                                not any(issue.level == ValidationLevel.ERROR for issue in classification.validation_errors))
-                    reason = classification.row_type.value # Use row_type as reason
-                    
-                    # Collect all validation issues (errors and warnings)
-                    for issue in classification.validation_errors:
-                        self.comparison_warnings.append(issue)
+                # Set reason based on validity
+                if is_valid:
+                    reason = 'VALID'
                 else:
-                    is_valid = False
-                    reason = 'NO_CLASSIFICATION'
-                    self.comparison_warnings.append(
-                        ValidationIssue(
-                            row_index=idx,
-                            column_index=None,
-                            validation_type=ValidationType.BUSINESS_RULE,
-                            level=ValidationLevel.ERROR,
-                            message="Row could not be classified",
-                            expected_value="Valid row data",
-                            actual_value="No classification",
-                            suggestion="Review row content and column mappings"
-                        )
-                    )
+                    reason = 'INVALID'
+                    # Note: We don't add warnings for invalid rows here because:
+                    # 1. The user already reviewed and marked them as invalid in the row review dialog
+                    # 2. These are expected and not actionable warnings
+                    # 3. Only important warnings (like unit mismatches) should be shown
                 
             results.append({
                 'row_index': idx,
