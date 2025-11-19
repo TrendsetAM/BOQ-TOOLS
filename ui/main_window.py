@@ -3484,8 +3484,28 @@ Offer Information:
                         cell.fill = header_fill
                         cell.alignment = header_alignment
                     
+                    # Collect all offers from the dataset
+                    all_offers_info = {}
+                    # Get comparison offer info
+                    all_offers_info[offer_info.get('offer_name', 'Comparison')] = offer_info
+                    
+                    # Get master offer info
+                    file_mapping = self._get_file_mapping_for_current_tab()
+                    if file_mapping and hasattr(file_mapping, 'offer_info'):
+                        master_offer_info = file_mapping.offer_info
+                        master_offer_name = master_offer_info.get('offer_name', 'Master')
+                        if master_offer_name not in all_offers_info:
+                            all_offers_info[master_offer_name] = master_offer_info
+                    
+                    # Also check for other offers in controller's current_files
+                    for file_key, file_data in self.controller.current_files.items():
+                        if 'offers' in file_data:
+                            for offer_name, offer_info_dict in file_data['offers'].items():
+                                if offer_name not in all_offers_info:
+                                    all_offers_info[offer_name] = offer_info_dict
+                    
                     # Add summary sheet with formulas
-                    self._add_summary_sheet_with_formulas_comparison(workbook, processor.master_dataset, offer_info)
+                    self._add_summary_sheet_with_formulas_comparison(workbook, processor.master_dataset, all_offers_info)
                 
                 messagebox.showinfo("Export Complete", f"Comparison results exported to {filename}")
                 
@@ -4599,8 +4619,13 @@ Offer Information:
             )
             
             if filename:
-                # Prepare data for export (same as display)
-                export_df = final_dataframe.copy()
+                # Use dataframe with comparison columns if available
+                if hasattr(self, '_current_dataframe_with_comparison') and self._current_dataframe_with_comparison is not None:
+                    logger.info("Using dataframe with comparison columns for export")
+                    export_df = self._current_dataframe_with_comparison.copy()
+                else:
+                    logger.info("Using original dataframe (no comparison columns found)")
+                    export_df = final_dataframe.copy()
                 
                 # Remove unwanted columns
                 columns_to_remove = ['ignore', 'Position']
@@ -4612,15 +4637,22 @@ Offer Information:
                 desired_order = ['code', 'Category', 'Description', 'unit', 
                                'quantity', 'unit_price', 'total_price', 'manhours', 'wage']
                 
+                # Get offer-specific columns (those with brackets)
+                offer_columns = [col for col in export_df.columns if '[' in col and ']' in col]
+                
                 # Reorder columns (only include columns that exist)
                 existing_columns = [col for col in desired_order if col in export_df.columns]
-                other_columns = [col for col in export_df.columns if col not in desired_order]
-                final_columns = existing_columns + other_columns
+                # Add offer-specific columns after base columns
+                other_columns = [col for col in export_df.columns if col not in desired_order and col not in offer_columns]
+                final_columns = existing_columns + offer_columns + other_columns
                 
                 export_df = export_df[final_columns]
                 
                 # Convert numeric columns to proper numeric values for Excel
+                # Include both base columns and offer-specific columns
                 numeric_columns = ['quantity', 'unit_price', 'total_price', 'manhours', 'wage']
+                # Also include all offer-specific numeric columns
+                numeric_columns.extend([col for col in offer_columns if any(base_col in col for base_col in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage'])])
                 for col in numeric_columns:
                     if col in export_df.columns:
                         # Convert to numeric, handling any formatting
@@ -4636,7 +4668,9 @@ Offer Information:
                     
                     # Apply European number formatting to numeric columns
                     for col_idx, col_name in enumerate(export_df.columns, 1):
-                        if col_name in numeric_columns:
+                        # Check if this is a numeric column (base or offer-specific)
+                        is_numeric = col_name in numeric_columns or any(base_col in col_name for base_col in ['quantity', 'unit_price', 'total_price', 'manhours', 'wage'])
+                        if is_numeric:
                             # Apply European number format (dot for thousands, comma for decimals)
                             from openpyxl.styles import NamedStyle
                             from openpyxl.utils import get_column_letter
@@ -4724,8 +4758,46 @@ Offer Information:
                                 offer_name = offer_info.get('offer_name', offer_name)
                             break
                     
-                    # Add summary sheet with formulas
-                    self._add_summary_sheet_with_formulas(workbook, export_df, offer_name)
+                    # Check if there are comparison offers in the dataframe
+                    comparison_columns = [col for col in export_df.columns if '[' in col and ']' in col and 'total_price' in col]
+                    
+                    if comparison_columns:
+                        # Multiple offers - use comparison summary function
+                        # Collect all offer info
+                        all_offers_info = {}
+                        # Get master offer info
+                        all_offers_info[offer_name] = {
+                            'offer_name': offer_name,
+                            'project_name': 'Unknown',
+                            'project_size': 'N/A',
+                            'date': datetime.now().strftime('%Y-%m-%d')
+                        }
+                        # Get comparison offer info
+                        for col in comparison_columns:
+                            offer_name_from_col = col.split('[')[1].split(']')[0]
+                            if offer_name_from_col not in all_offers_info:
+                                # Try to get offer info from controller
+                                offer_info_for_col = None
+                                for file_key, file_data in self.controller.current_files.items():
+                                    if 'offers' in file_data and offer_name_from_col in file_data['offers']:
+                                        offer_info_for_col = file_data['offers'][offer_name_from_col]
+                                        break
+                                
+                                if offer_info_for_col:
+                                    all_offers_info[offer_name_from_col] = offer_info_for_col
+                                else:
+                                    all_offers_info[offer_name_from_col] = {
+                                        'offer_name': offer_name_from_col,
+                                        'project_name': f'Project {offer_name_from_col}',
+                                        'project_size': 'N/A',
+                                        'date': datetime.now().strftime('%Y-%m-%d')
+                                    }
+                        
+                        # Use comparison summary function
+                        self._add_summary_sheet_with_formulas_comparison(workbook, export_df, all_offers_info)
+                    else:
+                        # Single offer - use regular summary function
+                        self._add_summary_sheet_with_formulas(workbook, export_df, offer_name)
                 
                 messagebox.showinfo("Export Complete", f"Categorized data exported to {filename}")
                 
@@ -4823,11 +4895,16 @@ Offer Information:
             logger.error(f"Full traceback: {traceback.format_exc()}")
             # Don't raise the exception, just log it so the main export can continue
 
-    def _add_summary_sheet_with_formulas_comparison(self, workbook, dataframe, offer_info):
-        """Add a summary sheet with formulas for comparison results"""
+    def _add_summary_sheet_with_formulas_comparison(self, workbook, dataframe, all_offers_info):
+        """Add a summary sheet with formulas for comparison results with multiple offers"""
         try:
-            offer_name = offer_info.get('offer_name', 'Comparison Results') if offer_info else 'Comparison Results'
-            logger.info(f"Creating summary sheet for comparison: {offer_name}")
+            # Handle backward compatibility: if all_offers_info is a single dict, convert to dict format
+            if isinstance(all_offers_info, dict) and 'offer_name' in all_offers_info:
+                # Old format: single offer_info dict
+                offer_name = all_offers_info.get('offer_name', 'Comparison Results')
+                all_offers_info = {offer_name: all_offers_info}
+            
+            logger.info(f"Creating summary sheet for comparison with {len(all_offers_info)} offers")
             # Create summary sheet
             summary_sheet = workbook.create_sheet("Summary")
             
@@ -4858,43 +4935,72 @@ Offer Information:
                 cell.fill = openpyxl.styles.PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
                 cell.alignment = openpyxl.styles.Alignment(horizontal="center", vertical="center")
             
-            # Add offer name
-            offer_name = offer_info.get('offer_name', 'Comparison Results') if offer_info else 'Comparison Results'
-            summary_sheet.cell(row=2, column=1, value=offer_name)
+            # Find the Category column in the main data sheet
+            category_col_idx = None
+            for idx, col_name in enumerate(dataframe.columns, 1):
+                if col_name == 'Category':
+                    category_col_idx = idx
+                    break
             
-            # Add formulas for each category
-            for col_idx, category in enumerate(category_order, 2):  # Start from column 2 (after Offer Name)
-                # Find the Category column in the main data sheet
-                category_col_idx = None
-                for idx, col_name in enumerate(dataframe.columns, 1):
-                    if col_name == 'Category':
-                        category_col_idx = idx
-                        break
+            category_col_letter = openpyxl.utils.get_column_letter(category_col_idx) if category_col_idx else None
+            
+            # Get all offer-specific total_price columns
+            offer_total_price_columns = {}
+            for col in dataframe.columns:
+                if '[' in col and ']' in col and 'total_price' in col:
+                    offer_name_from_col = col.split('[')[1].split(']')[0]
+                    offer_total_price_columns[offer_name_from_col] = col
+            
+            # Also check for base total_price column (master offer)
+            base_total_price_col = None
+            if 'total_price' in dataframe.columns:
+                # Check if it doesn't have brackets (is base column)
+                if '[' not in 'total_price' and ']' not in 'total_price':
+                    base_total_price_col = 'total_price'
+            
+            # Add a row for each offer
+            row_num = 2
+            for offer_name, offer_info in all_offers_info.items():
+                # Add offer name
+                summary_sheet.cell(row=row_num, column=1, value=offer_name)
                 
-                # Find the total_price column in the main data sheet
+                # Determine which total_price column to use for this offer
+                total_price_col = None
                 total_price_col_idx = None
-                for idx, col_name in enumerate(dataframe.columns, 1):
-                    if col_name == 'total_price':
-                        total_price_col_idx = idx
-                        break
                 
-                if category_col_idx and total_price_col_idx:
-                    # Create SUMIFS formula: =SUMIFS('Comparison Results'!F:F,'Comparison Results'!C:C,"General Costs")
-                    # Where F is total_price column and C is Category column
-                    category_col_letter = openpyxl.utils.get_column_letter(category_col_idx)
-                    total_price_col_letter = openpyxl.utils.get_column_letter(total_price_col_idx)
-                    
-                    formula = f'=SUMIFS(\'Comparison Results\'!{total_price_col_letter}:{total_price_col_letter},\'Comparison Results\'!{category_col_letter}:{category_col_letter},"{category}")'
-                    
-                    cell = summary_sheet.cell(row=2, column=col_idx)
-                    cell.value = formula
-                    
-                    # Apply European number formatting
-                    cell.number_format = '#,##0.00'
-                else:
-                    # If columns not found, set to 0
-                    summary_sheet.cell(row=2, column=col_idx, value=0)
-                    summary_sheet.cell(row=2, column=col_idx).number_format = '#,##0.00'
+                if offer_name in offer_total_price_columns:
+                    # Use offer-specific column
+                    total_price_col = offer_total_price_columns[offer_name]
+                    for idx, col_name in enumerate(dataframe.columns, 1):
+                        if col_name == total_price_col:
+                            total_price_col_idx = idx
+                            break
+                elif base_total_price_col:
+                    # Use base total_price column
+                    for idx, col_name in enumerate(dataframe.columns, 1):
+                        if col_name == base_total_price_col:
+                            total_price_col_idx = idx
+                            break
+                
+                # Add formulas for each category
+                for col_idx, category in enumerate(category_order, 2):  # Start from column 2 (after Offer Name)
+                    if category_col_letter and total_price_col_idx:
+                        total_price_col_letter = openpyxl.utils.get_column_letter(total_price_col_idx)
+                        
+                        # Create SUMIFS formula: =SUMIFS('BOQ Data'!F:F,'BOQ Data'!C:C,"General Costs")
+                        formula = f'=SUMIFS(\'BOQ Data\'!{total_price_col_letter}:{total_price_col_letter},\'BOQ Data\'!{category_col_letter}:{category_col_letter},"{category}")'
+                        
+                        cell = summary_sheet.cell(row=row_num, column=col_idx)
+                        cell.value = formula
+                        
+                        # Apply European number formatting
+                        cell.number_format = '#,##0.00'
+                    else:
+                        # If columns not found, set to 0
+                        summary_sheet.cell(row=row_num, column=col_idx, value=0)
+                        summary_sheet.cell(row=row_num, column=col_idx).number_format = '#,##0.00'
+                
+                row_num += 1
             
             # Auto-adjust column widths
             for column in summary_sheet.columns:
@@ -5164,11 +5270,19 @@ Offer Information:
             )
             
             if filename:
+                # Use dataframe with comparison columns if available
+                save_dataframe = dataframe.copy()
+                if hasattr(self, '_current_dataframe_with_comparison') and self._current_dataframe_with_comparison is not None:
+                    logger.info("Using dataframe with comparison columns for save analysis")
+                    save_dataframe = self._current_dataframe_with_comparison.copy()
+                else:
+                    logger.info("Using original dataframe (no comparison columns found)")
+                
                 # Create analysis data
                 total_cost = 0.0
-                if 'total_price' in dataframe.columns:
+                if 'total_price' in save_dataframe.columns:
                     try:
-                        numeric_prices = pd.to_numeric(dataframe['total_price'], errors='coerce')
+                        numeric_prices = pd.to_numeric(save_dataframe['total_price'], errors='coerce')
                         total_cost = numeric_prices.sum()
                     except Exception as e:
                         logger.warning(f"Error calculating total cost for analysis: {e}")
@@ -5191,7 +5305,7 @@ Offer Information:
                     logger.warning("Could not find file_mapping for current tab when saving analysis")
                 
                 analysis_data = {
-                    'dataframe': dataframe,
+                    'dataframe': save_dataframe,
                     'categorization_result': categorization_result,
                     'offer_info': current_offer_info or {
                         'offer_name': 'Unknown',
@@ -5200,9 +5314,9 @@ Offer Information:
                         'date': datetime.now().strftime('%Y-%m-%d')
                     },
                     'timestamp': time.time(),
-                    'total_rows': len(dataframe),
+                    'total_rows': len(save_dataframe),
                     'total_cost': total_cost,
-                    'category_counts': dataframe['Category'].value_counts().to_dict() if 'Category' in dataframe.columns else {}
+                    'category_counts': save_dataframe['Category'].value_counts().to_dict() if 'Category' in save_dataframe.columns else {}
                 }
                 
                 with open(filename, 'wb') as f:
