@@ -5767,6 +5767,19 @@ Offer Information:
                 return None
             
             all_data = []
+            # Check if we have column mappings - if not, we'll use a fallback method
+            has_column_mappings = False
+            for master_sheet in master_sheets:
+                column_mappings = getattr(master_sheet, 'column_mappings', [])
+                if column_mappings:
+                    has_column_mappings = True
+                    break
+            
+            # If no column mappings available (e.g., loaded from saved analysis), use fallback
+            if not has_column_mappings:
+                logger.warning("No column mappings found in master file mapping - using fallback method based on dataframe structure")
+                return self._process_comparison_file_fallback(filepath, master_file_mapping, offer_info, excel_processor)
+            
             for master_sheet in master_sheets:
                 sheet_name = getattr(master_sheet, 'sheet_name', None)
                 if not sheet_name or sheet_name not in visible_sheets:
@@ -5874,6 +5887,343 @@ Offer Information:
             return file_mapping
         except Exception as e:
             logger.error(f"Error processing comparison file with master mappings: {e}")
+            return None
+    
+    def _process_comparison_file_fallback(self, filepath, master_file_mapping, offer_info, excel_processor=None):
+        """
+        Fallback method to process comparison file when column mappings are not available.
+        Uses the dataframe structure from master to infer column mappings and creates proper sheet structure.
+        
+        Args:
+            filepath: Path to comparison file
+            master_file_mapping: Master BOQ file mapping (may not have column_mappings)
+            offer_info: Offer information dictionary
+            excel_processor: Optional pre-loaded ExcelProcessor instance
+            
+        Returns:
+            FileMapping object or None if failed
+        """
+        try:
+            from core.file_processor import ExcelProcessor
+            from core.mapping_generator import ColumnMappingInfo, SheetMapping, ProcessingStatus, FileMapping, FileMetadata, ProcessingSummary
+            from utils.config import ColumnType
+            import pandas as pd
+            import os
+            from datetime import datetime
+            
+            if excel_processor is None:
+                excel_processor = ExcelProcessor()
+                if not excel_processor.load_file(filepath):
+                    return None
+            
+            # Get sheet names from master dataframe's Source_Sheet column
+            sheet_names = set()
+            if hasattr(master_file_mapping, 'dataframe') and master_file_mapping.dataframe is not None:
+                if 'Source_Sheet' in master_file_mapping.dataframe.columns:
+                    sheet_names = set(master_file_mapping.dataframe['Source_Sheet'].dropna().unique())
+                elif 'source_sheet' in master_file_mapping.dataframe.columns:
+                    sheet_names = set(master_file_mapping.dataframe['source_sheet'].dropna().unique())
+            
+            # If no sheet names from dataframe, get from master sheets or visible sheets
+            if not sheet_names:
+                if hasattr(master_file_mapping, 'sheets') and master_file_mapping.sheets:
+                    sheet_names = {getattr(sheet, 'sheet_name', None) for sheet in master_file_mapping.sheets}
+                    sheet_names = {s for s in sheet_names if s}  # Remove None values
+                else:
+                    visible_sheets = excel_processor.get_visible_sheets()
+                    if visible_sheets:
+                        sheet_names = set(visible_sheets)
+            
+            if not sheet_names:
+                logger.error("Could not determine sheet names for comparison file")
+                return None
+            
+            # Map expected column names to ColumnType enum values
+            column_name_to_type = {
+                'description': ColumnType.DESCRIPTION,
+                'code': ColumnType.CODE,
+                'unit': ColumnType.UNIT,
+                'quantity': ColumnType.QUANTITY,
+                'unit_price': ColumnType.UNIT_PRICE,
+                'total_price': ColumnType.TOTAL_PRICE,
+                'scope': ColumnType.SCOPE,
+                'manhours': ColumnType.MANHOURS,
+                'wage': ColumnType.WAGE,
+            }
+            
+            # Get expected columns from master dataframe
+            expected_columns = []
+            if hasattr(master_file_mapping, 'dataframe') and master_file_mapping.dataframe is not None:
+                # Get base columns (those without brackets)
+                expected_columns = [col for col in master_file_mapping.dataframe.columns 
+                                  if '[' not in col and ']' not in col and col not in ['Source_Sheet', 'Category']]
+            
+            # Standard expected columns if not found
+            if not expected_columns:
+                expected_columns = ['Description', 'code', 'unit', 'quantity', 'unit_price', 'total_price']
+            
+            logger.info(f"Using fallback method with {len(sheet_names)} sheets and expected columns: {expected_columns}")
+            
+            all_data = []
+            all_sheets = []
+            visible_sheets = excel_processor.get_visible_sheets()
+            
+            for sheet_name in sheet_names:
+                if sheet_name not in visible_sheets:
+                    logger.warning(f"Sheet '{sheet_name}' not found in comparison file, skipping")
+                    continue
+                
+                try:
+                    # Get sheet data
+                    sheet_data = excel_processor.get_sheet_data(sheet_name, max_rows=10000)
+                    if not sheet_data or len(sheet_data) < 2:
+                        continue
+                    
+                    # Try to find header row by looking for expected column names
+                    header_row_idx = 0
+                    best_matches = 0
+                    for idx, row in enumerate(sheet_data[:10]):  # Check first 10 rows
+                        row_lower = [str(cell).lower().strip() if cell else '' for cell in row]
+                        # Check if this row contains expected column names
+                        matches = sum(1 for col in expected_columns if any(col.lower() in cell for cell in row_lower))
+                        if matches > best_matches:
+                            best_matches = matches
+                            header_row_idx = idx
+                    
+                    if best_matches < 2:
+                        logger.warning(f"Could not find good header row for sheet {sheet_name}, using first row")
+                    
+                    headers = sheet_data[header_row_idx]
+                    data_rows = sheet_data[header_row_idx + 1:]
+                    
+                    # Create proper column mappings using ColumnMappingInfo
+                    column_mappings = []
+                    column_map = {}  # For DataFrame creation
+                    
+                    for i, header in enumerate(headers):
+                        header_str = str(header).strip() if header else ''
+                        header_lower = header_str.lower()
+                        
+                        # Try to match to expected columns
+                        mapped_type = ColumnType.IGNORE
+                        matched_col = None
+                        confidence = 0.0
+                        
+                        for expected_col in expected_columns:
+                            expected_lower = expected_col.lower()
+                            # Better matching logic
+                            if expected_lower == header_lower:
+                                matched_col = expected_col
+                                mapped_type = column_name_to_type.get(expected_lower, ColumnType.IGNORE)
+                                confidence = 1.0
+                                break
+                            elif expected_lower in header_lower or header_lower in expected_lower:
+                                # Partial match
+                                if matched_col is None:  # Take first match
+                                    matched_col = expected_col
+                                    mapped_type = column_name_to_type.get(expected_lower, ColumnType.IGNORE)
+                                    confidence = 0.7
+                        
+                        # Create ColumnMappingInfo
+                        # mapped_type is a ColumnType enum, get its value
+                        mapped_type_str = mapped_type.value if hasattr(mapped_type, 'value') else str(mapped_type)
+                        is_required = mapped_type in [ColumnType.DESCRIPTION, ColumnType.QUANTITY, 
+                                                     ColumnType.UNIT_PRICE, ColumnType.TOTAL_PRICE]
+                        
+                        column_mapping_info = ColumnMappingInfo(
+                            column_index=i,
+                            original_header=header_str,
+                            normalized_header=header_lower,
+                            mapped_type=mapped_type_str,
+                            confidence=confidence,
+                            alternatives=[],
+                            reasoning=[f"Fallback mapping: matched '{header_str}' to '{matched_col or 'IGNORE'}'"],
+                            is_required=is_required,
+                            validation_status='valid' if confidence > 0 else 'needs_review',
+                            is_user_edited=False
+                        )
+                        column_mappings.append(column_mapping_info)
+                        
+                        # For DataFrame, use the matched column name or original header
+                        if matched_col:
+                            column_map[i] = matched_col
+                        else:
+                            column_map[i] = header_str if header_str else f'Column_{i}'
+                    
+                    # Extract data using column map
+                    mapped_data = []
+                    for row in data_rows:
+                        mapped_row = {}
+                        for col_idx, col_name in column_map.items():
+                            if col_idx < len(row):
+                                mapped_row[col_name] = row[col_idx] if row[col_idx] is not None else ''
+                            else:
+                                mapped_row[col_name] = ''
+                        mapped_data.append(mapped_row)
+                    
+                    if not mapped_data:
+                        continue
+                    
+                    df = pd.DataFrame(mapped_data)
+                    if df.empty:
+                        continue
+                    
+                    # Ensure required columns exist with proper names (use lowercase for consistency)
+                    required_cols = {
+                        'description': ['Description', 'description', 'desc', 'item'],
+                        'code': ['code', 'Code', 'CODE', 'item_code'],
+                        'unit': ['unit', 'Unit', 'UNIT', 'uom'],
+                        'quantity': ['quantity', 'Quantity', 'QTY', 'qty', 'q'],
+                        'unit_price': ['unit_price', 'Unit_Price', 'unit price', 'price', 'Price'],
+                        'total_price': ['total_price', 'Total_Price', 'total price', 'total', 'Total']
+                    }
+                    
+                    # Normalize column names to lowercase for consistency
+                    column_renames = {}
+                    for proper_name, alt_names in required_cols.items():
+                        # Check if column exists with any case variation
+                        existing_col = None
+                        for col in df.columns:
+                            col_lower = col.lower().strip()
+                            if col_lower == proper_name.lower() or any(alt.lower() == col_lower for alt in alt_names):
+                                existing_col = col
+                                break
+                        
+                        if existing_col and existing_col.lower() != proper_name.lower():
+                            # Rename to proper lowercase name
+                            column_renames[existing_col] = proper_name
+                        elif proper_name not in df.columns:
+                            # Check if any variation exists
+                            found = False
+                            for col in df.columns:
+                                if col.lower() in [alt.lower() for alt in alt_names]:
+                                    column_renames[col] = proper_name
+                                    found = True
+                                    break
+                            if not found:
+                                # Add missing column
+                                df[proper_name] = ''
+                    
+                    if column_renames:
+                        df = df.rename(columns=column_renames)
+                    
+                    # Add Source_Sheet
+                    df['Source_Sheet'] = sheet_name
+                    
+                    # Add Category if missing
+                    if 'Category' not in df.columns:
+                        df['Category'] = None
+                    
+                    # CRITICAL: Normalize column names to lowercase for consistency with dialog expectations
+                    # The dialog expects lowercase column names (code, description, unit, etc.)
+                    column_renames_final = {}
+                    for col in df.columns:
+                        col_lower = col.lower()
+                        # Keep Source_Sheet and Category with proper case, normalize others
+                        if col not in ['Source_Sheet', 'Category'] and col != col_lower:
+                            column_renames_final[col] = col_lower
+                    
+                    if column_renames_final:
+                        df = df.rename(columns=column_renames_final)
+                        logger.info(f"Normalized column names for sheet {sheet_name}: {column_renames_final}")
+                    
+                    all_data.append(df)
+                    
+                    # Create SheetMapping with proper structure
+                    sheet_mapping = SheetMapping(
+                        sheet_name=sheet_name,
+                        processing_status=ProcessingStatus.SUCCESS,
+                        row_count=len(df),
+                        column_count=len(df.columns),
+                        header_row_index=header_row_idx,
+                        header_confidence=0.8,
+                        column_mappings=column_mappings,
+                        row_classifications=[],
+                        validation_summary=None,
+                        overall_confidence=0.7,
+                        column_mapping_confidence=0.7,
+                        row_classification_confidence=0.0,
+                        data_quality_confidence=0.7,
+                        review_flags=[],
+                        manual_review_items=[],
+                        processing_notes=[f"Processed using fallback method"],
+                        warnings=[],
+                        processing_time=0.0,
+                        sheet_type="BOQ",
+                        sheet_data=sheet_data
+                    )
+                    all_sheets.append(sheet_mapping)
+                    
+                    logger.info(f"Extracted {len(df)} rows from sheet '{sheet_name}' using fallback method with {len(column_mappings)} column mappings")
+                    
+                except Exception as e:
+                    logger.warning(f"Error processing sheet '{sheet_name}' in fallback: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+                    continue
+            
+            if not all_data:
+                logger.error("No data could be extracted from comparison file using fallback method")
+                return None
+            
+            # Combine all data
+            try:
+                combined_df = pd.concat(all_data, ignore_index=True, sort=False)
+                logger.info(f"Combined {len(combined_df)} total rows from comparison file (fallback method)")
+            except Exception as e:
+                logger.error(f"Error combining DataFrames in fallback: {e}")
+                return None
+            
+            # Create file mapping object with proper sheet structure
+            metadata = FileMetadata(
+                filename=os.path.basename(filepath),
+                file_path=filepath,
+                file_size_mb=0.0,
+                file_format='xlsx',
+                processing_date=datetime.now(),
+                total_sheets=len(all_sheets),
+                visible_sheets=len(all_sheets),
+                processing_version='1.0.0'
+            )
+            
+            processing_summary = ProcessingSummary(
+                total_rows_processed=len(combined_df),
+                total_columns_mapped=sum(len(sheet.column_mappings) for sheet in all_sheets),
+                successful_sheets=len(all_sheets),
+                partial_sheets=0,
+                failed_sheets=0,
+                sheets_needing_review=0,
+                average_confidence=0.7,
+                average_data_quality=0.7,
+                total_validation_errors=0,
+                total_validation_warnings=0,
+                processing_time_total=0.0,
+                processing_notes=["Processed using fallback method (no column mappings available)"],
+                recommendations=[]
+            )
+            
+            from core.mapping_generator import ReviewFlag
+            
+            file_mapping = FileMapping(
+                metadata=metadata,
+                sheets=all_sheets,
+                global_confidence=0.7,
+                processing_summary=processing_summary,
+                review_flags=[],
+                export_ready=True,
+                column_mapper=None
+            )
+            
+            # Set dataframe and offer_info as attributes (not constructor arguments)
+            file_mapping.dataframe = combined_df
+            file_mapping.offer_info = offer_info
+            
+            return file_mapping
+            
+        except Exception as e:
+            logger.error(f"Error in fallback comparison file processing: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
 
     def _create_unified_dataframe(self, file_mapping, is_master=True):
