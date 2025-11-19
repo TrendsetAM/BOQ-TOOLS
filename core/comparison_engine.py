@@ -801,7 +801,9 @@ class ComparisonProcessor:
                     if len(master_instances) == 0:
                         # Check for descriptions that are very similar (might be encoding issues)
                         master_desc_lower = self.master_dataset[key_columns[0]].str.lower()
-                        similar_matches = master_desc_lower[master_desc_lower.str.contains(description.lower()[:50], na=False)]
+                        # Use regex=False to treat pattern as literal string (avoids regex errors with special characters)
+                        search_pattern = description.lower()[:50]
+                        similar_matches = master_desc_lower[master_desc_lower.str.contains(search_pattern, na=False, regex=False)]
                         if len(similar_matches) > 0:
                             logger.warning(f"Found {len(similar_matches)} similar descriptions for '{description[:50]}...'")
                             logger.warning(f"Similar descriptions: {similar_matches.head(3).tolist()}")
