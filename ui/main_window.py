@@ -1324,6 +1324,10 @@ class MainWindow:
             # Repopulate treeview with updated column mappings
             if hasattr(sheet, 'column_mappings'):
                 for mapping in sheet.column_mappings:
+                    # Get column index and calculate column letter (matching _populate_sheet_tab logic)
+                    col_index = getattr(mapping, 'column_index', None)
+                    # Column indices supplied by MappingGenerator are zero-based.
+                    column_letter = excel_column_letter(col_index) if col_index is not None else "--"
                     confidence = getattr(mapping, 'confidence', 0)
                     mapped_type = getattr(mapping, 'mapped_type', 'unknown')
                     required = mapped_type in required_types
@@ -1336,7 +1340,9 @@ class MainWindow:
                     if required:
                         tags.append('required')
                     
+                    # Treeview structure: ("Column", "Original Header", "Mapped Type", "Confidence", "Required", "Actions")
                     tree.insert("", tk.END, values=(
+                        column_letter,
                         original_header,
                         mapped_type,
                         f"{confidence:.1%}",
@@ -1356,7 +1362,9 @@ class MainWindow:
         values = item['values']
         if not values:
             return
-        column_name = values[0]
+        # Treeview structure: ("Column", "Original Header", "Mapped Type", "Confidence", "Required", "Actions")
+        # Original header is at index 1 (second column), not index 0
+        column_name = values[1]
         # Find the column mapping object
         col_mapping = None
         for cm in getattr(sheet, 'column_mappings', []):
@@ -1446,7 +1454,8 @@ class MainWindow:
                         # Find the row in the treeview for the other column
                         for row_id in tree.get_children():
                             row_vals = tree.item(row_id)['values']
-                            if row_vals and row_vals[0] == other_col_name:
+                            # Treeview structure: ("Column", "Original Header", ...), so original header is at index 1
+                            if row_vals and len(row_vals) > 1 and row_vals[1] == other_col_name:
                                 tree.set(row_id, column="Mapped Type", value="unknown")
                                 tree.set(row_id, column="Required", value="No")
                                 tree.set(row_id, column="Confidence", value="0.0%")
@@ -5767,6 +5776,7 @@ Offer Information:
                 return None
             
             all_data = []
+            processed_sheets = []  # Store SheetMapping objects for each processed sheet
             # Check if we have column mappings - if not, we'll use a fallback method
             has_column_mappings = False
             for master_sheet in master_sheets:
@@ -5807,26 +5817,17 @@ Offer Information:
                     if col_idx is not None and canon:
                         # mapped_type may be an Enum or str
                         canon_val = canon.value if hasattr(canon, 'value') else str(canon)
-                        # Ensure correct case for canonical names
-                        if canon_val.lower() == 'description':
-                            canon_val = 'Description'
-                        elif canon_val.lower() == 'quantity':
-                            canon_val = 'quantity'
-                        elif canon_val.lower() == 'unit_price':
-                            canon_val = 'unit_price'
-                        elif canon_val.lower() == 'total_price':
-                            canon_val = 'total_price'
-                        elif canon_val.lower() == 'unit':
-                            canon_val = 'unit'
-                        elif canon_val.lower() == 'code':
-                            canon_val = 'code'
+                        # Normalize to lowercase for consistency with dialog expectations
+                        canon_val = canon_val.lower()
                         column_index_map[col_idx] = canon_val
                 
                 # Map columns by index - only include mapped columns
                 mapped_columns = []
+                valid_column_indices = []  # Store the valid indices to ensure consistency
                 for col_idx in sorted(column_index_map.keys()):
                     if col_idx < len(headers):  # Ensure column index is valid
                         mapped_columns.append(column_index_map[col_idx])
+                        valid_column_indices.append(col_idx)  # Store valid index
                 
                 # Ensure unique column names
                 unique_columns = []
@@ -5841,10 +5842,11 @@ Offer Information:
                     seen_columns.add(col)
                 
                 # Filter data rows to match only mapped columns by index
+                # Use the same valid_column_indices to ensure column count matches
                 filtered_data_rows = []
                 for row in data_rows:
                     filtered_row = []
-                    for col_idx in sorted(column_index_map.keys()):
+                    for col_idx in valid_column_indices:  # Use the same valid indices
                         if col_idx < len(row):  # Ensure column index is valid
                             filtered_row.append(row[col_idx] if row[col_idx] is not None else '')
                         else:
@@ -5865,6 +5867,112 @@ Offer Information:
                 df = df.reset_index(drop=True)
                 all_data.append(df)
                 logger.debug(f"Extracted {len(df)} rows from sheet '{sheet_name}' using master mapping")
+                
+                # Create SheetMapping object with column_mappings for this sheet
+                # This allows the row mapping dialog to properly identify columns
+                from core.mapping_generator import SheetMapping, ProcessingStatus, ColumnMappingInfo, ValidationSummary
+                from utils.config import ColumnType, get_config
+                
+                # Get required columns from config to determine is_required
+                config = get_config()
+                required_types_from_config = config.get_required_columns()
+                required_type_values = {rt.value.lower() for rt in required_types_from_config}
+                
+                # Create column mappings for the comparison file based on the master mappings
+                # but using the normalized lowercase column names
+                comparison_column_mappings = []
+                for col_idx in valid_column_indices:
+                    if col_idx in column_index_map:
+                        canon_val = column_index_map[col_idx]
+                        # Find the original column mapping from master to preserve other attributes
+                        original_cm = None
+                        for cm in column_mappings:
+                            if getattr(cm, 'column_index', None) == col_idx:
+                                original_cm = cm
+                                break
+                        
+                        # Convert canonical value to ColumnType enum if needed
+                        col_type = None
+                        mapped_type_str = canon_val
+                        try:
+                            # Try to match to ColumnType enum
+                            for ct in ColumnType:
+                                if ct.value.lower() == canon_val.lower():
+                                    col_type = ct
+                                    mapped_type_str = ct.value
+                                    break
+                        except:
+                            pass
+                        
+                        # Determine if this column is required
+                        is_required = canon_val.lower() in required_type_values
+                        
+                        # Create ColumnMappingInfo for comparison file
+                        if original_cm:
+                            # Preserve original mapping info but update mapped_type
+                            comparison_cm = ColumnMappingInfo(
+                                column_index=col_idx,
+                                original_header=headers[col_idx] if col_idx < len(headers) else '',
+                                normalized_header=getattr(original_cm, 'normalized_header', ''),
+                                mapped_type=mapped_type_str,
+                                confidence=getattr(original_cm, 'confidence', 1.0),
+                                alternatives=getattr(original_cm, 'alternatives', []),
+                                reasoning=getattr(original_cm, 'reasoning', []),
+                                is_required=is_required,
+                                validation_status='valid',
+                                is_user_edited=getattr(original_cm, 'is_user_edited', False)
+                            )
+                        else:
+                            # Create new mapping if original not found
+                            comparison_cm = ColumnMappingInfo(
+                                column_index=col_idx,
+                                original_header=headers[col_idx] if col_idx < len(headers) else '',
+                                normalized_header=headers[col_idx].lower().strip() if col_idx < len(headers) else '',
+                                mapped_type=mapped_type_str,
+                                confidence=1.0,
+                                alternatives=[],
+                                reasoning=[],
+                                is_required=is_required,
+                                validation_status='valid',
+                                is_user_edited=False
+                            )
+                        comparison_column_mappings.append(comparison_cm)
+                
+                # Create minimal ValidationSummary for this sheet
+                validation_summary = ValidationSummary(
+                    overall_score=1.0,
+                    mathematical_consistency=1.0,
+                    data_type_quality=1.0,
+                    business_rule_compliance=1.0,
+                    error_count=0,
+                    warning_count=0,
+                    info_count=0,
+                    suggestions=[]
+                )
+                
+                # Create SheetMapping for this sheet
+                comparison_sheet = SheetMapping(
+                    sheet_name=sheet_name,
+                    processing_status=ProcessingStatus.SUCCESS,
+                    row_count=len(df),
+                    column_count=len(unique_columns),
+                    header_row_index=header_row_idx,
+                    header_confidence=1.0,
+                    column_mappings=comparison_column_mappings,
+                    row_classifications=[],
+                    validation_summary=validation_summary,
+                    overall_confidence=1.0,
+                    column_mapping_confidence=1.0,
+                    row_classification_confidence=1.0,
+                    data_quality_confidence=1.0,
+                    review_flags=[],
+                    manual_review_items=[],
+                    processing_notes=[],
+                    warnings=[],
+                    processing_time=0.0,
+                    sheet_type='BOQ'
+                )
+                processed_sheets.append(comparison_sheet)
             
             if not all_data:
                 logger.error("No data could be extracted from comparison file using master mappings")
@@ -5881,7 +5989,7 @@ Offer Information:
             file_mapping = type('MockFileMapping', (), {
                 'dataframe': combined_df,
                 'offer_info': offer_info,
-                'sheets': []
+                'sheets': processed_sheets  # Include sheet structure with column mappings
             })()
             file_mapping.offer_info = offer_info
             return file_mapping
