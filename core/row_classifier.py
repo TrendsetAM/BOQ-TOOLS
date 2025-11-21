@@ -626,7 +626,10 @@ class RowClassifier:
             if col_idx < len(row_data):
                 cell_value = row_data[col_idx].strip() if row_data[col_idx] else ""
                 
-                if col_type == ColumnType.DESCRIPTION:
+                # CRITICAL FIX: Skip IGNORE columns - they shouldn't be used for validation
+                if col_type == ColumnType.IGNORE:
+                    continue  # Skip ignore columns
+                elif col_type == ColumnType.DESCRIPTION:
                     if cell_value:
                         has_description = True
                 elif col_type == ColumnType.QUANTITY:
@@ -1127,7 +1130,10 @@ def ROW_VALIDITY_STATIC(row_data: List[str], column_mapping: Dict[int, ColumnTyp
         if col_idx < len(row_data):
             cell_value = row_data[col_idx].strip() if row_data[col_idx] else ""
             
-            if col_type == ColumnType.DESCRIPTION:
+            # CRITICAL FIX: Skip IGNORE columns - they shouldn't be used for validation
+            if col_type == ColumnType.IGNORE:
+                continue  # Skip ignore columns
+            elif col_type == ColumnType.DESCRIPTION:
                 if cell_value:
                     has_description = True
             elif col_type == ColumnType.QUANTITY:

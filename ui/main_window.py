@@ -2667,7 +2667,14 @@ class MainWindow:
             
             # Process rows for validity
             self._update_status("Processing row validity...")
-            row_results = self.comparison_processor.process_comparison_rows()
+            # CRITICAL FIX: Build column mapping from file mapping structure to match DataFrame columns
+            # This ensures column mappings match the actual DataFrame structure
+            column_mapping_for_validation = self._build_column_mapping_from_file_mapping(
+                comparison_file_mapping, comparison_df
+            )
+            row_results = self.comparison_processor.process_comparison_rows(
+                column_mapping=column_mapping_for_validation
+            )
             
             # Show comparison row review dialog
             if COMPARISON_ROW_REVIEW_AVAILABLE:
@@ -5858,6 +5865,34 @@ Offer Information:
                 if df.empty:
                     continue
                 
+                # CRITICAL FIX: Normalize column names to match expected format (capitalized)
+                # Map lowercase column names to their expected capitalized equivalents
+                column_name_mapping = {
+                    'description': 'Description',
+                    'code': 'code',
+                    'unit': 'unit',
+                    'quantity': 'quantity',
+                    'unit_price': 'unit_price',
+                    'total_price': 'total_price',
+                    'manhours': 'manhours',
+                    'wage': 'wage',
+                    'scope': 'scope',
+                    'category': 'Category'
+                }
+                
+                # Rename columns to match expected format
+                rename_dict = {}
+                for old_col in df.columns:
+                    old_col_lower = old_col.lower()
+                    if old_col_lower in column_name_mapping:
+                        expected_col = column_name_mapping[old_col_lower]
+                        if old_col != expected_col:
+                            rename_dict[old_col] = expected_col
+                
+                if rename_dict:
+                    df = df.rename(columns=rename_dict)
+                    logger.info(f"Renamed columns in sheet '{sheet_name}': {rename_dict}")
+                
                 # Add required columns that may be missing
                 if 'Category' not in df.columns:
                     df['Category'] = None
@@ -6372,7 +6407,38 @@ Offer Information:
                 required_columns = ['Description', 'code', 'unit', 'quantity', 'unit_price', 'total_price']
                 # Only check for base columns (without brackets)
                 base_required_columns = [col for col in required_columns if '[' not in col and ']' not in col]
-                missing_base_columns = [col for col in base_required_columns if col not in df.columns]
+                
+                # CRITICAL FIX: Use case-insensitive matching to find columns
+                # Map of lowercase column names to their expected capitalized format
+                df_columns_lower = {col.lower(): col for col in df.columns}
+                column_name_mapping = {
+                    'description': 'Description',
+                    'code': 'code',
+                    'unit': 'unit',
+                    'quantity': 'quantity',
+                    'unit_price': 'unit_price',
+                    'total_price': 'total_price'
+                }
+                
+                # Rename columns to match expected format (case-insensitive)
+                rename_dict = {}
+                missing_base_columns = []
+                for req_col in base_required_columns:
+                    req_col_lower = req_col.lower()
+                    # Check if column exists (case-insensitive)
+                    if req_col_lower in df_columns_lower:
+                        existing_col = df_columns_lower[req_col_lower]
+                        # If case doesn't match, rename it
+                        if existing_col != req_col and req_col_lower in column_name_mapping:
+                            rename_dict[existing_col] = req_col
+                    else:
+                        # Column doesn't exist, will need to add it
+                        missing_base_columns.append(req_col)
+                
+                # Rename columns if needed
+                if rename_dict:
+                    df = df.rename(columns=rename_dict)
+                    logger.info(f"Renamed columns in {dataset_type} dataset to match expected format: {rename_dict}")
                 
                 if missing_base_columns:
                     logger.warning(f"Missing base columns in {dataset_type} dataset: {missing_base_columns}")
@@ -6508,6 +6574,152 @@ Offer Information:
             logger.error(f"Error creating unified DataFrame for {dataset_type}: {e}")
             return None
 
+    def _build_column_mapping_from_file_mapping(self, file_mapping, dataframe):
+        """
+        Build column mapping dictionary from file mapping structure to match DataFrame columns.
+        
+        Args:
+            file_mapping: FileMapping object with sheets and column mappings
+            dataframe: DataFrame with actual column names
+            
+        Returns:
+            Dictionary mapping {column_index: ColumnType} matching DataFrame column order
+        """
+        from utils.config import ColumnType
+        
+        # Create mapping from DataFrame column name to ColumnType
+        # First, get column mappings from file mapping sheets structure
+        column_name_to_type = {}
+        
+        logger.info(f"Building column mapping from file mapping. DataFrame columns: {list(dataframe.columns)}")
+        
+        if hasattr(file_mapping, 'sheets') and file_mapping.sheets:
+            logger.info(f"File mapping has {len(file_mapping.sheets)} sheets")
+            for sheet in file_mapping.sheets:
+                sheet_name = getattr(sheet, 'sheet_name', 'Unknown')
+                if hasattr(sheet, 'column_mappings') and sheet.column_mappings:
+                    logger.info(f"Sheet '{sheet_name}' has {len(sheet.column_mappings)} column mappings")
+                    for cm in sheet.column_mappings:
+                        mapped_type = getattr(cm, 'mapped_type', None)
+                        col_idx = getattr(cm, 'column_index', None)
+                        if mapped_type:
+                            # Get the canonical column name based on mapped type
+                            if hasattr(mapped_type, 'value'):
+                                mapped_type_str = mapped_type.value
+                            else:
+                                mapped_type_str = str(mapped_type)
+                            
+                            # Map ColumnType enum values to expected DataFrame column names
+                            type_to_col_name = {
+                                'DESCRIPTION': 'Description',
+                                'CODE': 'code',
+                                'UNIT': 'unit',
+                                'QUANTITY': 'quantity',
+                                'UNIT_PRICE': 'unit_price',
+                                'TOTAL_PRICE': 'total_price',
+                                'MANHOURS': 'manhours',
+                                'WAGE': 'wage',
+                                'SCOPE': 'scope',
+                                'CATEGORY': 'Category'
+                            }
+                            
+                            expected_col_name = type_to_col_name.get(mapped_type_str.upper(), mapped_type_str)
+                            # Store both the expected name (lowercase) and the actual type
+                            column_name_to_type[expected_col_name.lower()] = mapped_type
+                            logger.debug(f"Mapped column type '{mapped_type_str}' -> DataFrame column '{expected_col_name}' (lowercase: '{expected_col_name.lower()}')")
+                else:
+                    logger.warning(f"Sheet '{sheet_name}' has no column_mappings attribute")
+        else:
+            logger.warning("File mapping has no sheets or sheets is empty")
+        
+        logger.info(f"Column name to type mapping built: {list(column_name_to_type.keys())}")
+        logger.info(f"DataFrame columns: {list(dataframe.columns)}")
+        
+        # Build column mapping based on DataFrame column order
+        # CRITICAL FIX: Use actual DataFrame column names (which are already normalized) to build the mapping
+        column_mapping = {}
+        for i, col_name in enumerate(dataframe.columns):
+            # Skip offer-specific columns and other special columns
+            if '[' in col_name and ']' in col_name:
+                logger.debug(f"Skipping offer-specific column at index {i}: '{col_name}'")
+                continue  # Skip offer-specific columns
+            if col_name in ['Source_Sheet', 'Category', 'Position']:
+                logger.debug(f"Skipping metadata column at index {i}: '{col_name}'")
+                continue  # Skip metadata columns
+            
+            col_name_lower = col_name.lower()
+            logger.debug(f"Processing column at index {i}: '{col_name}' (lowercase: '{col_name_lower}')")
+            
+            # CRITICAL FIX: Try both the actual column name (which might be capitalized) and lowercase
+            # The DataFrame might have 'Description' but column_name_to_type has 'description' (lowercase)
+            mapped_type = None
+            if col_name_lower in column_name_to_type:
+                logger.debug(f"Found mapping for '{col_name_lower}' in column_name_to_type")
+                mapped_type = column_name_to_type[col_name_lower]
+            elif col_name in column_name_to_type:
+                logger.debug(f"Found mapping for '{col_name}' in column_name_to_type")
+                mapped_type = column_name_to_type[col_name]
+            
+            if mapped_type:
+                mapped_type = column_name_to_type[col_name_lower]
+                # Convert to ColumnType enum if needed
+                if isinstance(mapped_type, str):
+                    try:
+                        column_mapping[i] = ColumnType[mapped_type.upper()]
+                    except (KeyError, AttributeError):
+                        # Fallback: try to match by value
+                        for ct in ColumnType:
+                            if ct.value.upper() == mapped_type.upper():
+                                column_mapping[i] = ct
+                                break
+                        else:
+                            # Default to DESCRIPTION if no match
+                            column_mapping[i] = ColumnType.DESCRIPTION
+                else:
+                    column_mapping[i] = mapped_type
+            else:
+                # Fallback: use heuristic mapping (same as in comparison_engine.py)
+                # CRITICAL FIX: Check for ignore columns first (before other heuristics)
+                # This handles columns like 'ignore', 'ignore_1', 'ignore_10', etc.
+                if col_name_lower.startswith('ignore') or col_name_lower == 'ignore':
+                    column_mapping[i] = ColumnType.IGNORE
+                    logger.debug(f"Column '{col_name}' at index {i} mapped to IGNORE (ignore column)")
+                elif col_name_lower in ['description', 'desc', 'item']:
+                    column_mapping[i] = ColumnType.DESCRIPTION
+                    logger.debug(f"Column '{col_name}' at index {i} mapped to DESCRIPTION (heuristic)")
+                elif col_name_lower in ['quantity', 'qty', 'qty.']:
+                    column_mapping[i] = ColumnType.QUANTITY
+                    logger.debug(f"Column '{col_name}' at index {i} mapped to QUANTITY (heuristic)")
+                elif col_name_lower in ['unit_price', 'unit price', 'price', 'rate']:
+                    column_mapping[i] = ColumnType.UNIT_PRICE
+                    logger.debug(f"Column '{col_name}' at index {i} mapped to UNIT_PRICE (heuristic)")
+                elif col_name_lower in ['total_price', 'total price', 'amount', 'total']:
+                    column_mapping[i] = ColumnType.TOTAL_PRICE
+                    logger.debug(f"Column '{col_name}' at index {i} mapped to TOTAL_PRICE (heuristic)")
+                elif col_name_lower in ['code', 'item code', 'ref']:
+                    column_mapping[i] = ColumnType.CODE
+                    logger.debug(f"Column '{col_name}' at index {i} mapped to CODE (heuristic)")
+                elif col_name_lower in ['unit', 'uom']:
+                    column_mapping[i] = ColumnType.UNIT
+                    logger.debug(f"Column '{col_name}' at index {i} mapped to UNIT (heuristic)")
+                elif col_name_lower in ['manhours', 'ore/u.m.', 'ore', 'man hours']:
+                    column_mapping[i] = ColumnType.MANHOURS
+                    logger.debug(f"Column '{col_name}' at index {i} mapped to MANHOURS (heuristic)")
+                elif col_name_lower in ['wage', 'euro/hour', 'hourly rate']:
+                    column_mapping[i] = ColumnType.WAGE
+                    logger.debug(f"Column '{col_name}' at index {i} mapped to WAGE (heuristic)")
+                elif col_name_lower in ['scope']:
+                    column_mapping[i] = ColumnType.SCOPE
+                    logger.debug(f"Column '{col_name}' at index {i} mapped to SCOPE (heuristic)")
+                else:
+                    # Default to DESCRIPTION for unknown columns
+                    logger.warning(f"Column '{col_name}' at index {i} not found in mappings, defaulting to DESCRIPTION")
+                    column_mapping[i] = ColumnType.DESCRIPTION
+        
+        logger.info(f"Built column mapping from file mapping: {len(column_mapping)} columns mapped")
+        logger.debug(f"Column mapping: {column_mapping}")
+        return column_mapping
+    
     def run(self):
         """Start the main window event loop"""
         try:
