@@ -91,3 +91,5 @@ logs/boq_tools.log
 logs/boq_tools.log
 *.log
 /test_outputs
+/config
+*.log

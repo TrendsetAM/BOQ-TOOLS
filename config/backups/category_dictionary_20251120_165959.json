@@ -487,15 +487,6 @@
       "original_description": "bop fo field cabinet supply ( 1 per each cu/tc)"
     },
     {
-      "description": "bop fo header cabinet supply (hv substation)",
-      "category": "Electrical Works",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "bop fo header cabinet supply (hv substation)"
-    },
-    {
       "description": "cabina di consegna elevation structure and foundation fully completed at civil level including earth works, soil preparation, concrete, walls, roof, all water proofing, ground zero slab and relevant supportig structures, paviments, false floors, all doors, windows, all finishing and building auxiliaries as indicated in the specification, all materials, components and activities necessary to ensure a proper and safe operation from this building. the contractor has to specify in tender document the type of structure for the buildings and foundation: steel, cast in situ concrete, precast concrete, etc.\nelectrical set up excluded",
       "category": "Civil Works",
       "confidence": 1.0,
@@ -2116,15 +2107,6 @@
       "original_description": null
     },
     {
-      "description": "excavation and backfilling (including sand bed, if necessary according to the design) for other earth solar trench",
-      "category": "Trenching",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "excavation and backfilling (including sand bed, if necessary according to the design) for other earth solar trench"
-    },
-    {
       "description": "excavation and backfilling (including sand bed, if necessary according to the design) for other earth trench",
       "category": "Trenching",
       "confidence": 1.0,
@@ -2251,15 +2233,6 @@
       "original_description": null
     },
     {
-      "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical lv-ac trench 1c 40 x 85 cm",
-      "category": "Trenching",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical lv-ac trench 1c 40 x 85 cm"
-    },
-    {
       "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical lv-ac trench 1c 85 x 40 cm (min)",
       "category": "Trenching",
       "confidence": 1.0,
@@ -2332,15 +2305,6 @@
       "original_description": null
     },
     {
-      "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical lv-ac trench 2c 40 x 85 cm",
-      "category": "Trenching",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical lv-ac trench 2c 40 x 85 cm"
-    },
-    {
       "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical lv-ac trench 2c-a  95 x 40 cm (min)",
       "category": "Other",
       "confidence": 1.0,
@@ -2386,15 +2350,6 @@
       "original_description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical lv-ac trench 3c  95 x 60 cm (min)"
     },
     {
-      "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical lv-ac trench 3c 60 x 85 cm",
-      "category": "Trenching",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical lv-ac trench 3c 60 x 85 cm"
-    },
-    {
       "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical lv-ac trench 3c-a  95 x 70 cm (min)",
       "category": "Trenching",
       "confidence": 1.0,
@@ -2438,15 +2393,6 @@
       "usage_count": 11,
       "notes": "Converted from Excel data - Category: Trenching",
       "original_description": null
-    },
-    {
-      "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical lv-ac trench 4c 60 x 85 cm",
-      "category": "Trenching",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical lv-ac trench 4c 60 x 85 cm"
     },
     {
       "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical lv-ac trench 4c-a  95 x 150 cm (min)",
@@ -2755,15 +2701,6 @@
       "original_description": null
     },
     {
-      "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical mv trench 1c - 40 x 100 cm",
-      "category": "Trenching",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical mv trench 1c - 40 x 100 cm"
-    },
-    {
       "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical mv trench 2c - 100 x 28 cm (min) - interferenza con cavo ac - n.1 three-phase mv lines - tratto di impianto",
       "category": "Trenching",
       "confidence": 1.0,
@@ -2789,15 +2726,6 @@
       "usage_count": 11,
       "notes": "Converted from Excel data - Category: Trenching",
       "original_description": null
-    },
-    {
-      "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical mv trench 2c - 55 x 100 cm",
-      "category": "Trenching",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical mv trench 2c - 55 x 100 cm"
     },
     {
       "description": "excavation and backfilling (including sand bed, if necessary according to the design) for typical mv trench 2c - 70 x 28 cm (min) - n.1 three-phase mv lines - tratto di connessione",
@@ -3491,15 +3419,6 @@
       "usage_count": 0,
       "notes": "Converted from Excel data - Category: Civil Works",
       "original_description": null
-    },
-    {
-      "description": "gas pipeline crossing",
-      "category": "Civil Works",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "gas pipeline crossing"
     },
     {
       "description": "gates\nsupply and installation according to the design.",
@@ -5806,33 +5725,6 @@
       "original_description": null
     },
     {
-      "description": "others",
-      "category": "Civil Works",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "others"
-    },
-    {
-      "description": "others (small material supply and installation)",
-      "category": "Electrical Works",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "others (small material supply and installation)"
-    },
-    {
-      "description": "others (tracker material installation)",
-      "category": "Tracker Inst.",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "others (tracker material installation)"
-    },
-    {
       "description": "packaging to be re-used after construction phase by community\nimplement a system with local communities in order to re-use packaging after construction phase by community (e.g. wood for construction, plastic for storage, steel)",
       "category": "Site Costs",
       "confidence": 1.0,
@@ -7138,15 +7030,6 @@
       "original_description": null
     },
     {
-      "description": "supply and installation precast full ventilated concrete cable trench, including grating lids and all the accesories and auxiliary support. at the substation.",
-      "category": "Trenching",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "supply and installation precast full ventilated concrete cable trench, including grating lids and all the accesories and auxiliary support. at the substation."
-    },
-    {
       "description": "supply and internal connections of vibrated reinforced concrete user cabin (cabina utente) according to paragraphs ppp.pvp.mvc.02 mv distribution center and ppp.pvp.mvc.03 mv center enclosure and iec 62271-202 with iac a certification - consisting of three rooms: mv room, transformer aux room, lv+scada room.\n\nelectrical part: all main and auxiliary components contained in the cabin:\n- protection system equipment (spg/dg + spi/di + ddr)\n- fiscal energy meetering system\n-  gas vent channel mv swg \n- fire detection system\n- air conditioning system\n- anti-rodent system\n- normal and emergency lighting system internal and external\n- transformation room ventilation system \n- normal + emergency fm sockets\n- mv, lv, communication and control cables\n- earthing system\n- any other necessary components",
       "category": "MV Cables",
       "confidence": 1.0,
@@ -8308,15 +8191,6 @@
       "original_description": null
     },
     {
-      "description": "supply of solar cable 16 mm2, connectors excluded",
-      "category": "Solar Cables",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "supply of solar cable 16 mm2, connectors excluded"
-    },
-    {
       "description": "supply of solar cable 4 mm2, connectors excluded",
       "category": "Solar Cables",
       "confidence": 1.0,
@@ -8351,15 +8225,6 @@
       "usage_count": 0,
       "notes": "Converted from Excel data - Category: Electrical Works",
       "original_description": null
-    },
-    {
-      "description": "supply of solar cable connectors - for 16 mm2 solar cable",
-      "category": "Electrical Works",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "supply of solar cable connectors - for 16 mm2 solar cable"
     },
     {
       "description": "supply of solar cable connectors - for 4/6 mm2 solar cable",
@@ -8893,15 +8758,6 @@
       "original_description": null
     },
     {
-      "description": "total miscellaneous activities",
-      "category": "Civil Works",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "total miscellaneous activities"
-    },
-    {
       "description": "transportation for local workers",
       "category": "Site Costs",
       "confidence": 1.0,
@@ -9055,15 +8911,6 @@
       "original_description": null
     },
     {
-      "description": "typical road crossing of solar lv-ac trench 3c  65 x 110 cm (solution with concrete envelope, according to the design)",
-      "category": "Trenching",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "typical road crossing of solar lv-ac trench 3c  65 x 110 cm (solution with concrete envelope, according to the design)"
-    },
-    {
       "description": "typical road crossing of solar lv-ac trench 3c-rc  80 x 80 cm (solution with concrete envelope, according to the design)",
       "category": "Trenching",
       "confidence": 1.0,
@@ -9071,15 +8918,6 @@
       "usage_count": 11,
       "notes": "Converted from Excel data - Category: Trenching",
       "original_description": null
-    },
-    {
-      "description": "typical road crossing of solar lv-ac trench 4c  85 x 110 cm (solution with concrete envelope, according to the design)",
-      "category": "Trenching",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "typical road crossing of solar lv-ac trench 4c  85 x 110 cm (solution with concrete envelope, according to the design)"
     },
     {
       "description": "typical road crossing of solar lv-ac trench 4cbi-rc 90 x 60 cm  (solution with concrete envelope, according to the design)",
@@ -9179,24 +9017,6 @@
       "usage_count": 0,
       "notes": "Converted from Excel data - Category: Trenching",
       "original_description": null
-    },
-    {
-      "description": "typical road crossing of solar mv trench 1c 40 x 125 cm (solution with concrete envelope, according to the design)",
-      "category": "Trenching",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "typical road crossing of solar mv trench 1c 40 x 125 cm (solution with concrete envelope, according to the design)"
-    },
-    {
-      "description": "typical road crossing of solar mv trench 2c 45 x 125 cm (solution with concrete envelope, according to the design)",
-      "category": "Trenching",
-      "confidence": 1.0,
-      "created_date": null,
-      "usage_count": 0,
-      "notes": null,
-      "original_description": "typical road crossing of solar mv trench 2c 45 x 125 cm (solution with concrete envelope, according to the design)"
     },
     {
       "description": "typical road crossing of solar mv trench 3crbi-rc - 140 x 70 cm (min) - for n.3-4 three-phase mv line (solution with concrete envelope, according to the design)",
@@ -9434,8 +9254,8 @@
     "Trenching"
   ],
   "metadata": {
-    "total_mappings": 1046,
+    "total_mappings": 1026,
     "total_categories": 16,
-    "last_updated": "2025-11-20T16:02:50.414239+00:00"
+    "last_updated": "2025-11-20T15:24:24.358859+00:00"
   }
 }

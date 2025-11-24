@@ -226,13 +226,22 @@ class ComparisonRowReviewDialog:
         for item in self.tree.get_children():
             self.tree.delete(item)
         
-        # Check if file mapping has proper sheet structure
+        # Check if file mapping has proper sheet structure with row_classifications
         sheets = getattr(self.file_mapping, 'sheets', [])
-        if sheets and any(hasattr(sheet, 'column_mappings') for sheet in sheets):
-            # Use sheet structure approach
+        has_sheet_structure = False
+        if sheets:
+            # Check if sheets have both column_mappings AND row_classifications
+            for sheet in sheets:
+                if hasattr(sheet, 'column_mappings') and hasattr(sheet, 'row_classifications') and sheet.row_classifications:
+                    has_sheet_structure = True
+                    break
+        
+        if has_sheet_structure:
+            # Use sheet structure approach (requires row_classifications)
             self._populate_from_sheets()
         else:
-            # Use DataFrame approach
+            # Use DataFrame approach (fallback when row_classifications are missing)
+            logger.info("Using DataFrame approach for populating row review dialog")
             self._populate_from_dataframe()
         
         # Update summary

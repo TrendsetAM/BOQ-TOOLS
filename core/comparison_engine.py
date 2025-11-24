@@ -507,24 +507,28 @@ class ComparisonProcessor:
             df: pandas DataFrame for the master BoQ
             manual_invalidations: set of row keys or tracker (optional)
         """
-        self.master_dataset = df
+        # CRITICAL: Make a copy to avoid modifying the original dataframe
+        # This ensures all existing offer columns are preserved
+        self.master_dataset = df.copy()
+        
+        # Log existing offer columns to verify they're preserved
+        existing_offer_columns = [col for col in self.master_dataset.columns if '[' in col and ']' in col]
+        logger.info(f"Master dataset loaded with {len(self.master_dataset)} rows and {len(self.master_dataset.columns)} columns")
+        logger.info(f"Preserving {len(existing_offer_columns)} existing offer columns: {existing_offer_columns}")
+        
         if manual_invalidations is not None:
             self.manual_invalidations = set(manual_invalidations)
         else:
             self.manual_invalidations = set()
         
-        # logger.info(f"Master dataset loaded with {len(df)} rows")
-        # logger.info(f"Master dataset columns: {list(df.columns)}")
-        # logger.info(f"Master dataset shape: {df.shape}")
-        
         # Log some sample descriptions for debugging
-        if 'Description' in df.columns:
-            sample_descriptions = df['Description'].head(5).tolist()
+        if 'Description' in self.master_dataset.columns:
+            sample_descriptions = self.master_dataset['Description'].head(5).tolist()
             # logger.info(f"Master dataset sample descriptions: {sample_descriptions}")
             
             # Check for any descriptions that might be problematic
-            if len(df) > 190:  # If we have enough rows to check row 195
-                row_195_desc = df.iloc[194]['Description'] if 194 < len(df) else "N/A"
+            if len(self.master_dataset) > 190:  # If we have enough rows to check row 195
+                row_195_desc = self.master_dataset.iloc[194]['Description'] if 194 < len(self.master_dataset) else "N/A"
                 # logger.info(f"Master dataset row 195 description: '{row_195_desc}'")
 
     def load_comparison_data(self, df):
@@ -581,7 +585,7 @@ class ComparisonProcessor:
         # Optionally, check for required columns
         return True, "Validation successful." 
 
-    def process_comparison_rows(self, row_classifier=None, key_columns=None):
+    def process_comparison_rows(self, row_classifier=None, key_columns=None, column_mapping=None):
         """
         For each row in the comparison data:
         - If the row matches a manual invalidation (by key), mark as invalid (MANUAL_OVERRIDE)
@@ -590,6 +594,8 @@ class ComparisonProcessor:
         Args:
             row_classifier: Optional, RowClassifier instance (if not provided, will import and create)
             key_columns: List of columns to use as row key (default: ['Description'])
+            column_mapping: Optional, pre-built column mapping dict {column_index: ColumnType}
+                          If provided, uses this instead of inferring from column names
         Returns:
             List of dicts with row index, key, validity, and reason
         """
@@ -598,7 +604,7 @@ class ComparisonProcessor:
         if key_columns is None:
             key_columns = ['Description']
         if row_classifier is None:
-            from core.row_classifier import RowClassifier, RowType # Added RowType
+            from core.row_classifier import RowClassifier
             row_classifier = RowClassifier()
         results = []
         for idx, row in self.comparison_data.iterrows():
@@ -615,71 +621,62 @@ class ComparisonProcessor:
                 reason = 'MANUAL_OVERRIDE'
             else:
                 # Prepare column mapping for ROW_VALIDITY
-                # Convert string column names to ColumnType enum values
+                # CRITICAL FIX: Use provided column mapping if available, otherwise infer from column names
                 from utils.config import ColumnType
-                column_mapping = {}
-                for i, col_name in enumerate(self.comparison_data.columns):
-                    try:
-                        # Map common column names to ColumnType enum
-                        if col_name.lower() in ['description', 'desc', 'item']:
-                            column_mapping[i] = ColumnType.DESCRIPTION
-                        elif col_name.lower() in ['quantity', 'qty', 'qty.']:
-                            column_mapping[i] = ColumnType.QUANTITY
-                        elif col_name.lower() in ['unit_price', 'unit price', 'price', 'rate']:
-                            column_mapping[i] = ColumnType.UNIT_PRICE
-                        elif col_name.lower() in ['total_price', 'total price', 'amount', 'total']:
-                            column_mapping[i] = ColumnType.TOTAL_PRICE
-                        elif col_name.lower() in ['code', 'item code', 'ref']:
-                            column_mapping[i] = ColumnType.CODE
-                        elif col_name.lower() in ['unit', 'uom']:
-                            column_mapping[i] = ColumnType.UNIT
-                        elif col_name.lower() in ['manhours', 'ore/u.m.', 'ore', 'man hours']:
-                            column_mapping[i] = ColumnType.MANHOURS
-                        elif col_name.lower() in ['wage', 'euro/hour', 'hourly rate']:
-                            column_mapping[i] = ColumnType.WAGE
-                        else:
-                            # Default to DESCRIPTION for unknown columns
-                            column_mapping[i] = ColumnType.DESCRIPTION
-                    except Exception as e:
-                        logger.warning(f"Could not map column {col_name}: {e}")
-                        column_mapping[i] = ColumnType.DESCRIPTION
+                if column_mapping is not None:
+                    # Use provided column mapping (should match DataFrame column order)
+                    col_mapping = column_mapping.copy()
+                else:
+                    # Fallback: infer column mapping from column names (legacy behavior)
+                    col_mapping = {}
+                    for i, col_name in enumerate(self.comparison_data.columns):
+                        try:
+                            # CRITICAL FIX: Check for ignore columns first (before other heuristics)
+                            # This handles columns like 'ignore', 'ignore_1', 'ignore_10', etc.
+                            col_name_lower = col_name.lower()
+                            if col_name_lower.startswith('ignore') or col_name_lower == 'ignore':
+                                col_mapping[i] = ColumnType.IGNORE
+                            # Map common column names to ColumnType enum
+                            elif col_name_lower in ['description', 'desc', 'item']:
+                                col_mapping[i] = ColumnType.DESCRIPTION
+                            elif col_name_lower in ['quantity', 'qty', 'qty.']:
+                                col_mapping[i] = ColumnType.QUANTITY
+                            elif col_name_lower in ['unit_price', 'unit price', 'price', 'rate']:
+                                col_mapping[i] = ColumnType.UNIT_PRICE
+                            elif col_name_lower in ['total_price', 'total price', 'amount', 'total']:
+                                col_mapping[i] = ColumnType.TOTAL_PRICE
+                            elif col_name_lower in ['code', 'item code', 'ref']:
+                                col_mapping[i] = ColumnType.CODE
+                            elif col_name_lower in ['unit', 'uom']:
+                                col_mapping[i] = ColumnType.UNIT
+                            elif col_name_lower in ['manhours', 'ore/u.m.', 'ore', 'man hours']:
+                                col_mapping[i] = ColumnType.MANHOURS
+                            elif col_name_lower in ['wage', 'euro/hour', 'hourly rate']:
+                                col_mapping[i] = ColumnType.WAGE
+                            elif col_name_lower in ['scope']:
+                                col_mapping[i] = ColumnType.SCOPE
+                            else:
+                                # Default to DESCRIPTION for unknown columns
+                                col_mapping[i] = ColumnType.DESCRIPTION
+                        except Exception as e:
+                            logger.warning(f"Could not map column {col_name}: {e}")
+                            col_mapping[i] = ColumnType.DESCRIPTION
                 
                 row_values = [str(row[col]) if row[col] is not None else '' for col in self.comparison_data.columns]
                 
-                # Call classify_rows to get detailed validation results
-                # Pass the sheet name for better context in warnings
-                row_classification_result = row_classifier.classify_rows(
-                    [row_values], # Pass as a list of one row
-                    column_mapping,
-                    sheet_name=row.get('Source_Sheet', 'Comparison') # Get source sheet from row data
-                )
+                # Use ROW_VALIDITY function to match master BOQ validation criteria
+                # This ensures comparison rows are validated using the same criteria as master BOQ rows
+                is_valid = row_classifier.ROW_VALIDITY(row_values, col_mapping)
                 
-                # Extract validity and reason from the classification result
-                if row_classification_result.classifications:
-                    classification = row_classification_result.classifications[0]
-                    # A row is considered valid if it's a PRIMARY_LINE_ITEM and has no ERROR level validation issues
-                    is_valid = (classification.row_type == RowType.PRIMARY_LINE_ITEM and
-                                not any(issue.level == ValidationLevel.ERROR for issue in classification.validation_errors))
-                    reason = classification.row_type.value # Use row_type as reason
-                    
-                    # Collect all validation issues (errors and warnings)
-                    for issue in classification.validation_errors:
-                        self.comparison_warnings.append(issue)
+                # Set reason based on validity
+                if is_valid:
+                    reason = 'VALID'
                 else:
-                    is_valid = False
-                    reason = 'NO_CLASSIFICATION'
-                    self.comparison_warnings.append(
-                        ValidationIssue(
-                            row_index=idx,
-                            column_index=None,
-                            validation_type=ValidationType.BUSINESS_RULE,
-                            level=ValidationLevel.ERROR,
-                            message="Row could not be classified",
-                            expected_value="Valid row data",
-                            actual_value="No classification",
-                            suggestion="Review row content and column mappings"
-                        )
-                    )
+                    reason = 'INVALID'
+                    # Note: We don't add warnings for invalid rows here because:
+                    # 1. The user already reviewed and marked them as invalid in the row review dialog
+                    # 2. These are expected and not actionable warnings
+                    # 3. Only important warnings (like unit mismatches) should be shown
                 
             results.append({
                 'row_index': idx,
@@ -742,6 +739,22 @@ class ComparisonProcessor:
         logger.info(f"=== STARTING PROCESS_VALID_ROWS ===")
         logger.info(f"Total valid rows to process: {len(valid_rows)}")
         
+        # Track which comparison rows have been processed to avoid duplicates
+        # This prevents processing the same comparison row multiple times when multiple valid rows have the same description
+        processed_comp_indices = set()
+        
+        # Verify that key_columns exist in both datasets
+        if key_columns and key_columns[0] not in self.comparison_data.columns:
+            logger.error(f"Key column '{key_columns[0]}' not found in comparison data. Available columns: {list(self.comparison_data.columns)}")
+            raise ValueError(f"Key column '{key_columns[0]}' not found in comparison data")
+        if key_columns and key_columns[0] not in self.master_dataset.columns:
+            logger.error(f"Key column '{key_columns[0]}' not found in master data. Available columns: {list(self.master_dataset.columns)}")
+            raise ValueError(f"Key column '{key_columns[0]}' not found in master data")
+        
+        # Limit logging to first 5 rows to avoid verbosity
+        rows_logged = 0
+        max_rows_to_log = 5
+        
         for row_info in valid_rows:
             idx = row_info['row_index']
             row = self.comparison_data.loc[idx]
@@ -771,19 +784,28 @@ class ComparisonProcessor:
                 self.master_dataset[key_columns[0]].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
             ]
             
-            # Debug: Log matching information
-            # logger.info(f"Row {idx} - Description: '{description}'")
-            # logger.info(f"Row {idx} - Normalized description: '{normalized_desc}'")
-            # logger.info(f"Row {idx} - Comparison instances found: {len(comp_instances)}")
-            # logger.info(f"Row {idx} - Master instances found: {len(master_instances)}")
+            # Debug: Log matching information (limit to first few rows to avoid verbosity)
+            if rows_logged < max_rows_to_log:
+                logger.info(f"Row {idx} - Description: '{description[:50]}...'")
+                logger.info(f"Row {idx} - Normalized description: '{normalized_desc[:50]}...'")
+                logger.info(f"Row {idx} - Comparison instances found: {len(comp_instances)}")
+                logger.info(f"Row {idx} - Master instances found: {len(master_instances)}")
+                
+                if len(comp_instances) > 0:
+                    logger.info(f"Row {idx} - Comparison instance indices: {list(comp_instances.index)[:5]}...")  # Show first 5
+                if len(master_instances) > 0:
+                    logger.info(f"Row {idx} - Master instance indices: {list(master_instances.index)[:5]}...")  # Show first 5
+                elif len(master_instances) == 0 and rows_logged == 0:
+                    # Log a sample of master descriptions to help debug matching (only for first row)
+                    sample_descriptions = self.master_dataset[key_columns[0]].head(10).tolist()
+                    logger.warning(f"Row {idx} - No master instances found. Sample master descriptions: {[str(d)[:30] for d in sample_descriptions]}")
+                
+                rows_logged += 1
             
             if is_row_195:
-                # logger.info(f"Row 195 - Comparison instance indices: {list(comp_instances.index)}")
-                # logger.info(f"Row 195 - Master instance indices: {list(master_instances.index)}")
-                # logger.info(f"Row 195 - Current description instance count: {description_instance_counts.get(description, 0)}")
-                pass
-            else:
-                pass
+                logger.info(f"Row 195 - Comparison instance indices: {list(comp_instances.index)}")
+                logger.info(f"Row 195 - Master instance indices: {list(master_instances.index)}")
+                logger.info(f"Row 195 - Current description instance count: {description_instance_counts.get(description, 0)}")
             
             # If no matches found with normalized matching, try exact matching as fallback
             if len(master_instances) == 0:
@@ -801,7 +823,9 @@ class ComparisonProcessor:
                     if len(master_instances) == 0:
                         # Check for descriptions that are very similar (might be encoding issues)
                         master_desc_lower = self.master_dataset[key_columns[0]].str.lower()
-                        similar_matches = master_desc_lower[master_desc_lower.str.contains(description.lower()[:50], na=False)]
+                        # Use regex=False to treat pattern as literal string (avoids regex errors with special characters)
+                        search_pattern = description.lower()[:50]
+                        similar_matches = master_desc_lower[master_desc_lower.str.contains(search_pattern, na=False, regex=False)]
                         if len(similar_matches) > 0:
                             logger.warning(f"Found {len(similar_matches)} similar descriptions for '{description[:50]}...'")
                             logger.warning(f"Similar descriptions: {similar_matches.head(3).tolist()}")
@@ -817,18 +841,51 @@ class ComparisonProcessor:
                     # Continue processing - this row will be added in the ADD section below
                     pass
             # For each nth instance, match and merge/add
-            for n, (comp_idx, comp_row) in enumerate(comp_instances.iterrows()):
+            for comp_idx, comp_row in comp_instances.iterrows():
+                # Skip if this comparison instance has already been processed (prevents duplicates)
+                if comp_idx in processed_comp_indices:
+                    continue
+                
+                # Mark this comparison instance as processed
+                processed_comp_indices.add(comp_idx)
+                
+                # Calculate the actual instance number (n) by finding the position of comp_idx
+                # within all comparison instances with this description
+                # This is critical: n must represent the actual instance number, not the enumeration position
+                instance_number = 0
+                for i, idx in enumerate(comp_instances.index):
+                    if idx == comp_idx:
+                        instance_number = i
+                        break
+                
                 # Enhanced logging for instance processing
                 if is_row_195:
-                    # logger.info(f"Row 195 - Processing instance {n} of {len(comp_instances)}")
-                    # logger.info(f"Row 195 - Current instance number: {n}")
+                    # logger.info(f"Row 195 - Processing instance {instance_number} of {len(comp_instances)}")
+                    # logger.info(f"Row 195 - Current instance number: {instance_number}")
                     # logger.info(f"Row 195 - Master instances available: {len(master_instances)}")
-                    # logger.info(f"Row 195 - Decision condition: {n} < {len(master_instances)} = {n < len(master_instances)}")
+                    # logger.info(f"Row 195 - Decision condition: {instance_number} < {len(master_instances)} = {instance_number < len(master_instances)}")
                     pass
                 
-                if n < len(master_instances):
-                    master_idx = master_instances.index[n]
-                    # logger.info(f"Row {idx} - MERGE decision: instance {n} -> master row {master_idx}")
+                # Debug logging to understand why all rows are being ADDed instead of MERGED
+                # Only log for first few rows or when instance_number is 0 to see patterns
+                should_log_detail = (comp_idx < 10) or (instance_number == 0) or (len(master_instances) == 0)
+                
+                if should_log_detail:
+                    logger.info(f"Row {comp_idx} - Processing: instance_number={instance_number}, master_instances={len(master_instances)}, comp_instances={len(comp_instances)}")
+                
+                if len(master_instances) == 0:
+                    if should_log_detail:
+                        logger.warning(f"Row {comp_idx} - No master instances found for description '{description[:50]}...' - will be ADDed")
+                elif instance_number >= len(master_instances):
+                    if should_log_detail:
+                        logger.warning(f"Row {comp_idx} - Instance number {instance_number} >= master instances {len(master_instances)} - will be ADDed (comparison has more instances than master)")
+                else:
+                    if should_log_detail:
+                        logger.info(f"Row {comp_idx} - MERGE: instance {instance_number} -> master row {master_instances.index[instance_number]}")
+                
+                if instance_number < len(master_instances):
+                    master_idx = master_instances.index[instance_number]
+                    # logger.info(f"Row {idx} - MERGE decision: instance {instance_number} -> master row {master_idx}")
                     
                     if is_row_195:
                         # logger.info(f"Row 195 - MERGE: Will merge into master row {master_idx}")
