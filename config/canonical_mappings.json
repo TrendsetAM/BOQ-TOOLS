@@ -9,7 +9,8 @@
     "DESCRIPTION ITEM",
     "DESCRIPTION",
     "ITEM DESCRIPTION",
-    "Practice Details"
+    "Practice Details",
+    "Title"
   ],
   "quantity": [
     "quantity",
@@ -35,7 +36,8 @@
     "UNIT\nPRICE",
     "UNITARY \nPRICE",
     "UNIT PRICE",
-    "UNITARY \nPRICE USD"
+    "UNITARY \nPRICE USD",
+    "UNITARY \nPRICE\nUSD\nMOD"
   ],
   "total_price": [
     "total price",
@@ -50,7 +52,8 @@
     "TOTAL \nPRICE",
     "TOTAL PRICE",
     "TOTAL",
-    "TOTAL USD"
+    "TOTAL USD",
+    "TOTAL PRICE\nUSD\nMOD"
   ],
   "unit": [
     "unit",
@@ -62,7 +65,9 @@
     "Unit of measure",
     "UNIT\n(SI)",
     "Measurement \nUnit",
-    "Quantity"
+    "Quantity",
+    "UNIT",
+    "Unit"
   ],
   "code": [
     "code",
@@ -78,7 +83,10 @@
     "Item",
     "Cod. REFERENCE",
     "REFERENCE",
-    "Title"
+    "Title",
+    "Reference",
+    "NUM",
+    "ID"
   ],
   "scope": [
     "scope",
