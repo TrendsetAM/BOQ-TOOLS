@@ -175,6 +175,7 @@ def auto_categorize_dataset(dataframe: pd.DataFrame,
         CategorizationResult with categorized DataFrame and statistics
     """
     logger.info(f"Starting automatic categorization of {len(dataframe)} rows")
+    logger.info(f"Category dictionary has {len(category_dictionary.mappings)} mappings")
     
     # Handle case-insensitive column names
     actual_description_column = None
@@ -203,10 +204,33 @@ def auto_categorize_dataset(dataframe: pd.DataFrame,
     if category_column not in df.columns:
         df[category_column] = ''
     
+    # Debug: Log sample descriptions and dictionary keys for troubleshooting
+    if total_rows > 0:
+        sample_descriptions = []
+        for idx in range(min(5, total_rows)):
+            try:
+                desc = str(df.iloc[idx][actual_description_column]).strip()
+                if desc and desc.lower() not in ['nan', 'none', '']:
+                    sample_descriptions.append(desc[:100])  # First 100 chars
+            except:
+                pass
+        if sample_descriptions:
+            logger.info(f"Sample descriptions from DataFrame (first 5): {sample_descriptions}")
+        
+        # Log sample dictionary keys
+        dict_keys = list(category_dictionary.mappings.keys())[:10]
+        logger.info(f"Sample dictionary keys (first 10): {dict_keys}")
+    
     # Process each row
     for index, row in df.iterrows():
         try:
+            # Get description and normalize it (remove extra whitespace, normalize line breaks)
             description = str(row[actual_description_column]).strip()
+            
+            # Normalize whitespace (replace multiple spaces/newlines with single space)
+            import re
+            description = re.sub(r'\s+', ' ', description).strip()
+            
             if not description or description.lower() in ['nan', 'none', '']:
                 unmatched_rows += 1
                 continue
@@ -597,12 +621,44 @@ def collect_descriptions_for_manual_review(dataframe: pd.DataFrame,
     """
     logger.info(f"Collecting descriptions for manual review from {len(dataframe)} rows")
     
-    # Validate inputs
-    if category_column not in dataframe.columns:
-        raise ValueError(f"Category column '{category_column}' not found in DataFrame")
+    # Handle case-insensitive column names (defensive measure)
+    actual_description_column = None
+    for col in dataframe.columns:
+        if col.lower() == description_column.lower():
+            actual_description_column = col
+            break
     
-    if description_column not in dataframe.columns:
-        raise ValueError(f"Description column '{description_column}' not found in DataFrame")
+    if not actual_description_column:
+        available_columns = list(dataframe.columns)
+        raise ValueError(f"Description column '{description_column}' not found in DataFrame. Available columns: {available_columns}")
+    
+    actual_category_column = None
+    for col in dataframe.columns:
+        if col.lower() == category_column.lower():
+            actual_category_column = col
+            break
+    
+    if not actual_category_column:
+        available_columns = list(dataframe.columns)
+        raise ValueError(f"Category column '{category_column}' not found in DataFrame. Available columns: {available_columns}")
+    
+    # Use the actual column names found
+    description_column = actual_description_column
+    category_column = actual_category_column
+    
+    # Find actual sheet name column with case-insensitive matching
+    actual_sheet_name_column = None
+    if sheet_name_column:
+        for col in dataframe.columns:
+            if col.lower() == sheet_name_column.lower():
+                actual_sheet_name_column = col
+                break
+    else:
+        # Try to find sheet name column automatically
+        for col in dataframe.columns:
+            if col.lower() in ["sheet_name", "source_sheet", "sheet"]:
+                actual_sheet_name_column = col
+                break
     
     # Initialize collection for unique descriptions
     unique_descriptions: Dict[str, ManualReviewDescription] = {}
@@ -633,8 +689,17 @@ def collect_descriptions_for_manual_review(dataframe: pd.DataFrame,
             # Normalize description for deduplication
             normalized_desc = description.lower()
             
-            # Get source information
-            source_sheet = str(row.get(sheet_name_column, 'Unknown')) if sheet_name_column else 'Unknown'
+            # Get source information - properly handle pandas Series access
+            if actual_sheet_name_column and actual_sheet_name_column in dataframe.columns:
+                source_sheet_value = row[actual_sheet_name_column]
+                # Handle NaN, None, or empty values
+                if pd.isna(source_sheet_value) or source_sheet_value is None or str(source_sheet_value).strip() in ['', 'nan', 'None']:
+                    source_sheet = 'Unknown'
+                else:
+                    source_sheet = str(source_sheet_value).strip()
+            else:
+                source_sheet = 'Unknown'
+            
             row_number = safe_int(index) + 1  # Convert to 1-based row numbering
             
             if normalized_desc in unique_descriptions:

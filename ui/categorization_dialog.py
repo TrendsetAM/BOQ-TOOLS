@@ -16,19 +16,21 @@ logger = logging.getLogger(__name__)
 
 
 class CategorizationDialog:
-    def __init__(self, parent, controller, file_mapping, on_complete=None):
+    def __init__(self, parent, controller, dataframe, file_mapping=None, on_complete=None):
         """
         Initialize the categorization dialog
         
         Args:
             parent: Parent window
             controller: Main application controller
-            file_mapping: File mapping object with processed data
+            dataframe: DataFrame to categorize (required) - unified structure with all required columns
+            file_mapping: File mapping object (optional) - for metadata and context
             on_complete: Callback function when categorization is complete
         """
         self.parent = parent
         self.controller = controller
-        self.file_mapping = file_mapping
+        self.dataframe = dataframe  # Phase 1.3: Accept DataFrame directly
+        self.file_mapping = file_mapping  # Keep for backward compatibility and metadata
         self.on_complete = on_complete
         
         # Dialog state
@@ -41,6 +43,12 @@ class CategorizationDialog:
         self.categorization_result = None
         self.manual_excel_path = None
         self.final_dataframe = None
+        
+        # Validate DataFrame has required columns
+        required_columns = ['Description', 'code', 'unit', 'quantity', 'unit_price', 'total_price', 'Category']
+        missing_columns = [col for col in required_columns if col not in dataframe.columns]
+        if missing_columns:
+            logger.warning(f"DataFrame missing some required columns: {missing_columns}")
         
         # Create and show dialog
         self._create_dialog()
@@ -139,12 +147,10 @@ class CategorizationDialog:
             try:
                 from core.manual_categorizer import execute_row_categorization
                 
-                # Get the DataFrame from file mapping
-                # This assumes the file mapping contains the processed DataFrame
-                # You may need to adjust this based on your actual data structure
-                mapped_df = self._get_dataframe_from_mapping()
+                # Phase 1.3: Use DataFrame directly instead of building from file_mapping
+                mapped_df = self.dataframe.copy() if self.dataframe is not None else None
                 
-                if mapped_df is None:
+                if mapped_df is None or mapped_df.empty:
                     self._show_error("No data available for categorization")
                     return
                 
@@ -169,22 +175,6 @@ class CategorizationDialog:
         # Start thread
         thread = threading.Thread(target=categorization_thread, daemon=True)
         thread.start()
-    
-    def _get_dataframe_from_mapping(self):
-        """Extract DataFrame from file mapping"""
-        # This is a placeholder - adjust based on your actual data structure
-        try:
-            # Assuming file_mapping has a method to get the processed DataFrame
-            if hasattr(self.file_mapping, 'get_processed_dataframe'):
-                return self.file_mapping.get_processed_dataframe()
-            elif hasattr(self.file_mapping, 'dataframe'):
-                return self.file_mapping.dataframe
-            else:
-                # Try to get from controller's current files
-                return self.controller.get_current_dataframe()
-        except Exception as e:
-            logger.error(f"Error getting DataFrame: {e}")
-            return None
     
     def _update_progress(self, percent, message):
         """Update progress bar and status"""
@@ -630,18 +620,19 @@ class CategorizationDialog:
 
 
 
-def show_categorization_dialog(parent, controller, file_mapping, on_complete=None):
+def show_categorization_dialog(parent, controller, dataframe, file_mapping=None, on_complete=None):
     """
     Show the categorization dialog
     
     Args:
         parent: Parent window
         controller: Main application controller
-        file_mapping: File mapping object
+        dataframe: DataFrame to categorize (required) - unified structure with all required columns
+        file_mapping: File mapping object (optional) - for metadata and context
         on_complete: Callback function when categorization is complete
     
     Returns:
         CategorizationDialog instance
     """
-    dialog = CategorizationDialog(parent, controller, file_mapping, on_complete)
+    dialog = CategorizationDialog(parent, controller, dataframe, file_mapping, on_complete)
     return dialog 

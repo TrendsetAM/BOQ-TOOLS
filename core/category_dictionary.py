@@ -64,8 +64,39 @@ class CategoryDictionary:
         if dictionary_file is None:
             # Use the user config directory for standalone executable compatibility
             from utils.config import get_user_config_path
+            import shutil
+            
             user_config_file = get_user_config_path('category_dictionary.json')
-            self.dictionary_file = Path(user_config_file)
+            user_config_path = Path(user_config_file)
+            
+            # Check if user config file exists (first run detection)
+            if not user_config_path.exists():
+                # First run: Copy from project config to user config if available
+                project_config_file = Path(__file__).parent.parent / 'config' / 'category_dictionary.json'
+                
+                if project_config_file.exists():
+                    try:
+                        # Ensure user config directory exists
+                        user_config_path.parent.mkdir(parents=True, exist_ok=True)
+                        
+                        # Copy project config to user config directory
+                        shutil.copy2(project_config_file, user_config_path)
+                        logger.info(f"First run detected: Initialized category dictionary by copying from project config")
+                        logger.info(f"  Source: {project_config_file}")
+                        logger.info(f"  Destination: {user_config_path}")
+                    except Exception as e:
+                        logger.error(f"Failed to copy project config to user config: {e}")
+                        logger.warning(f"Will create default dictionary in user config location")
+                        # Still use user config path - will create default if needed
+                else:
+                    logger.info(f"Project config file not found. Will create default dictionary if needed.")
+                
+                # Always use user config path (will be created if needed)
+                self.dictionary_file = user_config_path
+            else:
+                # User config exists - always use it (this is the normal case)
+                logger.info(f"Using existing user config file: {user_config_path}")
+                self.dictionary_file = user_config_path
         else:
             self.dictionary_file = dictionary_file
         self.mappings: Dict[str, CategoryMapping] = {}
@@ -77,22 +108,58 @@ class CategoryDictionary:
     def _load_dictionary(self) -> None:
         """Load dictionary from JSON file"""
         try:
+            logger.info(f"Loading category dictionary from: {self.dictionary_file}")
+            logger.info(f"Dictionary file exists: {self.dictionary_file.exists()}")
+            
             if self.dictionary_file.exists():
                 with open(self.dictionary_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                 
-                # Load mappings
+                # Check if mappings array exists and get count
                 if 'mappings' in data:
-                    for mapping_data in data['mappings']:
-                        mapping = CategoryMapping(**mapping_data)
-                        self.mappings[mapping.description.lower()] = mapping
-                        self.categories.add(mapping.category)
+                    total_mappings_in_file = len(data['mappings'])
+                    logger.info(f"Found {total_mappings_in_file} mappings in JSON file")
+                    
+                    duplicate_count = 0
+                    skipped_count = 0
+                    
+                    # Load mappings
+                    for idx, mapping_data in enumerate(data['mappings']):
+                        try:
+                            mapping = CategoryMapping(**mapping_data)
+                            # Normalize description: lowercase, strip, and normalize whitespace
+                            normalized_desc = re.sub(r'\s+', ' ', mapping.description.lower().strip())
+                            
+                            # Check for duplicates (same normalized description)
+                            if normalized_desc in self.mappings:
+                                duplicate_count += 1
+                                logger.debug(f"Duplicate mapping found (skipping): '{normalized_desc}'")
+                                # Keep the first occurrence, skip duplicates
+                                continue
+                            
+                            mapping.description = normalized_desc  # Update mapping with normalized description
+                            self.mappings[normalized_desc] = mapping
+                            self.categories.add(mapping.category)
+                        except Exception as e:
+                            skipped_count += 1
+                            logger.warning(f"Error loading mapping at index {idx}: {e}")
+                            continue
+                    
+                    if duplicate_count > 0:
+                        logger.warning(f"Skipped {duplicate_count} duplicate mappings")
+                    if skipped_count > 0:
+                        logger.warning(f"Skipped {skipped_count} invalid mappings")
+                    
+                    logger.info(f"Successfully loaded {len(self.mappings)} unique mappings from {total_mappings_in_file} total mappings in file")
+                else:
+                    logger.warning(f"No 'mappings' key found in dictionary file")
                 
                 # Load categories if provided
                 if 'categories' in data:
                     self.categories.update(data['categories'])
+                    logger.info(f"Loaded {len(data['categories'])} categories from file")
                 
-                logger.info(f"Loaded {len(self.mappings)} mappings from {self.dictionary_file}")
+                logger.info(f"Total mappings loaded: {len(self.mappings)}, Total categories: {len(self.categories)}")
             else:
                 logger.info(f"Dictionary file not found at {self.dictionary_file}")
                 # Try to copy from bundled default if running as executable
@@ -109,8 +176,35 @@ class CategoryDictionary:
                 
         except Exception as e:
             logger.error(f"Error loading dictionary: {e}")
-            self._create_default_dictionary()
-            self.save_dictionary()  # Save the default to user directory
+            logger.warning("Attempting to recover by copying from project config...")
+            
+            # Try to recover by copying from project config
+            import shutil
+            project_config_file = Path(__file__).parent.parent / 'config' / 'category_dictionary.json'
+            
+            if project_config_file.exists():
+                try:
+                    # Backup the corrupted file first
+                    if self.dictionary_file.exists():
+                        backup_file = self.dictionary_file.with_suffix('.json.backup')
+                        shutil.copy2(self.dictionary_file, backup_file)
+                        logger.warning(f"Backed up corrupted dictionary to: {backup_file}")
+                    
+                    # Copy from project config
+                    shutil.copy2(project_config_file, self.dictionary_file)
+                    logger.info(f"Recovered dictionary by copying from project config: {project_config_file}")
+                    
+                    # Reload the recovered dictionary
+                    self._load_dictionary()
+                except Exception as recover_error:
+                    logger.error(f"Failed to recover from project config: {recover_error}")
+                    logger.warning("Creating minimal default dictionary as last resort")
+                    self._create_default_dictionary()
+                    self.save_dictionary()  # Save the default to user directory
+            else:
+                logger.warning("Project config file not found. Creating minimal default dictionary")
+                self._create_default_dictionary()
+                self.save_dictionary()  # Save the default to user directory
     
     def _create_default_dictionary(self) -> None:
         """Create default category dictionary with common BOQ categories"""
@@ -224,8 +318,8 @@ class CategoryDictionary:
             True if mapping was added successfully
         """
         try:
-            # Normalize description (keep lowercase for matching)
-            normalized_desc = description.lower().strip()
+            # Normalize description: lowercase, strip, and normalize whitespace (same as find_category)
+            normalized_desc = re.sub(r'\s+', ' ', description.lower().strip())
             
             if not normalized_desc:
                 logger.warning("Cannot add mapping with empty description")
@@ -265,7 +359,8 @@ class CategoryDictionary:
             CategoryMatch with match results
         """
         original_desc = description
-        normalized_desc = description.lower().strip()
+        # Normalize description: lowercase, strip, and normalize whitespace (same as when loading dictionary)
+        normalized_desc = re.sub(r'\s+', ' ', description.lower().strip())
         
         if not normalized_desc:
             return CategoryMatch(

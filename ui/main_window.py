@@ -2102,6 +2102,15 @@ class MainWindow:
                     for mt in col_headers:
                         if mt not in row_dict:
                             row_dict[mt] = ''
+                    
+                    # Ensure Source_Sheet column is always included
+                    if 'Source_Sheet' not in row_dict:
+                        row_dict['Source_Sheet'] = sheet_name
+                    else:
+                        # If it exists but is empty, populate it
+                        if not row_dict['Source_Sheet'] or str(row_dict['Source_Sheet']).strip() == '':
+                            row_dict['Source_Sheet'] = sheet_name
+                    
                     rows.append(row_dict)
             
             if not rows:
@@ -2112,26 +2121,53 @@ class MainWindow:
             final_dataframe = pd.DataFrame(rows)
             logger.info(f"Filtered dataset created with {len(rows)} valid rows from {sheet_count} sheets")
             
+            # Ensure Source_Sheet column exists (backup check)
+            if 'Source_Sheet' not in final_dataframe.columns:
+                logger.warning("Source_Sheet column missing from DataFrame, adding it with 'Unknown' values")
+                final_dataframe['Source_Sheet'] = 'Unknown'
+            else:
+                # Fill any missing/empty Source_Sheet values
+                mask = final_dataframe['Source_Sheet'].isna() | (final_dataframe['Source_Sheet'].astype(str).str.strip() == '')
+                if mask.any():
+                    # Try to infer from sheet information if available
+                    if hasattr(file_mapping, 'sheets') and file_mapping.sheets:
+                        # This is a fallback - we already added it per row above
+                        final_dataframe.loc[mask, 'Source_Sheet'] = 'Unknown'
+                    else:
+                        final_dataframe.loc[mask, 'Source_Sheet'] = 'Unknown'
+            
             # Store the filtered dataframe in file_mapping for later use
             file_mapping.filtered_dataframe = final_dataframe
             
-            self._start_categorization(file_mapping)
+            # Phase 1.1: Pass DataFrame directly to categorization instead of file_mapping with sheet structure
+            self._start_categorization(final_dataframe, file_mapping)
         except Exception as e:
             logger.error(f"Error during row review confirmation: {e}", exc_info=True)
             messagebox.showerror("Error", f"An error occurred during row review confirmation: {str(e)}")
 
-    def _start_categorization(self, file_mapping):
-        """Start the categorization process"""
+    def _start_categorization(self, dataframe, file_mapping):
+        """
+        Start the categorization process
+        
+        Args:
+            dataframe: DataFrame to categorize (unified structure with all required columns)
+            file_mapping: File mapping object (for metadata and context)
+        """
         if not CATEGORIZATION_AVAILABLE:
             messagebox.showerror("Error", "Categorization components not available")
             return
         
+        if dataframe is None or dataframe.empty:
+            messagebox.showerror("Error", "No data available for categorization")
+            return
+        
         try:
-            # Show categorization dialog
+            # Phase 1.2: Pass DataFrame directly to categorization dialog instead of file_mapping
             dialog = show_categorization_dialog(
                 parent=self.root,
                 controller=self.controller,
-                file_mapping=file_mapping,
+                dataframe=dataframe,
+                file_mapping=file_mapping,  # Still pass file_mapping for metadata/context
                 on_complete=self._on_categorization_complete
             )
             
@@ -2140,7 +2176,7 @@ class MainWindow:
             messagebox.showerror("Error", f"Failed to start categorization: {str(e)}")
     
     def _on_categorization_complete(self, final_dataframe, categorization_result):
-        """Handle categorization completion"""
+        """Handle categorization completion for both master BOQ and comparison workflows"""
         try:
             current_tab_path = self.notebook.select()
             
@@ -2151,65 +2187,105 @@ class MainWindow:
             logger.debug(f"Current tab widget type: {type(current_tab)}")
             logger.debug(f"Current tab widget: {current_tab}")
             
-            # First, try to find the matching file data in controller's current_files
+            # Get file_mapping to check if this is subset categorization (comparison rows)
+            file_mapping = None
             file_data_found = False
+            
+            # First, try to find the matching file data in controller's current_files
             for file_key, file_data in self.controller.current_files.items():
                 if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
-                    # Store the final dataframe and categorization result
-                    file_data['final_dataframe'] = final_dataframe
-                    file_data['categorization_result'] = categorization_result
-                    
-                    # Update the tab with the final categorized data
-                    logger.debug(f"Calling _show_final_categorized_data with tab type: {type(current_tab)}")
-                    self._show_final_categorized_data(current_tab, final_dataframe, categorization_result)
-                    
-                    # Refresh summary grid
-                    logger.debug("Calling centralized summary grid refresh after categorization")
-                    self._refresh_summary_grid_centralized()
+                    file_mapping = file_data['file_mapping']
                     file_data_found = True
                     break
             
-            # If not found in current_files, try tab_id_to_file_mapping (for Use Mapping workflow)
-            if not file_data_found:
+            # If not found in current_files, try tab_id_to_file_mapping
+            if not file_mapping:
                 file_mapping = self.tab_id_to_file_mapping.get(current_tab_path)
-                if file_mapping:
-                    logger.debug("Found file mapping in tab_id_to_file_mapping for Use Mapping workflow")
-                    
-                    # Store the final dataframe and categorization result in the file mapping
-                    file_mapping.final_dataframe = final_dataframe
-                    file_mapping.categorization_result = categorization_result
-                    
-                    # Get offer info from file mapping or current offer info
-                    offer_info = getattr(file_mapping, 'offer_info', None)
-                    if not offer_info and hasattr(self, 'current_offer_info') and self.current_offer_info:
-                        offer_info = self.current_offer_info
-                        # Store it in the file mapping for consistency
-                        file_mapping.offer_info = offer_info
-                        logger.debug(f"Retrieved offer info from current_offer_info: {offer_info}")
-                    elif offer_info:
-                        logger.debug(f"Found offer info in file_mapping: {offer_info}")
+            
+            # Phase 1.4 & Phase 2: Handle subset categorization (comparison rows)
+            if file_mapping and getattr(file_mapping, '_is_subset_categorization', False):
+                logger.info("Merging categorized subset rows back into main dataset")
+                
+                # Get the original full DataFrame
+                original_df = getattr(file_mapping, '_original_full_dataframe', None)
+                if original_df is None or original_df.empty:
+                    logger.error("Original DataFrame not found for merging categorized subset")
+                    messagebox.showerror("Error", "Could not merge categorized rows: original dataset not found")
+                    return
+                
+                # Merge categorized Category values back into the main dataset
+                # Match by index if preserved, or by Description + code combination
+                merged_df = original_df.copy()
+                
+                # Try matching by index first (if indices are preserved)
+                for idx in final_dataframe.index:
+                    if idx in merged_df.index:
+                        # Direct index match - update Category
+                        if 'Category' in final_dataframe.columns and 'Category' in merged_df.columns:
+                            merged_df.at[idx, 'Category'] = final_dataframe.at[idx, 'Category']
+                            logger.debug(f"Updated Category for row {idx} by index")
                     else:
-                        logger.warning("No offer info found for Use Mapping workflow")
-                        offer_info = {}
-                    
-                    # Also store in controller's current_files for consistency
-                    file_key = f"mapping_workflow_{int(time.time())}"
-                    self.controller.current_files[file_key] = {
-                        'file_mapping': file_mapping,
-                        'final_dataframe': final_dataframe,
-                        'categorization_result': categorization_result,
-                        'offer_info': offer_info
-                    }
-                    
-                    # Update the tab with the final categorized data
-                    logger.debug(f"Calling _show_final_categorized_data with tab type: {type(current_tab)}")
-                    self._show_final_categorized_data(current_tab, final_dataframe, categorization_result)
-                    
-                    # Refresh summary grid
-                    logger.debug("Calling centralized summary grid refresh after categorization")
-                    self._refresh_summary_grid_centralized()
-                else:
-                    logger.warning("Tab mismatch or no tab attribute found for categorization completion")
+                        # Index not preserved, match by Description + code
+                        cat_row = final_dataframe.loc[idx]
+                        desc = str(cat_row.get('Description', '')).strip()
+                        code = str(cat_row.get('code', '')).strip()
+                        category = cat_row.get('Category', '')
+                        
+                        if desc and 'Description' in merged_df.columns:
+                            # Find matching rows
+                            matches = merged_df[
+                                (merged_df['Description'].astype(str).str.strip() == desc) &
+                                (merged_df['code'].astype(str).str.strip() == code)
+                            ]
+                            
+                            if len(matches) > 0:
+                                # Update first match (should be unique)
+                                match_idx = matches.index[0]
+                                merged_df.at[match_idx, 'Category'] = category
+                                logger.debug(f"Updated Category for row {match_idx} by Description+code match")
+                
+                # Update file_mapping with merged DataFrame
+                file_mapping.dataframe = merged_df
+                file_mapping.filtered_dataframe = merged_df  # Also update filtered_dataframe
+                
+                # Clear the subset categorization flag
+                file_mapping._is_subset_categorization = False
+                if hasattr(file_mapping, '_original_full_dataframe'):
+                    delattr(file_mapping, '_original_full_dataframe')
+                
+                # Update final_dataframe to be the merged full dataset
+                final_dataframe = merged_df
+                
+                logger.info("Successfully merged categorized subset rows back into main dataset")
+            
+            # Update file data stores with final categorized DataFrame
+            if file_data_found:
+                for file_key, file_data in self.controller.current_files.items():
+                    if hasattr(file_data['file_mapping'], 'tab') and str(file_data['file_mapping'].tab) == str(current_tab_path):
+                        file_data['final_dataframe'] = final_dataframe
+                        file_data['categorization_result'] = categorization_result
+                        break
+            
+            # Update file_mapping if found
+            if file_mapping:
+                file_mapping.final_dataframe = final_dataframe
+                file_mapping.categorization_result = categorization_result
+                file_mapping.dataframe = final_dataframe  # Ensure dataframe is updated
+                
+                # Also update filtered_dataframe if it exists
+                if not hasattr(file_mapping, 'filtered_dataframe') or file_mapping.filtered_dataframe is None:
+                    file_mapping.filtered_dataframe = final_dataframe
+            
+            # Update the tab with the final categorized data
+            logger.debug(f"Calling _show_final_categorized_data with tab type: {type(current_tab)}")
+            self._show_final_categorized_data(current_tab, final_dataframe, categorization_result)
+            
+            # Refresh summary grid
+            logger.debug("Calling centralized summary grid refresh after categorization")
+            self._refresh_summary_grid_centralized()
+            
+            # Update status
+            self._update_status("Categorization complete. All rows are now categorized.")
                 
         except Exception as e:
             logger.error(f"Error handling categorization completion: {e}")
@@ -2534,6 +2610,9 @@ class MainWindow:
             # Update the main dataset in place instead of showing results
             self._update_main_dataset_with_comparison_results(self.comparison_processor, comparison_offer_info)
             
+            # Phase 2.1: Check for uncategorized rows and categorize them
+            self._categorize_comparison_rows(comparison_offer_info)
+            
             # Reset comparison workflow flags
             self.is_comparison_workflow = False
             self._pending_comparison_export = False
@@ -2799,6 +2878,89 @@ class MainWindow:
         except Exception as e:
             logger.error(f"Error updating main dataset with comparison results: {e}")
             self._update_status(f"Error updating dataset: {str(e)}")
+    
+    def _categorize_comparison_rows(self, offer_info):
+        """
+        Phase 2.1 & 2.2: Identify and categorize uncategorized rows from comparison results
+        
+        Args:
+            offer_info: Offer information dictionary
+        """
+        try:
+            if not CATEGORIZATION_AVAILABLE:
+                logger.info("Categorization not available, skipping uncategorized row categorization")
+                return
+            
+            # Get the current tab and file mapping
+            current_tab_id = self.notebook.select()
+            if not current_tab_id:
+                logger.warning("No current tab found for categorizing comparison rows")
+                return
+            
+            file_mapping = self.tab_id_to_file_mapping.get(current_tab_id)
+            if not file_mapping:
+                logger.warning("No file mapping found for categorizing comparison rows")
+                return
+            
+            # Get the updated dataframe
+            updated_df = file_mapping.dataframe if hasattr(file_mapping, 'dataframe') and file_mapping.dataframe is not None else None
+            if updated_df is None or updated_df.empty:
+                logger.info("No data available for categorizing comparison rows")
+                return
+            
+            # Phase 2.2: Identify uncategorized rows
+            # Check if Category column exists
+            if 'Category' not in updated_df.columns:
+                logger.info("No Category column found, adding it")
+                updated_df['Category'] = ''
+            
+            # Identify uncategorized rows
+            uncategorized_mask = (
+                updated_df['Category'].isna() | 
+                (updated_df['Category'] == '') | 
+                (updated_df['Category'].astype(str).str.strip() == '')
+            )
+            uncategorized_rows = updated_df[uncategorized_mask].copy()
+            
+            if len(uncategorized_rows) == 0:
+                logger.info("No uncategorized rows found after comparison")
+                self._update_status("Comparison completed. All rows are categorized.")
+                return
+            
+            logger.info(f"Found {len(uncategorized_rows)} uncategorized rows after comparison")
+            
+            # Ask user if they want to categorize the uncategorized rows
+            response = messagebox.askyesno(
+                "Categorize New Rows",
+                f"Comparison completed. {len(uncategorized_rows)} new rows need categorization.\n\n"
+                "These rows will be excluded from category totals in Summarize until categorized.\n\n"
+                "Would you like to categorize them now?",
+                icon='question'
+            )
+            
+            if not response:
+                logger.info("User chose not to categorize comparison rows now")
+                self._update_status(f"Comparison completed. {len(uncategorized_rows)} rows are uncategorized.")
+                return
+            
+            # Start categorization for uncategorized rows only
+            self._update_status(f"Categorizing {len(uncategorized_rows)} new rows from comparison...")
+            logger.info(f"Starting categorization for {len(uncategorized_rows)} uncategorized rows")
+            
+            # Store original DataFrame and indices for merging categorized results back
+            # Preserve original indices in uncategorized_rows so we can merge back by index
+            uncategorized_rows = uncategorized_rows.copy()  # Ensure we have a copy
+            file_mapping._original_full_dataframe = updated_df.copy()  # Store for merging
+            file_mapping._is_subset_categorization = True  # Flag to indicate subset categorization
+            
+            # Phase 2.2: Pass only uncategorized rows DataFrame to categorization
+            self._start_categorization(uncategorized_rows, file_mapping)
+            
+        except Exception as e:
+            logger.error(f"Error categorizing comparison rows: {e}")
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Error", f"Failed to categorize comparison rows: {str(e)}")
 
     def _refresh_tab_with_updated_data(self, tab, file_mapping):
         """
@@ -3983,7 +4145,7 @@ Offer Information:
             
             # Action buttons (centered)
             summarize_btn = ttk.Button(inner_button_frame, text="Summarize", 
-                                     command=lambda: self._summarize_categorized_data(final_dataframe))
+                                     command=lambda: self._summarize_with_uncategorized_check(final_dataframe))
             summarize_btn.pack(side=tk.LEFT, padx=5)
             
             save_mapping_btn = ttk.Button(inner_button_frame, text="Save Mapping", 
@@ -4005,6 +4167,75 @@ Offer Information:
         except Exception as e:
             logger.error(f"Error showing final categorized data: {e}")
             messagebox.showerror("Error", f"Failed to show categorized data: {str(e)}")
+    
+    def _summarize_with_uncategorized_check(self, dataframe):
+        """
+        Phase 2.3: Check for uncategorized rows before summarizing and warn user
+        
+        Args:
+            dataframe: DataFrame to summarize
+        """
+        try:
+            # Check if Category column exists
+            if 'Category' not in dataframe.columns:
+                logger.warning("No Category column found in DataFrame")
+                # Proceed with summarize anyway
+                self._summarize_categorized_data(dataframe)
+                return
+            
+            # Identify uncategorized rows
+            uncategorized_mask = (
+                dataframe['Category'].isna() | 
+                (dataframe['Category'] == '') | 
+                (dataframe['Category'].astype(str).str.strip() == '')
+            )
+            uncategorized_count = uncategorized_mask.sum()
+            
+            if uncategorized_count > 0:
+                # Show warning dialog
+                response = messagebox.askyesno(
+                    "Uncategorized Rows Detected",
+                    f"Some rows ({uncategorized_count}) are not categorized. These will be excluded from category totals in Summarize.\n\n"
+                    "Would you like to categorize them now?",
+                    icon='question'
+                )
+                
+                if response:
+                    # User wants to categorize uncategorized rows
+                    uncategorized_rows = dataframe[uncategorized_mask].copy()
+                    
+                    # Get file_mapping for context
+                    current_tab_id = self.notebook.select()
+                    file_mapping = self.tab_id_to_file_mapping.get(current_tab_id)
+                    
+                    if file_mapping:
+                        # Store original DataFrame for merging
+                        file_mapping._original_full_dataframe = dataframe.copy()
+                        file_mapping._is_subset_categorization = True
+                        
+                        # Start categorization
+                        self._update_status(f"Categorizing {len(uncategorized_rows)} uncategorized rows...")
+                        self._start_categorization(uncategorized_rows, file_mapping)
+                        return
+                    else:
+                        messagebox.showwarning(
+                            "Warning",
+                            "Could not find file mapping. Please categorize rows manually or proceed with summarize."
+                        )
+                
+                # User chose to proceed anyway - show info and continue
+                messagebox.showinfo(
+                    "Proceeding with Summarize",
+                    f"Summarize will proceed. {uncategorized_count} uncategorized rows will be excluded from category totals."
+                )
+            
+            # Proceed with summarize (either no uncategorized rows or user chose to proceed)
+            self._summarize_categorized_data(dataframe)
+            
+        except Exception as e:
+            logger.error(f"Error checking for uncategorized rows: {e}")
+            # On error, proceed with summarize anyway
+            self._summarize_categorized_data(dataframe)
 
     def _debug_export_datasets_before_merge(self, master_df, comparison_df, offer_info):
         """DEBUG: Export both datasets to Excel for debugging merge process"""

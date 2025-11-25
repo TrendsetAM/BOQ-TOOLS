@@ -391,15 +391,49 @@ def process_manual_categorizations(excel_filepath: Path,
         logger.error(f"Failed to read Excel file: {e}")
         raise ValueError(f"Failed to read Excel file {excel_filepath}: {e}")
     
-    # Validate required columns exist
-    required_columns = [description_column, category_column, source_sheet_column]
-    missing_columns = [col for col in required_columns if col not in df.columns]
+    # Handle case-insensitive column names
+    logger.info(f"Looking for columns with case-insensitive matching. Expected: description='{description_column}', category='{category_column}', source_sheet='{source_sheet_column}'")
+    logger.info(f"Available columns in Excel file: {list(df.columns)}")
     
-    if missing_columns:
+    actual_description_column = None
+    for col in df.columns:
+        if col.lower() == description_column.lower():
+            actual_description_column = col
+            logger.info(f"Found description column: '{col}' (matches expected '{description_column}')")
+            break
+    
+    if not actual_description_column:
         available_columns = list(df.columns)
-        logger.error(f"Missing required columns: {missing_columns}")
-        logger.error(f"Available columns: {available_columns}")
-        raise ValueError(f"Missing required columns: {missing_columns}. Available columns: {available_columns}")
+        logger.error(f"Description column '{description_column}' not found. Available columns: {available_columns}")
+        raise ValueError(f"Description column '{description_column}' not found. Available columns: {available_columns}")
+    
+    actual_category_column = None
+    for col in df.columns:
+        if col.lower() == category_column.lower():
+            actual_category_column = col
+            logger.info(f"Found category column: '{col}' (matches expected '{category_column}')")
+            break
+    
+    if not actual_category_column:
+        available_columns = list(df.columns)
+        logger.error(f"Category column '{category_column}' not found. Available columns: {available_columns}")
+        raise ValueError(f"Category column '{category_column}' not found. Available columns: {available_columns}")
+    
+    actual_source_sheet_column = None
+    for col in df.columns:
+        if col.lower() == source_sheet_column.lower():
+            actual_source_sheet_column = col
+            break
+    
+    if not actual_source_sheet_column:
+        # Source sheet column is optional, but log a warning
+        logger.warning(f"Source sheet column '{source_sheet_column}' not found. Using 'Unknown' for source sheets.")
+        actual_source_sheet_column = None
+    
+    # Use the actual column names found
+    description_column = actual_description_column
+    category_column = actual_category_column
+    source_sheet_column = actual_source_sheet_column if actual_source_sheet_column else None
     
     # Clean and validate data
     logger.info("Cleaning and validating data...")
@@ -425,14 +459,20 @@ def process_manual_categorizations(excel_filepath: Path,
         return {}
     
     # Clean source sheet column
-    if source_sheet_column in df.columns:
+    if source_sheet_column and source_sheet_column in df.columns:
         df[source_sheet_column] = df[source_sheet_column].astype(str).str.strip()
         df[source_sheet_column] = df[source_sheet_column].replace('nan', 'Unknown')
     
-    # Clean notes column
-    if notes_column in df.columns:
-        df[notes_column] = df[notes_column].astype(str).str.strip()
-        df[notes_column] = df[notes_column].replace('nan', '')
+    # Clean notes column (handle case-insensitive)
+    actual_notes_column = None
+    for col in df.columns:
+        if col.lower() == notes_column.lower():
+            actual_notes_column = col
+            break
+    
+    if actual_notes_column and actual_notes_column in df.columns:
+        df[actual_notes_column] = df[actual_notes_column].astype(str).str.strip()
+        df[actual_notes_column] = df[actual_notes_column].replace('nan', '')
     
     # Create mapping dictionary
     categorization_mapping = {}
@@ -672,13 +712,34 @@ def apply_manual_categories(dataframe: pd.DataFrame,
     """
     logger.info(f"Applying {len(manual_categorizations)} manual categorizations to DataFrame")
     
-    # Validate inputs
-    if description_column not in dataframe.columns:
-        raise ValueError(f"Description column '{description_column}' not found in DataFrame")
+    # Handle case-insensitive column names
+    actual_description_column = None
+    for col in dataframe.columns:
+        if col.lower() == description_column.lower():
+            actual_description_column = col
+            logger.info(f"Found description column: '{col}' (matches expected '{description_column}')")
+            break
     
-    if category_column not in dataframe.columns:
+    if not actual_description_column:
+        available_columns = list(dataframe.columns)
+        logger.error(f"Description column '{description_column}' not found. Available columns: {available_columns}")
+        raise ValueError(f"Description column '{description_column}' not found in DataFrame. Available columns: {available_columns}")
+    
+    actual_category_column = None
+    for col in dataframe.columns:
+        if col.lower() == category_column.lower():
+            actual_category_column = col
+            logger.info(f"Found category column: '{col}' (matches expected '{category_column}')")
+            break
+    
+    if not actual_category_column:
         logger.warning(f"Category column '{category_column}' not found, creating it")
-        dataframe[category_column] = ''
+        actual_category_column = category_column  # Will use the default name
+        dataframe[actual_category_column] = ''
+    
+    # Use the actual column names found
+    description_column = actual_description_column
+    category_column = actual_category_column
     
     # Create a copy to avoid modifying the original
     df = dataframe.copy()
@@ -1109,18 +1170,40 @@ def execute_row_categorization(
         summary['auto_categorized'] = True
         
         update_progress(20, f"Collecting descriptions for manual review...")
+        # Find actual column names with case-insensitive matching
         # Pass the sheet name column if it exists
         sheet_name_column = None
         for col in auto_df.columns:
             if col.lower() in ["sheet_name", "source_sheet", "sheet"]:
                 sheet_name_column = col
                 break
+        
+        # Find actual description column name (case-insensitive)
+        actual_description_column = None
+        for col in auto_df.columns:
+            if col.lower() == 'description':
+                actual_description_column = col
+                break
+        
+        # Find actual category column name (case-insensitive)
+        actual_category_column = None
+        for col in auto_df.columns:
+            if col.lower() == 'category':
+                actual_category_column = col
+                break
+        
+        # Use found column names or fallback to defaults
+        if not actual_description_column:
+            actual_description_column = 'Description'
+        if not actual_category_column:
+            actual_category_column = 'Category'
+        
         from core.auto_categorizer import collect_descriptions_for_manual_review
         review_list = collect_descriptions_for_manual_review(
             auto_df, 
             category_dict, 
-            category_column='Category', 
-            description_column='Description', 
+            category_column=actual_category_column, 
+            description_column=actual_description_column, 
             sheet_name_column=sheet_name_column,
             confidence_threshold=0.8
         )
