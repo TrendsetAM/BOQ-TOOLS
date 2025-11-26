@@ -5419,9 +5419,11 @@ Offer Information:
                 
                 # Map columns by index - only include mapped columns
                 mapped_columns = []
+                valid_column_indices = []  # Track which indices are actually valid
                 for col_idx in sorted(column_index_map.keys()):
                     if col_idx < len(headers):  # Ensure column index is valid
                         mapped_columns.append(column_index_map[col_idx])
+                        valid_column_indices.append(col_idx)  # Track valid indices
                 
                 # Ensure unique column names
                 unique_columns = []
@@ -5436,10 +5438,11 @@ Offer Information:
                     seen_columns.add(col)
                 
                 # Filter data rows to match only mapped columns by index
+                # Use only valid_column_indices to ensure row length matches unique_columns length
                 filtered_data_rows = []
                 for row in data_rows:
                     filtered_row = []
-                    for col_idx in sorted(column_index_map.keys()):
+                    for col_idx in valid_column_indices:  # Only use indices that were included in mapped_columns
                         if col_idx < len(row):  # Ensure column index is valid
                             filtered_row.append(row[col_idx] if row[col_idx] is not None else '')
                         else:
@@ -5505,6 +5508,22 @@ Offer Information:
             if hasattr(file_mapping, 'dataframe') and file_mapping.dataframe is not None:
                 df = file_mapping.dataframe.copy()
                 logger.info(f"Using existing dataframe for {dataset_type}: {len(df)} rows, columns: {list(df.columns)}")
+                
+                # Normalize Description column - handle both 'Description' and 'description'
+                if 'description' in df.columns and 'Description' in df.columns:
+                    # Both exist - merge them, preferring 'Description' but filling from 'description' where empty
+                    logger.info(f"Both 'Description' and 'description' columns found, merging them")
+                    df['Description'] = df['Description'].fillna('').astype(str)
+                    df['description'] = df['description'].fillna('').astype(str)
+                    # Use 'Description' if it has content, otherwise use 'description'
+                    mask = (df['Description'].str.strip() == '') | (df['Description'].isna())
+                    df.loc[mask, 'Description'] = df.loc[mask, 'description']
+                    # Drop the lowercase version
+                    df = df.drop(columns=['description'])
+                elif 'description' in df.columns and 'Description' not in df.columns:
+                    # Only lowercase exists - rename it
+                    logger.info(f"Only 'description' column found, renaming to 'Description'")
+                    df = df.rename(columns={'description': 'Description'})
                 
                 # Ensure we have the required columns
                 required_columns = ['Description', 'code', 'unit', 'quantity', 'unit_price', 'total_price']

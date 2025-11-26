@@ -559,17 +559,27 @@ class ComparisonProcessor:
         if self.master_dataset is None or self.comparison_data is None:
             return False, "Master or comparison dataset not loaded."
         
-        # Check if master dataset has descriptions
+        # Check if master dataset has descriptions (handle both 'Description' and 'description')
+        desc_column = None
         if 'Description' in self.master_dataset.columns:
-            master_descriptions = self.master_dataset['Description'].head(10).tolist()
-            empty_count = sum(1 for desc in master_descriptions if not desc or str(desc).strip() == '')
+            desc_column = 'Description'
+        elif 'description' in self.master_dataset.columns:
+            desc_column = 'description'
+        
+        if desc_column:
+            # Check a larger sample (up to 50 rows or all rows if fewer)
+            sample_size = min(50, len(self.master_dataset))
+            master_descriptions = self.master_dataset[desc_column].head(sample_size).tolist()
+            empty_count = sum(1 for desc in master_descriptions if not desc or (isinstance(desc, str) and desc.strip() == '') or (pd.isna(desc)))
+            non_empty_count = len(master_descriptions) - empty_count
             if empty_count == len(master_descriptions):
                 return False, "Master dataset has empty descriptions. Cannot perform comparison without descriptions."
             elif empty_count > 0:
-                logger.warning(f"Master dataset has {empty_count}/{len(master_descriptions)} empty descriptions")
+                logger.warning(f"Master dataset has {empty_count}/{len(master_descriptions)} empty descriptions in sample, {non_empty_count} non-empty")
             else:
-                # logger.info(f"Master dataset has valid descriptions: {len(master_descriptions) - empty_count}/{len(master_descriptions)} non-empty")
-                pass
+                logger.info(f"Master dataset has valid descriptions: {non_empty_count}/{len(master_descriptions)} non-empty in sample")
+        else:
+            return False, "Master dataset missing 'Description' column. Cannot perform comparison without descriptions."
         
         # Check column compatibility
         master_cols = set(self.master_dataset.columns)
@@ -600,10 +610,25 @@ class ComparisonProcessor:
         if row_classifier is None:
             from core.row_classifier import RowClassifier, RowType # Added RowType
             row_classifier = RowClassifier()
+        # Create case-insensitive column mapping for key columns
+        column_name_map = {col.lower(): col for col in self.comparison_data.columns}
+        
         results = []
         for idx, row in self.comparison_data.iterrows():
-            # Build row key (tuple of key column values)
-            key = tuple(str(row.get(col, '')).strip() for col in key_columns)
+            # Build row key (tuple of key column values) - handle case-insensitive column names
+            key = []
+            for col in key_columns:
+                # Try exact match first
+                if col in self.comparison_data.columns:
+                    val = str(row.get(col, '')).strip()
+                # Try case-insensitive match
+                elif col.lower() in column_name_map:
+                    actual_col = column_name_map[col.lower()]
+                    val = str(row.get(actual_col, '')).strip()
+                else:
+                    val = ''
+                key.append(val)
+            key = tuple(key)
             key_str = '|'.join(key)
             description = key[0] if key else ''
             
@@ -616,12 +641,16 @@ class ComparisonProcessor:
             else:
                 # Prepare column mapping for ROW_VALIDITY
                 # Convert string column names to ColumnType enum values
+                # IMPORTANT: Map ALL columns to keep indices aligned with row_values
                 from utils.config import ColumnType
                 column_mapping = {}
                 for i, col_name in enumerate(self.comparison_data.columns):
                     try:
+                        # Map ignore columns to IGNORE type (don't skip them - keep indices aligned)
+                        if col_name.lower().startswith('ignore') or col_name.lower() == 'ignore':
+                            column_mapping[i] = ColumnType.IGNORE
                         # Map common column names to ColumnType enum
-                        if col_name.lower() in ['description', 'desc', 'item']:
+                        elif col_name.lower() in ['description', 'desc', 'item']:
                             column_mapping[i] = ColumnType.DESCRIPTION
                         elif col_name.lower() in ['quantity', 'qty', 'qty.']:
                             column_mapping[i] = ColumnType.QUANTITY
@@ -638,20 +667,59 @@ class ComparisonProcessor:
                         elif col_name.lower() in ['wage', 'euro/hour', 'hourly rate']:
                             column_mapping[i] = ColumnType.WAGE
                         else:
-                            # Default to DESCRIPTION for unknown columns
-                            column_mapping[i] = ColumnType.DESCRIPTION
+                            # Map unknown columns to IGNORE to keep indices aligned
+                            column_mapping[i] = ColumnType.IGNORE
                     except Exception as e:
                         logger.warning(f"Could not map column {col_name}: {e}")
-                        column_mapping[i] = ColumnType.DESCRIPTION
+                        # Map to IGNORE on error to keep indices aligned
+                        column_mapping[i] = ColumnType.IGNORE
                 
-                row_values = [str(row[col]) if row[col] is not None else '' for col in self.comparison_data.columns]
+                # Convert row values to strings, handling NaN properly
+                row_values = []
+                for col in self.comparison_data.columns:
+                    val = row[col]
+                    if pd.isna(val) or val is None:
+                        row_values.append('')
+                    else:
+                        val_str = str(val).strip()
+                        # Convert 'nan' string (from NaN) to empty string
+                        if val_str.lower() in ['nan', 'none', '']:
+                            row_values.append('')
+                        else:
+                            row_values.append(val_str)
+                
+                # Debug: Log first few rows to see what we're passing
+                if idx < 3:  # Only log first 3 rows to avoid spam
+                    logger.debug(f"Row {idx} - column_mapping: {column_mapping}")
+                    logger.debug(f"Row {idx} - row_values length: {len(row_values)}")
+                    # Find Description column index
+                    desc_idx = None
+                    for i, col in enumerate(self.comparison_data.columns):
+                        if col.lower() == 'description':
+                            desc_idx = i
+                            break
+                    if desc_idx is not None:
+                        logger.debug(f"Row {idx} - Description at index {desc_idx}: '{row_values[desc_idx] if desc_idx < len(row_values) else 'OUT OF RANGE'}'")
+                    # Find quantity, unit_price, total_price indices
+                    for col_name in ['quantity', 'unit_price', 'total_price']:
+                        for i, col in enumerate(self.comparison_data.columns):
+                            if col.lower() == col_name:
+                                val = row_values[i] if i < len(row_values) else 'OUT OF RANGE'
+                                logger.debug(f"Row {idx} - {col_name} at index {i}: '{val}'")
+                                break
                 
                 # Call classify_rows to get detailed validation results
                 # Pass the sheet name for better context in warnings
+                source_sheet = 'Comparison'
+                if 'Source_Sheet' in row.index:
+                    sheet_val = row['Source_Sheet']
+                    if pd.notna(sheet_val) and str(sheet_val).strip():
+                        source_sheet = str(sheet_val).strip()
+                
                 row_classification_result = row_classifier.classify_rows(
                     [row_values], # Pass as a list of one row
                     column_mapping,
-                    sheet_name=row.get('Source_Sheet', 'Comparison') # Get source sheet from row data
+                    sheet_name=source_sheet
                 )
                 
                 # Extract validity and reason from the classification result
@@ -731,6 +799,30 @@ class ComparisonProcessor:
                     self.master_dataset[offer_col_name] = 0
                     logger.info(f"Created offer column: {offer_col_name}")
         
+        # Create case-insensitive column mapping for key columns
+        comp_column_name_map = {col.lower(): col for col in self.comparison_data.columns}
+        master_column_name_map = {col.lower(): col for col in self.master_dataset.columns}
+        
+        # Find actual column names (case-insensitive)
+        actual_key_columns_comp = []
+        actual_key_columns_master = []
+        for col in key_columns:
+            # Find in comparison data
+            if col in self.comparison_data.columns:
+                actual_key_columns_comp.append(col)
+            elif col.lower() in comp_column_name_map:
+                actual_key_columns_comp.append(comp_column_name_map[col.lower()])
+            else:
+                actual_key_columns_comp.append(col)  # Fallback to original
+            
+            # Find in master data
+            if col in self.master_dataset.columns:
+                actual_key_columns_master.append(col)
+            elif col.lower() in master_column_name_map:
+                actual_key_columns_master.append(master_column_name_map[col.lower()])
+            else:
+                actual_key_columns_master.append(col)  # Fallback to original
+        
         # Filter valid rows from previous step
         valid_rows = [r for r in self.row_results if r['is_valid']]
         merge_results = []
@@ -746,8 +838,17 @@ class ComparisonProcessor:
             idx = row_info['row_index']
             row = self.comparison_data.loc[idx]
             
-            # Build key for instance matching
-            key = tuple(str(row.get(col, '')).strip() for col in key_columns)
+            # Build key for instance matching - use case-insensitive column names
+            key = []
+            for i, col in enumerate(key_columns):
+                actual_col = actual_key_columns_comp[i]
+                # Try exact match first
+                if actual_col in row.index:
+                    val = str(row[actual_col]) if pd.notna(row[actual_col]) else ''
+                else:
+                    val = ''
+                key.append(val.strip())
+            key = tuple(key)
             description = key[0] if key else ''
             
             # # Enhanced logging for row 195 specifically
@@ -763,12 +864,15 @@ class ComparisonProcessor:
             # This handles cases where descriptions have different whitespace/newline characters
             normalized_desc = ' '.join(description.split())  # Normalize whitespace
             
-            # Apply same normalization to both comparison and master datasets
+            # Apply same normalization to both comparison and master datasets - use actual column names
+            comp_key_col = actual_key_columns_comp[0]
+            master_key_col = actual_key_columns_master[0]
+            
             comp_instances = self.comparison_data[
-                self.comparison_data[key_columns[0]].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
+                self.comparison_data[comp_key_col].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
             ]
             master_instances = self.master_dataset[
-                self.master_dataset[key_columns[0]].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
+                self.master_dataset[master_key_col].str.lower().apply(lambda x: ' '.join(str(x).split())) == normalized_desc.lower()
             ]
             
             # Debug: Log matching information

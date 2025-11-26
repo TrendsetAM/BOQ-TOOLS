@@ -624,7 +624,14 @@ class RowClassifier:
         # Check each column
         for col_idx, col_type in column_mapping.items():
             if col_idx < len(row_data):
-                cell_value = row_data[col_idx].strip() if row_data[col_idx] else ""
+                # Ensure cell_value is a string and handle empty/None values
+                cell_raw = row_data[col_idx]
+                if cell_raw is None:
+                    cell_value = ""
+                elif isinstance(cell_raw, str):
+                    cell_value = cell_raw.strip()
+                else:
+                    cell_value = str(cell_raw).strip() if cell_raw else ""
                 
                 if col_type == ColumnType.DESCRIPTION:
                     if cell_value:
@@ -915,6 +922,19 @@ class RowClassifier:
             # print(f"[DEBUG] _is_positive_numeric: failed to parse '{value}'")
             return False
     
+    def _is_strictly_positive_numeric(self, value: str) -> bool:
+        """Check if value is a strictly positive number (> 0), supports European formats"""
+        try:
+            # Remove currency symbols, commas, and all whitespace (including non-breaking)
+            clean_value = re.sub(r'[\$€£¥₹,\s\u00A0]', '', value)
+            # Replace decimal comma with dot if present
+            if ',' in value and value.count(',') == 1 and '.' not in value:
+                clean_value = clean_value.replace(',', '.')
+            num = float(clean_value)
+            return num > 0
+        except (ValueError, TypeError):
+            return False
+    
     def _is_numeric(self, value: str) -> bool:
         """Check if value is numeric, supports European formats"""
         try:
@@ -1131,7 +1151,7 @@ def ROW_VALIDITY_STATIC(row_data: List[str], column_mapping: Dict[int, ColumnTyp
                 if cell_value:
                     has_description = True
             elif col_type == ColumnType.QUANTITY:
-                if _is_positive_numeric_static(cell_value):
+                if _is_strictly_positive_numeric_static(cell_value):
                     has_quantity = True
             elif col_type == ColumnType.UNIT_PRICE:
                 if _is_positive_numeric_static(cell_value):
@@ -1140,8 +1160,29 @@ def ROW_VALIDITY_STATIC(row_data: List[str], column_mapping: Dict[int, ColumnTyp
                 if _is_positive_numeric_static(cell_value):
                     has_total_price = True
     
-    # All conditions must be met
-    return has_description and has_quantity and has_unit_price and has_total_price
+    # Check for "#REF!" error in code column
+    has_ref_error = False
+    for col_idx, col_type in column_mapping.items():
+        if col_type == ColumnType.CODE and col_idx < len(row_data):
+            code_value = str(row_data[col_idx]).strip().upper()
+            if '#REF!' in code_value:
+                has_ref_error = True
+                break
+    
+    # Check that at least one price is > 0 (not just >= 0)
+    has_positive_price = False
+    for col_idx, col_type in column_mapping.items():
+        if col_type == ColumnType.UNIT_PRICE and col_idx < len(row_data):
+            if _is_strictly_positive_numeric_static(str(row_data[col_idx]).strip()):
+                has_positive_price = True
+                break
+        elif col_type == ColumnType.TOTAL_PRICE and col_idx < len(row_data):
+            if _is_strictly_positive_numeric_static(str(row_data[col_idx]).strip()):
+                has_positive_price = True
+                break
+    
+    # All conditions must be met: description, quantity > 0, at least one price > 0, and no #REF! error
+    return (has_description and has_quantity and has_positive_price and not has_ref_error)
 
 
 def _is_positive_numeric_static(value: str) -> bool:
@@ -1154,6 +1195,19 @@ def _is_positive_numeric_static(value: str) -> bool:
             clean_value = clean_value.replace(',', '.')
         num = float(clean_value)
         return num >= 0
+    except (ValueError, TypeError):
+        return False
+
+def _is_strictly_positive_numeric_static(value: str) -> bool:
+    """Static version of _is_strictly_positive_numeric for use in position calculation"""
+    try:
+        # Remove currency symbols, commas, and all whitespace (including non-breaking)
+        clean_value = re.sub(r'[\$€£¥₹,\s\u00A0]', '', value)
+        # Replace decimal comma with dot if present
+        if ',' in value and value.count(',') == 1 and '.' not in value:
+            clean_value = clean_value.replace(',', '.')
+        num = float(clean_value)
+        return num > 0
     except (ValueError, TypeError):
         return False 
         

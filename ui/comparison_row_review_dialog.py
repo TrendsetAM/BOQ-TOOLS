@@ -146,7 +146,8 @@ class ComparisonRowReviewDialog:
         available_columns = []
         
         # Define the desired column order (same as main dataset)
-        desired_order = ['code', 'Source_Sheet', 'description', 'unit', 'quantity', 'unit_price', 'total_price', 'manhours', 'wage']
+        # Use 'Description' (capital D) to match normalized column names
+        desired_order = ['code', 'Source_Sheet', 'Description', 'unit', 'quantity', 'unit_price', 'total_price', 'manhours', 'wage']
         
         # Check if file mapping has proper sheet structure with column mappings
         sheets = getattr(self.file_mapping, 'sheets', [])
